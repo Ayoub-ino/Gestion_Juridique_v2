@@ -14,10 +14,12 @@ namespace WebApplication1.Services
     public class TransactionService
     {
         private readonly AppDbContext _context;
+        private readonly DocumentAccessService _accessService;
 
-        public TransactionService(AppDbContext context)
+        public TransactionService(AppDbContext context, DocumentAccessService accessService)
         {
             _context = context;
+            _accessService = accessService;
         }
 
         private static bool IsAdminLike(Utilisateur user)
@@ -145,6 +147,10 @@ namespace WebApplication1.Services
                     DoitRevenir = false
                 };
                 _context.Transactions.Add(retourTransaction);
+
+                // Revoke receiver's access — document is returning to sender
+                var receiverRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
+                await _accessService.RevokeAccessAsync(transaction.DocumentId, receiverRbacCode);
             }
             else
             {
@@ -196,7 +202,12 @@ namespace WebApplication1.Services
                     Statut = StatutTransaction.EnAttente,
                     DoitRevenir = false
                 };
+
                 _context.Transactions.Add(retourTransaction);
+
+                // Revoke receiver's access — document is returning to sender
+                var receiverRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
+                await _accessService.RevokeAccessAsync(transaction.DocumentId, receiverRbacCode);
             }
 
             await _context.SaveChangesAsync();
@@ -220,20 +231,23 @@ namespace WebApplication1.Services
             var userEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
 
             // Standard users: can only cancel 'EnAttente' transactions they sent
-            // Admin users: can cancel any transaction at any stage
-            if (!isAdmin)
-            {
-                if (transaction.Statut != StatutTransaction.EnAttente)
-                    return ServiceResult.Fail(400, "Seules les transactions en attente peuvent être annulées par un utilisateur standard");
-                if (transaction.ServiceOrigine != userEnum)
-                    return ServiceResult.Fail(403, "Vous ne pouvez annuler que les transferts que vous avez envoyés");
-            }
+            // Admin users: can cancel 'EnAttente' transactions (any sender)
+            // No one can cancel already-accepted or refused transactions — that would corrupt document state
+            if (transaction.Statut != StatutTransaction.EnAttente)
+                return ServiceResult.Fail(400, "Seules les transactions en attente peuvent être annulées");
+            if (!isAdmin && transaction.ServiceOrigine != userEnum)
+                return ServiceResult.Fail(403, "Vous ne pouvez annuler que les transferts que vous avez envoyés");
 
-            // Find all transactions for the same document that happened at or after this one and are not already annulled
+            // Cancel this transaction itself
+            transaction.Statut = StatutTransaction.Annule;
+
+            // Find all transactions for the same document that happened strictly after this one
+            // (or at the same time with a higher ID) and are not already annulled
             var transactionsToAnnul = await _context.Transactions
                 .Include(t => t.Document)
                 .Where(t => t.DocumentId == transaction.DocumentId
-                    && t.DateTransaction >= transaction.DateTransaction
+                    && (t.DateTransaction > transaction.DateTransaction
+                        || (t.DateTransaction == transaction.DateTransaction && t.Id > transaction.Id))
                     && t.Statut != StatutTransaction.Annule)
                 .ToListAsync();
 
@@ -248,6 +262,10 @@ namespace WebApplication1.Services
             document.StatutActuel = transaction.StatutPrecedent ?? StatutDossier.EnCours;
 
             await _context.SaveChangesAsync();
+
+            // Revoke DocumentAccess for the destination service (they can no longer modify)
+            var destRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
+            await _accessService.RevokeAccessAsync(transaction.DocumentId, destRbacCode);
 
             return ServiceResult.Ok(new
             {

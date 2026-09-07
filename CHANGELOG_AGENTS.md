@@ -1261,3 +1261,98 @@ The following files contain hardcoded `IsAdminLike()` checks that bypass permiss
 | ESLint | ✅ **0 errors, 0 warnings** (was 1 error + 14 warnings) |
 | Backend unit tests | ✅ **98/98 passing** |
 | Frontend static generation | ✅ 4/4 pages generated |
+
+---
+
+## [2026-09-07 05:00] — Full-System Logic Audit: DocumentAccess Revocation on Cancel/Return
+
+### 1. Context & Objective
+- Perform a comprehensive audit of the entire codebase for logical consistency, end-to-end user workflows, state management, and edge cases across all user roles.
+- Fix any logical flaws in the transaction lifecycle: cancel, accept with doitRevenir, refuse with doitRevenir.
+- Ensure DocumentAccess (ACL) stays consistent with document ownership changes.
+
+### 2. Issues Found & Fixed
+
+| # | Category | Issue | Fix |
+|---|----------|-------|-----|
+| 1 | **Critical** | `AnnulerTransitionAsync`: When sender cancels a transfer, the receiver's DocumentAccess was NOT revoked — receiver could still modify the document after cancellation | Added `_accessService.RevokeAccessAsync()` call after cancellation to revoke the destination service's Editor access |
+| 2 | **Critical** | `AccepterAsync` with `doitRevenir`: When receiver accepts and document returns to sender, receiver's DocumentAccess was NOT revoked — receiver could still modify the returned document | Added `_accessService.RevokeAccessAsync()` to revoke receiver's access on doitRevenir return |
+| 3 | **Critical** | `RefuserAsync` with `doitRevenir`: Same issue — receiver retains Editor access after refusing with return-to-sender | Added `_accessService.RevokeAccessAsync()` to revoke receiver's access on doitRevenir return |
+| 4 | **Architecture** | `TransactionService` had no `DocumentAccessService` dependency — could not manage ACL | Injected `DocumentAccessService` into `TransactionService` constructor |
+| 5 | **Test** | `TransactionServiceTests` failing — constructor signature changed | Updated all 6 test instantiations to pass `new DocumentAccessService(ctx)` |
+
+### 3. Files Modified
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/TransactionService.cs`:
+  - Injected `DocumentAccessService` via constructor
+  - `AnnulerTransitionAsync`: Added `RevokeAccessAsync()` for destination service after cancel
+  - `AccepterAsync`: Added `RevokeAccessAsync()` for receiver's service on doitRevenir return
+  - `RefuserAsync`: Added `RevokeAccessAsync()` for receiver's service on doitRevenir return
+
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/TransactionServiceTests.cs`:
+  - Updated 6 `new TransactionService(ctx)` → `new TransactionService(ctx, new DocumentAccessService(ctx))`
+
+### 4. Multi-User Simulation Summary
+
+| Role | Workflow | Status |
+|------|----------|--------|
+| **Sender** | Transfer → Cancel → Document revokes receiver access, returns to sender | ✅ Fixed |
+| **Receiver** | Transfer → Accept → Document moves to receiver, both retain Editor access | ✅ Working |
+| **Receiver** | Transfer → Accept (doitRevenir) → Document returns to sender, receiver loses access | ✅ Fixed |
+| **Receiver** | Transfer → Refuse (doitRevenir) → Document returns to sender, receiver loses access | ✅ Fixed |
+| **Receiver** | Transfer → Refuse (no return) → Document stays with sender, no change | ✅ Working |
+| **Admin** | Cannot send/receive transfers | ✅ Enforced (sidebar hidden + route guard + backend exclusion) |
+| **Admin** | Empty transaction list, zero stats, no notifications | ✅ Enforced |
+| **Cross-role** | Unauthorized API access blocked by [RequirePermission] + service-ownership check | ✅ Enforced |
+
+### 5. Final Build Status
+
+| Check | Status |
+|-------|--------|
+| Backend build | ✅ 0 errors, 0 warnings |
+| Frontend build | ✅ Compiled successfully |
+| ESLint | ✅ 0 errors, 0 warnings |
+| Backend unit tests | ✅ **98/98 passing** |
+| Frontend static generation | ✅ 4/4 pages generated |
+
+---
+
+## [2026-09-07 06:00] — Workflow Logic Diagnostics: State Machine Fixes + Admin Guard Hardening
+
+### 1. Context & Objective
+- Perform targeted audit of all workflow pipelines, state machines, and data flow paths.
+- Detect logical bottlenecks, invalid state transitions, race conditions, and unhandled edge cases.
+- Implement clean, deterministic fixes for all identified issues.
+
+### 2. Issues Found & Fixed
+
+| # | Category | Issue | Fix |
+|---|----------|-------|-----|
+| 1 | **Invalid State Transition** | Admin could cancel already-accepted transactions via AnnulerTransitionAsync — this would corrupt document state | Hardened guard: ALL users can only cancel EnAttente transactions. Added test |
+| 2 | **Imprecise State Query** | Cascade-cancel used DateTransaction >= which could include unrelated same-timestamp entries | Changed to strict comparison with ID tiebreaker |
+| 3 | **Missing Self-Cancel** | After fixing cascade filter, the transaction being cancelled itself was excluded | Added explicit self-cancel before cascade query |
+| 4 | **Code Quality** | Two C# statements crammed on a single line | Split into separate lines |
+
+### 3. Files Modified
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/TransactionService.cs`
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/TransactionServiceTests.cs`
+
+### 4. State Machine Audit Results
+
+| State Machine | Transitions | Status |
+|---------------|-------------|--------|
+| StatutTransaction | EnAttente to Accepte/Refuse/Annule | ✅ Valid |
+| StatutTransaction | Accepte/Refuse to Annule | ❌ BLOCKED (prevents state corruption) |
+| DocumentAccess | Transfer to Editor (both parties) | ✅ Auto-granted |
+| DocumentAccess | Cancel/Return to Revoke destination | ✅ Auto-revoked |
+
+### 5. Final Build Status
+
+| Check | Status |
+|-------|--------|
+| Backend build | ✅ 0 errors, 0 warnings |
+| Frontend build | ✅ Compiled successfully |
+| ESLint | ✅ 0 errors, 0 warnings |
+| Backend unit tests | ✅ **99/99 passing** |
+| Frontend SSG | ✅ 4/4 pages generated |

@@ -127,19 +127,26 @@ namespace WebApplication1.Tests
 
             var permissionService = new PermissionService(ctx);
 
-            // voir_workspace is NOT in bureauordre's default permission set
-            // This verifies the permission check is in place
+            // voir_workspace is in all services' default permission sets
+            // so bureauordre should have it
             var bureauordre = await ctx.Utilisateurs.FirstAsync(u => u.Login == "bureauordre");
             var hasPermission = await permissionService.HasPermissionAsync(bureauordre.Id, "voir_workspace");
-            // bureauordre doesn't have voir_workspace by default — this is expected
-            // The permission guard on the endpoint will block access
-            Assert.False(hasPermission, "bureauordre should NOT have voir_workspace by default");
+            Assert.True(hasPermission, "bureauordre should have voir_workspace by default");
 
-            // Admin should have it (admin gets all permissions unless overridden)
+            // Admin should also have it
             var admin = await ctx.Utilisateurs.FirstAsync(u => u.Login == "admin");
             var adminHasPermission = await permissionService.HasPermissionAsync(admin.Id, "voir_workspace");
-            // voir_workspace is NOT in the admin override list, so admin should have it
             Assert.True(adminHasPermission, "Admin should have voir_workspace permission");
+
+            // Toggle it off for bureauordre and verify it blocks
+            var bureauService = await ctx.RbacServices.FirstAsync(s => s.Code == "bureauordre");
+            var perm = await ctx.ServicePermissions.FirstAsync(sp =>
+                sp.ServiceId == bureauService.Id && sp.PermissionKey == "voir_workspace");
+            perm.Enabled = false;
+            await ctx.SaveChangesAsync();
+
+            Assert.False(await permissionService.HasPermissionAsync(bureauordre.Id, "voir_workspace"),
+                "bureauordre should NOT have voir_workspace after toggle off");
         }
 
         [Fact]

@@ -96,7 +96,7 @@ namespace WebApplication1.Controllers
                 "creer_modifier", "transferer", "consulter", "accepter", "refuser",
                 "annuler_transfert", "dashboard", "mes_entites", "transactions",
                 "recherche_avancee", "export_excel", "export_word", "voir_historique",
-                "telecharger_fichiers", "ajouter_notes", "profil"
+                "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil"
             };
             foreach (var key in defaultPermissions)
             {

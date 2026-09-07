@@ -72,7 +72,7 @@ namespace WebApplication1.Tests
             );
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.GetPendingAsync(me.Id);
 
             Assert.True(result.Success);
@@ -103,7 +103,7 @@ namespace WebApplication1.Tests
             ctx.Transactions.Add(tx);
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.AccepterAsync(tx.Id, "ok", me.Id, me.Id.ToString());
 
             Assert.True(result.Success);
@@ -134,7 +134,7 @@ namespace WebApplication1.Tests
             ctx.Transactions.Add(tx);
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.RefuserAsync(tx.Id, "motif", false, me.Id, me.Id.ToString());
 
             Assert.False(result.Success);
@@ -156,6 +156,44 @@ namespace WebApplication1.Tests
             ctx.Documents.Add(doc);
             await ctx.SaveChangesAsync();
 
+            // Admin can cancel EnAttente transactions (not accepted ones — that would corrupt state)
+            var pending = new Transaction
+            {
+                DocumentId = doc.Id,
+                Document = doc,
+                ServiceOrigine = ServiceTribunal.BureauOrdre,
+                ServiceDestination = ServiceTribunal.JalsatWaIjra2at,
+                Statut = StatutTransaction.EnAttente,
+                DateTransaction = DateTime.Now.AddMinutes(-1),
+                StatutPrecedent = StatutDossier.Nouveau
+            };
+            ctx.Transactions.Add(pending);
+            await ctx.SaveChangesAsync();
+
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
+            var result = await service.AnnulerTransitionAsync(pending.Id, admin.Id);
+
+            Assert.True(result.Success);
+            Assert.Equal(StatutTransaction.Annule, (await ctx.Transactions.FindAsync(pending.Id))!.Statut);
+            Assert.Equal(ServiceTribunal.BureauOrdre, (await ctx.Documents.FindAsync(doc.Id))!.ServiceActuel);
+            Assert.Equal(StatutDossier.Nouveau, (await ctx.Documents.FindAsync(doc.Id))!.StatutActuel);
+        }
+
+        [Fact]
+        public async Task AnnulerTransitionAsync_RejectsAlreadyAcceptedTransactions()
+        {
+            var ctx = CreateContext();
+            var admin = CreateUser("BureauOrdre", "Admin");
+            ctx.Utilisateurs.Add(admin);
+            await ctx.SaveChangesAsync();
+
+            var doc = CreateDoc();
+            doc.ServiceActuel = ServiceTribunal.JalsatWaIjra2at;
+            doc.StatutActuel = StatutDossier.EnCours;
+            ctx.Documents.Add(doc);
+            await ctx.SaveChangesAsync();
+
+            // Already accepted — cannot be cancelled by anyone (admin or not)
             var accepted = new Transaction
             {
                 DocumentId = doc.Id,
@@ -169,13 +207,13 @@ namespace WebApplication1.Tests
             ctx.Transactions.Add(accepted);
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.AnnulerTransitionAsync(accepted.Id, admin.Id);
 
-            Assert.True(result.Success);
-            Assert.Equal(StatutTransaction.Annule, (await ctx.Transactions.FindAsync(accepted.Id))!.Statut);
-            Assert.Equal(ServiceTribunal.BureauOrdre, (await ctx.Documents.FindAsync(doc.Id))!.ServiceActuel);
-            Assert.Equal(StatutDossier.Nouveau, (await ctx.Documents.FindAsync(doc.Id))!.StatutActuel);
+            Assert.False(result.Success);
+            // Document should remain unchanged
+            Assert.Equal(ServiceTribunal.JalsatWaIjra2at, (await ctx.Documents.FindAsync(doc.Id))!.ServiceActuel);
+            Assert.Equal(StatutTransaction.Accepte, (await ctx.Transactions.FindAsync(accepted.Id))!.Statut);
         }
 
         [Fact]
@@ -199,7 +237,7 @@ namespace WebApplication1.Tests
             );
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.GetStatsAsync(user.Id);
 
             Assert.True(result.Success);
@@ -226,7 +264,7 @@ namespace WebApplication1.Tests
             );
             await ctx.SaveChangesAsync();
 
-            var service = new TransactionService(ctx);
+            var service = new TransactionService(ctx, new DocumentAccessService(ctx));
             var result = await service.GetStatsAsync(admin.Id);
 
             Assert.True(result.Success);
