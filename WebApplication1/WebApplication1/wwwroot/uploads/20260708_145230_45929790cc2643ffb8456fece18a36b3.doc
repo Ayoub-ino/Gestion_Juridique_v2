@@ -1,0 +1,45 @@
+﻿<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8">
+    <style>
+      body { font-family: 'Times New Roman', serif; font-size: 12px; margin: 20px; color: #1a1a1a; }
+      .header-block { text-align: center; margin-bottom: 30px; border-bottom: 3px double #1e3a5f; padding-bottom: 20px; }
+      .royaume { font-size: 14px; font-weight: bold; color: #1e3a5f; letter-spacing: 2px; margin: 0; }
+      .court-name { font-size: 16px; font-weight: bold; color: #1e3a5f; margin: 8px 0 4px; }
+      .direction { font-size: 12px; color: #555; margin: 4px 0 0; }
+      .doc-title { text-align: center; font-size: 14px; font-weight: bold; color: #1e3a5f;
+        border: 2px solid #1e3a5f; padding: 8px 20px; margin: 20px auto; display: inline-block; }
+      .date-line { text-align: right; font-size: 11px; color: #666; margin-bottom: 16px; }
+      table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+      th, td { border: 1px solid #aaa; padding: 7px 10px; text-align: left; font-size: 11px; }
+      th { background: #1e3a5f; color: white; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+      tr:nth-child(even) { background: #f0f4f8; }
+      tr:hover { background: #e2e8f0; }
+      .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #888;
+        border-top: 2px solid #1e3a5f; padding-top: 10px; }
+      .watermark { position: fixed; top: 40%; left: 25%; font-size: 60px; color: rgba(30,58,95,0.04);
+        transform: rotate(-30deg); z-index: -1; font-weight: bold; }
+    </style></head><body>
+    <div class="watermark">COUR D'APPEL ADMINISTRATIVE DE FÈS</div>
+
+    <div class="header-block">
+      <p class="royaume">ROYAUME DU MAROC</p>
+      <p class="court-name">Cour d'Appel Administrative de Fès</p>
+      <p class="court-name" style="font-size:13px;margin-top:4px;">محكمة الاستئناف الإدارية بفاس</p>
+      <p class="direction">Direction des Affaires Juridiques</p>
+      <p class="direction">مديرية الشؤون القضائية</p>
+    </div>
+
+    <div class="date-line">Fait le 05/07/2026 21:29:20</div>
+    <div style="text-align:center;margin-bottom:20px;">
+      <span class="doc-title">المراسلات الواردة</span>
+    </div>
+
+    <table><thead><tr><th>العنوان</th><th>المرجع</th><th>النوع</th><th>التاريخ</th><th>المصدر</th><th>المصلحة</th><th>الحالة</th></tr></thead><tbody><tr style=""><td>TEST3</td><td>57</td><td>entrant-admin</td><td>05/07/2026</td><td>MHKA%A</td><td>التبليغ</td><td>في طور التداول</td></tr><tr style="background:#f0f4f8;"><td>CDJBDKHDV</td><td>376365</td><td>entrant-juridique</td><td>05/07/2026</td><td>KJEH</td><td>فتح الملفات</td><td>جديد</td></tr><tr style=""><td>TEST"</td><td>12</td><td>entrant-juridique</td><td>05/07/2026</td><td>WIZARA</td><td>فتح الملفات</td><td>قيد المعالجة</td></tr><tr style="background:#f0f4f8;"><td>TEST2</td><td>67</td><td>entrant-juridique</td><td>05/07/2026</td><td>MAHKAMA</td><td>فتح الملفات</td><td>جديد</td></tr><tr style=""><td>test1</td><td>13</td><td>entrant-juridique</td><td>05/07/2026</td><td>مكتب الضبط </td><td>الخبرة</td><td>في طور التداول</td></tr></tbody></table>
+
+    <div class="footer">
+      Cour d'Appel Administrative de Fès — Direction des Affaires Juridiques<br/>
+      Document généré le 05/07/2026 21:29:20 — 5 enregistrement(s)
+    </div>
+    </body></html>

@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+html.dark .bg-white { background-color: #1e293b; }
+html.dark .bg-slate-50 { background-color: #0f172a; }
+html.dark .bg-slate-100 { background-color: #1e293b; }
+html.dark .bg-slate-50\/50 { background-color: rgba(15, 23, 42, 0.5); }
+html.dark .text-slate-900 { color: #f1f5f9; }
+html.dark .text-slate-800 { color: #e2e8f0; }
+html.dark .text-slate-700 { color: #cbd5e1; }
+html.dark .text-slate-600 { color: #94a3b8; }
+html.dark .text-slate-500 { color: #64748b; }
+html.dark .border-slate-300 { border-color: #334155; }
+html.dark .border-slate-200 { border-color: #1e293b; }
+html.dark .hover\:bg-slate-50:hover { background-color: #1e293b; }
+html.dark .hover\:bg-slate-100:hover { background-color: #334155; }
+html.dark .bg-blue-50 { background-color: #172554; }
+html.dark .bg-blue-600 { background-color: #2563eb; }
+html.dark .bg-emerald-50 { background-color: #022c22; }
+html.dark .bg-amber-50 { background-color: #451a03; }
+html.dark .bg-red-50 { background-color: #450a0a; }
+html.dark .bg-red-50\/50 { background-color: rgba(69, 10, 10, 0.5); }
+html.dark .bg-purple-50 { background-color: #2e1065; }
+
+/* RTL Support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .text-start {
+  text-align: right;
+}
+
+[dir="rtl"] .text-end {
+  text-align: left;
+}
+
+[dir="rtl"] .ms-1 { margin-left: 0; margin-right: 0.25rem; }
+[dir="rtl"] .ms-2 { margin-left: 0; margin-right: 0.5rem; }
+[dir="rtl"] .ms-3 { margin-left: 0; margin-right: 0.75rem; }
+[dir="rtl"] .ms-4 { margin-left: 0; margin-right: 1rem; }
+[dir="rtl"] .ms-5 { margin-left: 0; margin-right: 1.25rem; }
+[dir="rtl"] .ms-auto { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .me-1 { margin-right: 0; margin-left: 0.25rem; }
+[dir="rtl"] .me-2 { margin-right: 0; margin-left: 0.5rem; }
+[dir="rtl"] .me-3 { margin-right: 0; margin-left: 0.75rem; }
+[dir="rtl"] .me-auto { margin-right: 0; margin-left: auto; }
+
+[dir="rtl"] .ps-1 { padding-left: 0; padding-right: 0.25rem; }
+[dir="rtl"] .ps-2 { padding-left: 0; padding-right: 0.5rem; }
+[dir="rtl"] .ps-3 { padding-left: 0; padding-right: 0.75rem; }
+[dir="rtl"] .ps-4 { padding-left: 0; padding-right: 1rem; }
+[dir="rtl"] .ps-5 { padding-left: 0; padding-right: 1.25rem; }
+[dir="rtl"] .ps-8 { padding-left: 0; padding-right: 2rem; }
+[dir="rtl"] .pe-1 { padding-right: 0; padding-left: 0.25rem; }
+[dir="rtl"] .pe-2 { padding-right: 0; padding-left: 0.5rem; }
+[dir="rtl"] .pe-3 { padding-right: 0; padding-left: 0.75rem; }
+
+[dir="rtl"] .start-0 { left: auto; right: 0; }
+[dir="rtl"] .start-1\.5 { left: auto; right: 0.375rem; }
+[dir="rtl"] .start-3 { left: auto; right: 0.75rem; }
+[dir="rtl"] .end-0 { right: auto; left: 0; }
+
+[dir="rtl"] .border-l { border-left-width: 1px; border-right-width: 0; }
+[dir="rtl"] .border-r { border-right-width: 1px; border-left-width: 0; }
+[dir="rtl"] .left-0 { left: auto; right: 0; }
+[dir="rtl"] .right-0 { right: auto; left: 0; }
+[dir="rtl"] .right-full { right: auto; left: 100%; }
+
+[dir="rtl"] .space-x-1 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+[dir="rtl"] .space-x-2 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+[dir="rtl"] .space-x-3 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+[dir="rtl"] .space-x-4 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+[dir="rtl"] .space-x-6 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+[dir="rtl"] .space-x-reverse > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 0;
+}
+
+[dir="rtl"] .translate-x-\[4px\] {
+  --tw-translate-x: -4px;
+}
+
+[dir="rtl"] select {
+  background-position: left 0.5rem center;
+}
+
+/* Fix table header icons in RTL */
+[dir="rtl"] th.text-start {
+  text-align: right;
+}
+
+[dir="rtl"] th.text-end {
+  text-align: left;
+}

@@ -1,0 +1,32 @@
+# Backend build artifacts
+WebApplication1/**/bin/
+WebApplication1/**/obj/
+WebApplication1/appsettings.Development.json
+*.user
+
+# Frontend
+frontend-juridique/node_modules/
+frontend-juridique/.next/
+frontend-juridique/out/
+frontend-juridique/prisma/dev.db
+
+# Logs
+*.log
+*.err.log
+
+# Temp files
+tmp/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+
+# AI/tooling artifacts
+.ignore
+
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
