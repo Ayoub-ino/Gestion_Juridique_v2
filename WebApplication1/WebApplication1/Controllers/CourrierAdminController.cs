@@ -39,20 +39,14 @@ namespace WebApplication1.Controllers
 
             var query = _context.CourriersAdministratifs.Where(c => !c.EstSupprime).AsQueryable();
 
-            // If user has a specific service, show docs in their service OR docs they sent out
-            // Admin, Greffier, Directeur, Consultant see everything
+            // STRICT SERVICE SCOPING: users only see docs in their current service.
+            // Admin, Greffier, Directeur, Consultant see everything.
             var role = user?.Role ?? "";
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
                 var userServiceEnum = ServiceMapper.MapToServiceEnum(userService);
-                var sentDocIds = await _context.Transactions
-                    .Where(t => t.ServiceOrigine == userServiceEnum)
-                    .Select(t => t.DocumentId)
-                    .Distinct()
-                    .ToListAsync();
-
-                query = query.Where(c => c.ServiceActuel == userServiceEnum || sentDocIds.Contains(c.Id));
+                query = query.Where(c => c.ServiceActuel == userServiceEnum);
             }
 
             var courriers = await query

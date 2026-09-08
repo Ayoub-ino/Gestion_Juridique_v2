@@ -15,6 +15,7 @@ interface Props {
   corbeilleDocs: { id: number; reference: string; objet: string; serviceActuel: string }[];
   onFetchCorbeille: () => void;
   onRestoreDocument: (id: number) => void;
+  onPermanentDelete?: (id: number) => void;
   filteredGeneral: CourrierSimule[];
   docsArchives: number;
   searchTerm: string;
@@ -32,6 +33,7 @@ export function ArchivesView({
   corbeilleDocs,
   onFetchCorbeille,
   onRestoreDocument,
+  onPermanentDelete,
   filteredGeneral,
   docsArchives,
   searchTerm,
@@ -171,15 +173,32 @@ export function ArchivesView({
                       <td className="p-3 font-bold">{doc.objet}</td>
                       <td className="p-3">{getServiceLabel(doc.serviceActuel, langue)}</td>
                       <td className="p-3 text-center">
-                        {hasPermission("restaurer") && (
-                          <button
-                            type="button"
-                            onClick={() => onRestoreDocument(doc.id)}
-                            className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold"
-                          >
-                            {cur.restaurer}
-                          </button>
-                        )}
+                        <div className="flex justify-center gap-1">
+                          {hasPermission("restaurer") && (
+                            <button
+                              type="button"
+                              onClick={() => onRestoreDocument(doc.id)}
+                              className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold"
+                            >
+                              {cur.restaurer}
+                            </button>
+                          )}
+                          {hasPermission("supprimer") && onPermanentDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(langue === "fr"
+                                  ? "Cette action est irréversible. Voulez-vous vraiment supprimer définitivement cet élément ?"
+                                  : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟")) {
+                                  onPermanentDelete(doc.id);
+                                }
+                              }}
+                              className="px-2 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 text-[10px] font-bold"
+                            >
+                              {langue === "fr" ? "Supprimer définitivement" : "حذف نهائياً"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))

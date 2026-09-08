@@ -49,7 +49,7 @@ export function ArchiveRetraitPage({
     if (!selectedDoc || !token) return;
     try {
       setRetraits(await api.get<Retrait[]>(`/api/Retrait/document/${selectedDoc.id}`, token));
-    } catch {}
+    } catch { /* Retrait endpoint may not exist yet */ }
   }, [selectedDoc, token]);
 
   useEffect(() => {

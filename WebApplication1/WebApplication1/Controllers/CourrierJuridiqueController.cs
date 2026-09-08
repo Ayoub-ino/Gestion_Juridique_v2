@@ -39,18 +39,13 @@ namespace WebApplication1.Controllers
 
             var query = _context.DossiersJuridiques.Where(d => !d.EstSupprime).AsQueryable();
 
+            // STRICT SERVICE SCOPING: users only see docs in their current service.
             var role = user?.Role ?? "";
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
                 var userServiceEnum = ServiceMapper.MapToServiceEnum(userService);
-                var sentDocIds = await _context.Transactions
-                    .Where(t => t.ServiceOrigine == userServiceEnum)
-                    .Select(t => t.DocumentId)
-                    .Distinct()
-                    .ToListAsync();
-
-                query = query.Where(c => c.ServiceActuel == userServiceEnum || sentDocIds.Contains(c.Id));
+                query = query.Where(c => c.ServiceActuel == userServiceEnum);
             }
 
             var juridiques = await query

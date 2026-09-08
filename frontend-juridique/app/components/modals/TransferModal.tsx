@@ -4,8 +4,19 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { CourrierSimule, Langue } from "@/app/types";
-import { SERVICE_GROUPS, getChildrenOf, isParentService } from "@/lib/constants";
 import { api } from "@/lib/api/client";
+
+// Dynamic service type from RBAC API
+interface RbacService {
+  id: number;
+  nom: string;
+  code: string;
+  description?: string;
+  parentId?: number | null;
+  parentNom?: string | null;
+  isActive: boolean;
+  userCount: number;
+}
 
 interface TransferModalProps {
   doc: CourrierSimule | null;
@@ -47,22 +58,32 @@ export function TransferModal({
   const { token } = useAuth();
   const [serviceUsers, setServiceUsers] = useState<{ id: number; nom: string }[]>([]);
   const [historicalServices, setHistoricalServices] = useState<{ id: number; code: string; nom: string; isActive?: boolean }[]>([]);
+  const [activeServices, setActiveServices] = useState<RbacService[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
 
-  // Fetch historical services on mount
+  // Fetch active services and historical services on mount
   useEffect(() => {
-    const fetchHistorical = async () => {
+    const fetchAll = async () => {
       try {
-        const data = await api.get<{ id: number; code: string; nom: string; isActive: boolean }[]>(
-          "/api/historical-services",
-          token
-        );
-        setHistoricalServices(data.filter((s) => s.isActive));
+        const [services, historical] = await Promise.all([
+          api.get<RbacService[]>("/api/rbac/services", token),
+          api.get<{ id: number; code: string; nom: string; isActive: boolean }[]>(
+            "/api/historical-services",
+            token
+          ).catch(() => []),
+        ]);
+        // Filter out the user's own service and inactive services
+        setActiveServices(services.filter(s => s.code !== ownService && s.isActive && s.userCount > 0));
+        setHistoricalServices(historical.filter((s) => s.isActive));
       } catch {
+        setActiveServices([]);
         setHistoricalServices([]);
+      } finally {
+        setLoadingServices(false);
       }
     };
-    fetchHistorical();
-  }, [token]);
+    fetchAll();
+  }, [token, ownService]);
 
   // When selected services change, fetch users for each selected service
   useEffect(() => {
@@ -101,61 +122,12 @@ export function TransferModal({
     fetchUsers();
   }, [selectedServices, token, setTargetUserId]);
 
-  const allChildValues = SERVICE_GROUPS.flatMap(g => g.children.map(c => c.value));
-
   const toggleService = (value: string) => {
     setSelectedServices(
       selectedServices.includes(value)
         ? selectedServices.filter((s) => s !== value)
         : [...selectedServices, value]
     );
-  };
-
-  const toggleParent = (parentValue: string) => {
-    const children = getChildrenOf(parentValue);
-    const allSelected = children.every((c) => selectedServices.includes(c));
-
-    if (allSelected) {
-      setSelectedServices(selectedServices.filter((s) => !children.includes(s)));
-    } else {
-      const next = new Set(selectedServices);
-      for (const c of children) next.add(c);
-      setSelectedServices(Array.from(next));
-    }
-  };
-
-  const allChildSelected = allChildValues.every((v) => selectedServices.includes(v));
-
-  const toggleAll = () => {
-    if (allChildSelected) {
-      setSelectedServices([]);
-    } else {
-      setSelectedServices([...allChildValues]);
-    }
-  };
-
-  const isGroupFullySelected = (groupValues: string[]) =>
-    groupValues.every((v) => selectedServices.includes(v));
-
-  const toggleGroup = (groupValues: string[]) => {
-    const allSelected = isGroupFullySelected(groupValues);
-    if (allSelected) {
-      setSelectedServices(selectedServices.filter((s) => !groupValues.includes(s)));
-    } else {
-      const next = new Set(selectedServices);
-      for (const v of groupValues) next.add(v);
-      setSelectedServices(Array.from(next));
-    }
-  };
-
-  const isParentFullySelected = (parentValue: string) => {
-    const children = getChildrenOf(parentValue);
-    return children.length > 0 && children.every((c) => selectedServices.includes(c));
-  };
-
-  const isParentIndeterminate = (parentValue: string) => {
-    const children = getChildrenOf(parentValue);
-    return children.some((c) => selectedServices.includes(c)) && !isParentFullySelected(parentValue);
   };
 
   if (!doc) return null;
@@ -193,84 +165,55 @@ export function TransferModal({
             <div className="flex items-center gap-2 mb-2">
               <input
                 type="checkbox"
-                checked={allChildSelected}
+                checked={activeServices.length > 0 && activeServices.every(s => selectedServices.includes(s.code))}
                 ref={(el) => {
-                  if (el) el.indeterminate = selectedServices.length > 0 && !allChildSelected;
+                  if (el) el.indeterminate = selectedServices.length > 0 && !activeServices.every(s => selectedServices.includes(s.code));
                 }}
-                onChange={toggleAll}
+                onChange={() => {
+                  if (activeServices.every(s => selectedServices.includes(s.code))) {
+                    setSelectedServices([]);
+                  } else {
+                    setSelectedServices(activeServices.map(s => s.code));
+                  }
+                }}
                 className="w-3.5 h-3.5 text-blue-600"
               />
               <p className="text-[11px] font-bold text-slate-500">
                 {langue === "fr" ? "Tout sélectionner" : "تحديد الكل"}
               </p>
             </div>
-            <div className="space-y-3">
-              {SERVICE_GROUPS.map((group) => {
-                // Filter out the user's own service from destination choices
-                const filteredChildren = group.children.filter((c) => c.value !== ownService);
-                if (filteredChildren.length === 0) return null;
-                const groupValues = filteredChildren.map((c) => c.value);
-                const parentVal = group.label;
-                const hasParent = isParentService(parentVal);
-
-                return (
-                  <div key={group.label} className="border border-slate-200 rounded-lg p-2 bg-white">
-                    <div className="flex items-center gap-2 mb-1">
-                      {hasParent && (
-                        <input
-                          type="checkbox"
-                          checked={isParentFullySelected(parentVal)}
-                          ref={(el) => {
-                            if (el) el.indeterminate = isParentIndeterminate(parentVal);
-                          }}
-                          onChange={() => toggleParent(parentVal)}
-                          className="w-3.5 h-3.5 text-blue-600"
-                        />
-                      )}
-                      <label className={`flex items-center gap-2 cursor-pointer ${!hasParent ? "ps-0" : ""}`}>
-                        {!hasParent && (
-                          <input
-                            type="checkbox"
-                            checked={isGroupFullySelected(groupValues)}
-                            ref={(el) => {
-                              if (el) el.indeterminate = selectedServices.some((s) => groupValues.includes(s)) && !isGroupFullySelected(groupValues);
-                            }}
-                            onChange={() => toggleGroup(groupValues)}
-                            className="w-3.5 h-3.5 text-blue-600"
-                          />
-                        )}
-                        <span className="text-[10px] font-bold text-slate-600">{langue === "fr" ? group.fr : group.ar}</span>
-                        {hasParent && (
-                          <span className="text-[9px] text-slate-400 ms-1">
-                            {langue === "fr" ? "(+tous les enfants)" : "(+جميع الفروع)"}
-                          </span>
-                        )}
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 ps-5">
-                      {filteredChildren.map((svc) => (
-                        <label
-                          key={svc.value}
-                          className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer transition ${
-                            selectedServices.includes(svc.value)
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedServices.includes(svc.value)}
-                            onChange={() => toggleService(svc.value)}
-                            className="w-3.5 h-3.5"
-                          />
-                          {langue === "fr" ? svc.fr : svc.ar}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {loadingServices ? (
+              <p className="text-xs text-slate-400 text-center py-4">
+                {langue === "fr" ? "Chargement des services..." : "جاري تحميل الخدمات..."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                {activeServices.map((svc) => (
+                  <label
+                    key={svc.code}
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer transition ${
+                      selectedServices.includes(svc.code)
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedServices.includes(svc.code)}
+                      onChange={() => toggleService(svc.code)}
+                      className="w-3.5 h-3.5"
+                    />
+                    <span>{svc.nom}</span>
+                    <span className="text-[9px] opacity-60 ml-auto">({svc.userCount})</span>
+                  </label>
+                ))}
+                {activeServices.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-2 col-span-2">
+                    {langue === "fr" ? "Aucun service disponible" : "لا توجد خدمات متاحة"}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Historique services section */}
             {historicalServices.length > 0 && (

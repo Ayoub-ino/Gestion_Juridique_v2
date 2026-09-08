@@ -16,7 +16,7 @@ export function LangueSwitcher() {
         if (savedLang === "fr" || savedLang === "ar") {
           document.documentElement.lang = savedLang;
         }
-      } catch {}
+      } catch { /* localStorage may be unavailable in SSR */ }
     };
 
     // Run on mount

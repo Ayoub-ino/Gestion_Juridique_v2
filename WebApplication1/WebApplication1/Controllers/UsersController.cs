@@ -209,6 +209,30 @@ namespace WebApplication1.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Utilisateur restauré avec succès" });
         }
+
+        // PERMANENT DELETE - Suppression définitive
+        [HttpDelete("{id}/permanent")]
+        [RequirePermission("gerer_utilisateurs")]
+        public async Task<IActionResult> PermanentDelete(int id)
+        {
+            var user = await _context.Utilisateurs.FindAsync(id);
+            if (user == null)
+                return NotFound(new { message = "Utilisateur non trouvé" });
+
+            // Prevent deleting admin user
+            if (user.Login == "admin")
+                return BadRequest(new { error = "Impossible de supprimer l'utilisateur administrateur" });
+
+            // Check if user has any pending transactions
+            var hasTransactions = await _context.Transactions
+                .AnyAsync(t => t.UtilisateurId == id.ToString());
+            if (hasTransactions)
+                return BadRequest(new { error = "Cet utilisateur a des transactions en cours. Désactivez-le plutôt." });
+
+            _context.Utilisateurs.Remove(user);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Utilisateur supprimé définitivement" });
+        }
     }
 
     public class CreateUserDto

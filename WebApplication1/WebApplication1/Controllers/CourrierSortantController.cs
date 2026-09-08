@@ -83,8 +83,23 @@ namespace WebApplication1.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var sortants = await _context.CourriersSortants
-                .Where(c => !c.EstSupprime)
+            // STRICT SERVICE SCOPING: users only see docs in their current service.
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var query = _context.CourriersSortants.Where(c => !c.EstSupprime).AsQueryable();
+
+            if (ServiceMapper.TryParseUserId(userIdStr, out var userId))
+            {
+                var user = await _context.Utilisateurs.FindAsync(userId);
+                var role = user?.Role ?? "";
+                var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
+                if (!isAdminLike && !string.IsNullOrEmpty(user?.Service))
+                {
+                    var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service);
+                    query = query.Where(c => c.ServiceActuel == userServiceEnum);
+                }
+            }
+
+            var sortants = await query
                 .Select(c => new {
                     c.Id,
                     c.NumeroReference,

@@ -1417,3 +1417,65 @@ The following files contain hardcoded `IsAdminLike()` checks that bypass permiss
 - **Frontend:** Edit and Transfer buttons only visible when user is the current custodian.
 - **All services active** in the system, all permissions working, voir_workspace granted to all.
 - **Database:** Clean — all CourriersEntrants and DossiersJuridiques deleted (CourriersSortants untouched).
+
+---
+
+## [2026-09-08 16:00] — Service-Scoped Folder Visibility & Dynamic Transfer Pipeline
+
+### 1. Context & Objective
+- Enforce **strict service-scoped folder visibility**: users can ONLY see folders currently in their service (`ServiceActuel == user.service`).
+- Eliminate hardcoded service lists in TransferModal — fetch services dynamically from RBAC database.
+- Verify transfer API supports both specific-user and service-wide broadcast.
+
+### 2. Files Modified
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierAdminController.cs` — Removed `sentDocIds` leak. Query now filters by `ServiceActuel == user.service` only.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierJuridiqueController.cs` — Same strict scoping applied.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierSortantController.cs` — Added service scoping to `GetAll()` (was returning ALL sortants).
+- `[MODIFIED]` `frontend-juridique/app/components/modals/TransferModal.tsx` — Replaced hardcoded `SERVICE_GROUPS` with dynamic fetch from `/api/rbac/services`. Shows user count per service.
+
+### 3. Key Technical Decisions
+- **Backend-enforced isolation**: Filtering happens at the SQL query level (`WHERE ServiceActuel = @userService`), not in frontend JS.
+- **Dynamic services**: TransferModal fetches active services from DB on mount, filters out user's own service and services with 0 users.
+- **Service-wide broadcast**: When no specific user is selected in transfer, backend creates one service-wide transaction (TargetUserId = null).
+- **Admin/Greffier/Directeur/Consultant bypass**: Admin-like roles see all documents (system managers).
+
+### 4. Verification
+- ✅ Backend build: 0 errors, 0 warnings
+- ✅ Frontend build: Compiled successfully
+- ✅ ESLint: 0 errors, 0 warnings
+- ✅ Backend tests: **103/103 passing**
+- ✅ Cypress app.cy.ts: **35/35 passing**
+- ✅ Cypress permission-toggle.cy.ts: **27/27 passing**
+- ✅ **Total: 62/62 E2E tests passing**
+
+---
+
+## [2026-09-08 17:00] — Permanent Deletion from Archive & Service Form Cleanup
+
+### 1. Context & Objective
+- Implement permanent deletion (hard delete) for archived entities: documents, users, and services.
+- Verify service creation form has no password field (already clean).
+- Add confirmation modals for irreversible permanent delete actions.
+
+### 2. Files Modified
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/DocumentsController.cs` — Added `DELETE /{id}/permanent` and `POST /permanent-delete-batch` endpoints. Hard deletes document, linked transactions, document accesses, and physical files.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/UsersController.cs` — Added `DELETE /{id}/permanent` endpoint. Prevents deleting admin user and users with pending transactions.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/ArchivesView.tsx` — Added `onPermanentDelete` prop and "Supprimer définitivement" button in corbeille table with confirmation modal.
+- `[MODIFIED]` `frontend-juridique/app/components/admin/GestionUtilisateurs.tsx` — Added `handlePermanentDeleteUser` function and button in archived users table.
+- `[MODIFIED]` `frontend-juridique/app/page.tsx` — Added `permanentDeleteDocument` handler and wired it to ArchivesView.
+
+### 3. Key Technical Decisions
+- **Hard delete cascade**: Documents → Transactions → DocumentAccesses → Physical files, all removed in order.
+- **Safety checks**: Admin user cannot be permanently deleted. Users with pending transactions cannot be deleted (must be deactivated instead).
+- **Confirmation modal**: All permanent delete actions require double-confirmation with irreversible warning.
+- **Service creation form**: Already clean — only `nom`, `code`, `description` fields (no password).
+
+### 4. Verification
+- ✅ Backend build: 0 errors, 0 warnings
+- ✅ Frontend build: Compiled successfully
+- ✅ ESLint: 0 errors, 0 warnings
+- ✅ Backend tests: **103/103 passing**
+- ✅ Cypress app.cy.ts: **35/35 passing**
+- ✅ Cypress permission-toggle.cy.ts: **27/27 passing**
+- ✅ **Total: 62/62 E2E tests passing**
+

@@ -543,6 +543,17 @@ export default function Home() {
     }
   };
 
+  const permanentDeleteDocument = async (id: number) => {
+    if (!token) return;
+    try {
+      await api.delete(`/api/Documents/${id}/permanent`, token);
+      await fetchCorbeille();
+      alert(langue === "fr" ? "Document supprimé définitivement" : "تم الحذف نهائياً");
+    } catch (e) {
+      alert(getErrorMessage(e));
+    }
+  };
+
   const searchLocalDirectory = async () => {
     try {
       const w = window as typeof window & { showDirectoryPicker?: (opts?: { mode: string }) => Promise<FileSystemDirectoryHandle> };
@@ -1395,6 +1406,7 @@ export default function Home() {
               corbeilleDocs={corbeilleDocs}
               onFetchCorbeille={fetchCorbeille}
               onRestoreDocument={restoreDocument}
+              onPermanentDelete={permanentDeleteDocument}
               filteredGeneral={filteredGeneral}
               docsArchives={docsArchives}
               searchTerm={searchTerm}

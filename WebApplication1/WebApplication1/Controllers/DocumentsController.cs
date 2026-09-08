@@ -158,6 +158,82 @@ namespace WebApplication1.Controllers
 
             return Ok(lateDocs);
         }
+
+        // PERMANENT DELETE - Suppression définitive (hard delete)
+        [HttpDelete("{id}/permanent")]
+        [RequirePermission("supprimer")]
+        public async Task<IActionResult> PermanentDelete(int id)
+        {
+            var document = await _context.Documents.FirstOrDefaultAsync(d => d.Id == id);
+            if (document == null)
+                return NotFound(new { error = "Document non trouvé" });
+
+            if (!document.EstSupprime)
+                return BadRequest(new { error = "Ce document n'est pas archivé. Supprimez-le d'abord." });
+
+            // Delete linked transactions first
+            var transactions = await _context.Transactions.Where(t => t.DocumentId == id).ToListAsync();
+            _context.Transactions.RemoveRange(transactions);
+
+            // Delete linked document accesses
+            var accesses = await _context.DocumentAccesses.Where(da => da.DocumentId == id).ToListAsync();
+            _context.DocumentAccesses.RemoveRange(accesses);
+
+            // Delete physical file if exists
+            if (!string.IsNullOrEmpty(document.FilePath))
+            {
+                var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", document.FilePath.TrimStart('/'));
+                if (System.IO.File.Exists(fullPath))
+                {
+                    System.IO.File.Delete(fullPath);
+                }
+            }
+
+            // Hard delete the document
+            _context.Documents.Remove(document);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Document supprimé définitivement" });
+        }
+
+        // BATCH PERMANENT DELETE
+        [HttpPost("permanent-delete-batch")]
+        [RequirePermission("supprimer")]
+        public async Task<IActionResult> PermanentDeleteBatch([FromBody] List<int> ids)
+        {
+            if (ids == null || ids.Count == 0)
+                return BadRequest(new { error = "Aucun document sélectionné" });
+
+            var documents = await _context.Documents
+                .Where(d => ids.Contains(d.Id) && d.EstSupprime)
+                .ToListAsync();
+
+            foreach (var doc in documents)
+            {
+                // Delete linked transactions
+                var transactions = await _context.Transactions.Where(t => t.DocumentId == doc.Id).ToListAsync();
+                _context.Transactions.RemoveRange(transactions);
+
+                // Delete linked document accesses
+                var accesses = await _context.DocumentAccesses.Where(da => da.DocumentId == doc.Id).ToListAsync();
+                _context.DocumentAccesses.RemoveRange(accesses);
+
+                // Delete physical file if exists
+                if (!string.IsNullOrEmpty(doc.FilePath))
+                {
+                    var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", doc.FilePath.TrimStart('/'));
+                    if (System.IO.File.Exists(fullPath))
+                    {
+                        System.IO.File.Delete(fullPath);
+                    }
+                }
+
+                _context.Documents.Remove(doc);
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = $"{documents.Count} document(s) supprimé(s) définitivement" });
+        }
     }
 
     public class ArchiveBatchDto

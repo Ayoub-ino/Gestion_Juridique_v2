@@ -112,6 +112,19 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
     }
   };
 
+  const handlePermanentDeleteUser = async (id: number) => {
+    if (!confirm(langue === "fr"
+      ? "Cette action est irréversible. Voulez-vous vraiment supprimer définitivement cet utilisateur ?"
+      : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟")) return;
+    try {
+      await api.delete(`/api/Users/${id}/permanent`, token);
+      alert(langue === "fr" ? "Utilisateur supprimé définitivement" : "تم الحذف نهائياً");
+      fetchArchivedUsers();
+    } catch (err) {
+      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+    }
+  };
+
   const startEdit = (u: UserItem) => {
     setEditingId(u.id);
     setForm({ nom: u.nom, login: u.login, password: "", serviceId: u.serviceId || 0 });
@@ -252,6 +265,12 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
                             className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold"
                           >
                             {cur.restaurer}
+                          </button>
+                          <button
+                            onClick={() => handlePermanentDeleteUser(u.id)}
+                            className="px-2 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 text-[10px] font-bold"
+                          >
+                            {langue === "fr" ? "Supprimer définitivement" : "حذف نهائياً"}
                           </button>
                         </div>
                       </td>
