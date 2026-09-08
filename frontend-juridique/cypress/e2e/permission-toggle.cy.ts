@@ -537,10 +537,16 @@ describe("9. Permission Toggle Lifecycle", () => {
   // ─────────────────────────────────────────────────
 
   it("ownership: cross-service accepter → 403 even with permission enabled", () => {
-    // Create a courrier as bureauordre, then transfer to archive
+    // Create a courrier as bureauordre, transfer to archive,
+    // then bureauordre (non-destination) tries to accept → should get 403
     login("admin", "admin123")
       .then(() => login("bureauordre", "bureauordre123"))
       .then((boToken) => {
+        // Verify bureauordre has accepter permission
+        authed(boToken, "GET", `${API_URL}/api/auth/me`).then((me) => {
+          expect(me.body.user.permissions).to.include("accepter");
+        });
+        // Create a courrier
         authed(boToken, "POST", `${API_URL}/api/CourrierAdmin`, {
           NumeroOrdre: `OWNERSHIP-TEST-${Date.now()}`,
           Expediteur: "Test",
@@ -556,30 +562,13 @@ describe("9. Permission Toggle Lifecycle", () => {
           }).then((txRes) => {
             const txId = txRes.body.transactionIds?.[0];
             expect(txId, "transaction should be created").to.exist;
-
-            // Archive user (destination) should be able to accept
-            login("archive", "archive123").then((archiveToken) => {
-              authed(archiveToken, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {
-                commentaire: "accepted",
-              }).then((r) => {
-                expect(r.status).to.eq(200);
-              });
+            // Bureauordre (non-destination) tries to accept → 403
+            authed(boToken, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {
+              commentaire: "should fail",
+            }).then((r) => {
+              expect(r.status).to.eq(403);
             });
           });
-        });
-      })
-      // Now test that a non-owner WITH accepter permission gets 403
-      .then(() => login("bureauordre", "bureauordre123"))
-      .then((boToken) => {
-        // bureauordre has accepter permission but is not the destination service
-        authed(boToken, "GET", `${API_URL}/api/auth/me`).then((me) => {
-          expect(me.body.user.permissions).to.include("accepter");
-        });
-        // Try to accept a transaction destined for archive
-        authed(boToken, "PUT", `${API_URL}/api/Transactions/1/accepter`, {
-          commentaire: "should fail",
-        }).then((r) => {
-          expect(r.status).to.eq(403);
         });
       });
   });
@@ -1075,6 +1064,120 @@ describe("9. Permission Toggle Lifecycle", () => {
       })
       // Clean up
       .then(() => authed(adminToken, "DELETE", `${API_URL}/api/rbac/services/${svcId}/permanent`));
+  });
+
+  // ─────────────────────────────────────────────────
+  //  CUSTODY ENFORCEMENT TESTS
+  // ─────────────────────────────────────────────────
+
+  it("custody: edit button hidden when user service != document ServiceActuel", () => {
+    // Create a document as bureauordre, verify bureauordre can see edit button
+    // Then verify that another service (fathmilafat) cannot see edit button
+    login("admin", "admin123")
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((boToken) => {
+        // Create a document as bureauordre
+        authed(boToken, "POST", `${API_URL}/api/CourrierAdmin`, {
+          NumeroOrdre: `CUSTODY-TEST-${Date.now()}`,
+          Expediteur: "Test",
+          Objet: "Custody visibility test",
+        }).then((res) => {
+          expect(res.status).to.eq(201);
+          const docId = res.body.courrier?.id ?? res.body.id;
+          // Transfer to fathmilafat
+          authed(boToken, "POST", `${API_URL}/api/Transfer`, {
+            documentId: docId,
+            documentType: "entrant-admin",
+            serviceDestination: "OuvertureDossier",
+          }).then((txRes) => {
+            expect(txRes.status).to.eq(200);
+            const txId = txRes.body.transactionIds?.[0];
+            // fathmilafat accepts the transfer (gaining custody)
+            login("fathmilafat", "fathmilafat123").then((fmToken) => {
+              authed(fmToken, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {
+                commentaire: "accepted",
+              }).then((r) => {
+                expect(r.status).to.eq(200);
+                // fathmilafat now has custody → should be able to edit
+                authed(fmToken, "GET", `${API_URL}/api/CourrierAdmin/${docId}`).then((docRes) => {
+                  expect(docRes.status).to.eq(200);
+                  expect(docRes.body.serviceActuel).to.eq("OuvertureDossier");
+                });
+                // bureauordre (lost custody) → should get 403 on edit
+                authed(boToken, "PUT", `${API_URL}/api/CourrierAdmin/${docId}`, {
+                  NumeroOrdre: "SHOULD-FAIL",
+                  Expediteur: "Test",
+                  Objet: "Should fail",
+                }).then((editRes) => {
+                  expect(editRes.status).to.eq(403);
+                });
+              });
+            });
+          });
+        });
+      });
+  });
+
+  it("custody: transfer button blocked when user service != document ServiceActuel", () => {
+    // Create a document as bureauordre, transfer to archive,
+    // then bureauordre (lost custody) tries to transfer → 403
+    login("admin", "admin123")
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((boToken) => {
+        authed(boToken, "POST", `${API_URL}/api/CourrierAdmin`, {
+          NumeroOrdre: `TRANSFER-CUSTODY-${Date.now()}`,
+          Expediteur: "Test",
+          Objet: "Transfer custody test",
+        }).then((res) => {
+          expect(res.status).to.eq(201);
+          const docId = res.body.courrier?.id ?? res.body.id;
+          // Transfer to archive
+          authed(boToken, "POST", `${API_URL}/api/Transfer`, {
+            documentId: docId,
+            documentType: "entrant-admin",
+            serviceDestination: "Archive",
+          }).then((txRes) => {
+            expect(txRes.status).to.eq(200);
+            // bureauordre (lost custody) tries to transfer again → 403
+            authed(boToken, "POST", `${API_URL}/api/Transfer`, {
+              documentId: docId,
+              documentType: "entrant-admin",
+              serviceDestination: "OuvertureDossier",
+            }).then((r) => {
+              expect(r.status).to.eq(403);
+            });
+          });
+        });
+      });
+  });
+
+  it("custody: delete blocked when user service != document ServiceActuel", () => {
+    // Create a document as bureauordre, transfer to secretarait,
+    // then bureauordre (lost custody) tries to delete → 403
+    login("admin", "admin123")
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((boToken) => {
+        authed(boToken, "POST", `${API_URL}/api/CourrierAdmin`, {
+          NumeroOrdre: `DELETE-CUSTODY-${Date.now()}`,
+          Expediteur: "Test",
+          Objet: "Delete custody test",
+        }).then((res) => {
+          expect(res.status).to.eq(201);
+          const docId = res.body.courrier?.id ?? res.body.id;
+          // Transfer to secretarait
+          authed(boToken, "POST", `${API_URL}/api/Transfer`, {
+            documentId: docId,
+            documentType: "entrant-admin",
+            serviceDestination: "KitabaKhasa",
+          }).then((txRes) => {
+            expect(txRes.status).to.eq(200);
+            // bureauordre (lost custody) tries to delete → 403
+            authed(boToken, "DELETE", `${API_URL}/api/CourrierAdmin/${docId}`).then((r) => {
+              expect(r.status).to.eq(403);
+            });
+          });
+        });
+      });
   });
 
 });

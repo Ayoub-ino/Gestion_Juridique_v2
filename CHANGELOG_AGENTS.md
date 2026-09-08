@@ -1356,3 +1356,64 @@ The following files contain hardcoded `IsAdminLike()` checks that bypass permiss
 | ESLint | ✅ 0 errors, 0 warnings |
 | Backend unit tests | ✅ **99/99 passing** |
 | Frontend SSG | ✅ 4/4 pages generated |
+
+---
+
+## [2026-09-08 14:00] — Service-Based Folder Custody & Access Control Implementation
+
+### 1. Context & Objective
+- Implement strict **Active Custody Constraint**: ONLY the service currently holding physical/logical custody of a folder (`ServiceActuel`) can edit, modify, or transfer it.
+- All other services are restricted to read-only or no-access states.
+- Enforce custody at both backend (API guard clauses) and frontend (UI button visibility).
+
+### 2. Files Modified / Created / Deleted
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/DocumentAccessService.cs` — Added 3 custody check methods:
+  - `IsUserCustodianAsync(documentId, userId)` — async check for any document type
+  - `IsUserCustodian(document, userId)` — sync check when document entity is already loaded
+  - `IsServiceCustodian(document, serviceCode)` — service code comparison
+  - `FindDocumentAsync(documentId)` — helper to find documents across all tables
+  - Admin/Greffier/Directeur/Consultant roles bypass custody checks (system managers)
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierAdminController.cs` — Added custody guards to Update and Delete endpoints. Returns 403 if user's service ≠ document.ServiceActuel.
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierJuridiqueController.cs` — Added custody guards to Put and Delete endpoints.
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierSortantController.cs` — Added custody guards to UpdateStatut and Delete endpoints.
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/TransferController.cs` — Added custody guard to Transfer endpoint. Only the current custodian can initiate a transfer.
+
+- `[MODIFIED]` `frontend-juridique/app/components/modals/DetailModal.tsx` — Replaced ACL-based `canEdit` with strict custody check:
+  - Compares `user.service` against `doc.serviceActuel` (normalized lowercase)
+  - Admin-like roles (Admin/Greffier/Directeur/Consultant) bypass custody
+  - Transfer button also respects custody (`isCustodian && ...`)
+
+### 3. Key Technical & Architectural Decisions
+
+- **Custody = ServiceActuel:** The `ServiceActuel` field on each document entity is the single source of truth for custody. When a transfer is accepted, `ServiceActuel` updates to the new service, revoking custody from the old service.
+- **ServiceTribunal → RBAC code mapping:** Custody checks use the existing `ServiceTribunalToRbacCode()` mapping to compare user service codes (RBAC) against document ServiceActuel (enum).
+- **Admin bypass preserved:** Admin, Greffier, Directeur, and Consultant roles bypass custody checks (they manage the system, not individual folders).
+- **Frontend normalization:** User service and document service are both lowercased and compared with non-alphanumeric chars stripped to handle formatting differences (e.g., `bureauordre` vs `Bureau Ordre`).
+
+### 4. Verification & Test Results
+- ✅ **Backend build:** 0 errors, 0 warnings
+- ✅ **Frontend build:** Compiled successfully
+- ✅ **ESLint:** 0 errors, 0 warnings
+- ✅ **Backend tests:** **103/103 passing** (99 core + 4 custody tests)
+- ✅ **Frontend SSG:** 4/4 pages generated
+- ✅ **Cypress app.cy.ts:** **35/35 passing**
+- ✅ **Cypress permission-toggle.cy.ts:** **27/27 passing** (all fixed + 3 new custody tests)
+- ✅ **voir_workspace permission:** Verified granted to all services (reseed applied)
+- ✅ **Backfill ACL:** All existing documents initialized
+
+### 5. Cypress Custody Tests Added
+- `custody: edit button hidden when user service != document ServiceActuel` — Transfer doc to OuvertureDossier, verify bureauordre gets 403 on edit
+- `custody: transfer button blocked when user service != document ServiceActuel` — Transfer to Archive, verify bureauordre gets 403 on re-transfer
+- `custody: delete blocked when user service != document ServiceActuel` — Transfer to KitabaKhasa, verify bureauordre gets 403 on delete
+- Fixed pre-existing ownership test: replaced hardcoded `Transactions/1` with proper `txId` variable and removed race condition with archive acceptance
+
+### 6. Current System State & Pending Tasks
+- **Custody enforcement:** Fully active across all 3 document types (Admin, Juridique, Sortant) and Transfer endpoint.
+- **Frontend:** Edit and Transfer buttons only visible when user is the current custodian.
+- **All services active** in the system, all permissions working, voir_workspace granted to all.
+- **Database:** Clean — all CourriersEntrants and DossiersJuridiques deleted (CourriersSortants untouched).

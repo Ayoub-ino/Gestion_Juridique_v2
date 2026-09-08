@@ -130,6 +130,14 @@ namespace WebApplication1.Controllers
                 if (sortant == null)
                     return NotFound(new { error = "Courrier sortant non trouvé" });
 
+                // ── CUSTODY CHECK: only the current service holder can modify ──
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+                {
+                    if (!_accessService.IsUserCustodian(sortant, userId))
+                        return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce courrier. Seul le service en charge peut le modifier." });
+                }
+
                 // Mapper le statut reçu (string) vers l'enum StatutDossier
                 switch (dto.Statut)
                 {
@@ -165,6 +173,14 @@ namespace WebApplication1.Controllers
             var sortant = await _context.CourriersSortants.FindAsync(id);
             if (sortant == null)
                 return NotFound(new { error = "Courrier sortant non trouvé" });
+
+            // ── CUSTODY CHECK: only the current service holder can delete ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(sortant, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce courrier. Seul le service en charge peut le supprimer." });
+            }
 
             sortant.EstSupprime = true;
             await _context.SaveChangesAsync();

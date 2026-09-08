@@ -323,5 +323,49 @@ namespace WebApplication1.Tests
             Assert.True(mismatchCount >= 6,
                 $"Expected at least 6 mismatches between enum names and RBAC codes, found {mismatchCount}");
         }
+
+        // ── CUSTODY CHECK TESTS ──
+
+        [Fact]
+        public void IsServiceCustodian_MatchingService_ReturnsTrue()
+        {
+            using var context = CreateContext();
+            var accessService = new DocumentAccessService(context);
+
+            var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
+            Assert.True(accessService.IsServiceCustodian(doc, "bureauordre"));
+        }
+
+        [Fact]
+        public void IsServiceCustodian_NonMatchingService_ReturnsFalse()
+        {
+            using var context = CreateContext();
+            var accessService = new DocumentAccessService(context);
+
+            var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
+            Assert.False(accessService.IsServiceCustodian(doc, "fathmilafat"));
+        }
+
+        [Fact]
+        public void IsServiceCustodian_EnumName_MapsCorrectly()
+        {
+            using var context = CreateContext();
+            var accessService = new DocumentAccessService(context);
+
+            // OuvertureDossier maps to fathmilafat in RBAC
+            var doc = new DossierJuridique { ServiceActuel = ServiceTribunal.OuvertureDossier };
+            Assert.True(accessService.IsServiceCustodian(doc, "fathmilafat"));
+        }
+
+        [Fact]
+        public void IsServiceCustodian_EmptyServiceCode_ReturnsFalse()
+        {
+            using var context = CreateContext();
+            var accessService = new DocumentAccessService(context);
+
+            var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
+            Assert.False(accessService.IsServiceCustodian(doc, ""));
+            Assert.False(accessService.IsServiceCustodian(doc, null!));
+        }
     }
 }

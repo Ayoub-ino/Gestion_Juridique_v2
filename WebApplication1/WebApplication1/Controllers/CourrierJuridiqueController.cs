@@ -156,6 +156,14 @@ namespace WebApplication1.Controllers
             if (juridique == null)
                 return NotFound(new { message = "Courrier non trouvé" });
 
+            // ── CUSTODY CHECK: only the current service holder can modify ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(juridique, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce dossier. Seul le service en charge peut le modifier." });
+            }
+
             juridique.NumeroReference = dto.Reference ?? juridique.NumeroReference;
             juridique.Sujet = dto.Objet ?? juridique.Sujet;
             juridique.Objet = dto.Objet ?? juridique.Objet;
@@ -184,6 +192,14 @@ namespace WebApplication1.Controllers
             var juridique = await _context.DossiersJuridiques.FindAsync(id);
             if (juridique == null)
                 return NotFound(new { message = "Courrier non trouvé" });
+
+            // ── CUSTODY CHECK: only the current service holder can delete ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(juridique, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce dossier. Seul le service en charge peut le supprimer." });
+            }
 
             juridique.EstSupprime = true;
             await _context.SaveChangesAsync();

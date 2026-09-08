@@ -88,12 +88,18 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
   const [docAccessLevel, setDocAccessLevel] = useState<string | null>(null);
   const canDownload = hasPermission("telecharger_fichiers");
 
-  // Document-level edit access: true if user's service has Editor/Owner access
-  // Admin-like roles always have access (backend enforces this too)
-  // NOTE: docAccessLevel === null means no access record found → deny edit
-  const canEdit = canEditPermission && (
-    docAccessLevel === "Owner" || docAccessLevel === "Editor" || user?.role === "Admin" || user?.role === "Greffier"
-  );
+  // Document-level edit access: only the current custodian service can edit.
+  // Admin-like roles always have access (backend enforces this too).
+  // ServiceActuel may be a number (enum) or string — normalize both sides.
+  const docService = String(doc?.serviceActuel ?? docDetails?.ServiceActuel ?? "").toLowerCase();
+  const userService = String(user?.service ?? "").toLowerCase();
+  const isAdminLike = user?.role === "Admin" || user?.role === "Greffier" || user?.role === "Directeur" || user?.role === "Consultant";
+  // Strict custody: user's service must match the document's current service
+  const isCustodian = isAdminLike || (userService !== "" && docService !== "" && (
+    userService === docService ||
+    userService.replace(/[^a-z0-9]/g, "") === docService.replace(/[^a-z0-9]/g, "")
+  ));
+  const canEdit = canEditPermission && isCustodian;
 
   // Determine file type category for preview routing
   const getFileCategory = (filePath: string): "pdf" | "image" | "office" | "unsupported" => {
@@ -724,7 +730,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
           {/* Action Buttons */}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between">
             <div className="flex gap-2">
-              {onTransfer && canTransferDoc && doc.transmissible !== "Non" && (
+              {onTransfer && canTransferDoc && isCustodian && doc.transmissible !== "Non" && (
                 <button
                   type="button"
                   onClick={() => { onClose(); onTransfer(doc); }}

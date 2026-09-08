@@ -64,6 +64,10 @@ namespace WebApplication1.Controllers
             if (document == null)
                 return NotFound(new { error = "Document non trouvé" });
 
+            // ── CUSTODY CHECK: only the current service holder can transfer ──
+            if (!_accessService.IsUserCustodian(document, userId))
+                return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce document. Seul le service en charge peut le transférer." });
+
             var serviceOrigine = document.ServiceActuel;
 
             // Check if the destination is a Historique (record-only) service

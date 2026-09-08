@@ -321,6 +321,81 @@ namespace WebApplication1.Services
                 _ => "bureauordre"
             };
         }
+
+        // ── CUSTODY CHECK (Active Custody Constraint) ──
+
+        /// <summary>
+        /// Check if a user is the current custodian of a document.
+        /// The custodian is the service that currently holds the document (ServiceActuel).
+        /// Admin/Greffier/Directeur roles bypass custody checks (they manage the system).
+        /// </summary>
+        public async Task<bool> IsUserCustodianAsync(int documentId, int userId)
+        {
+            var user = await _context.Utilisateurs.FindAsync(userId);
+            if (user == null) return false;
+
+            // Admin-like roles bypass custody (system managers)
+            if (IsAdminLike(user)) return true;
+
+            var userServiceCode = NormalizeServiceCode(user.Service ?? "");
+            if (string.IsNullOrEmpty(userServiceCode)) return false;
+
+            // Find the document across all document types
+            var doc = await FindDocumentAsync(documentId);
+            if (doc == null) return false;
+
+            var custodyServiceCode = ServiceTribunalToRbacCode(doc.ServiceActuel);
+            return userServiceCode == custodyServiceCode;
+        }
+
+        /// <summary>
+        /// Check if a user is the current custodian of a document (sync).
+        /// Used in controllers where the document entity is already loaded.
+        /// Admin/Greffier/Directeur roles bypass custody checks.
+        /// </summary>
+        public bool IsUserCustodian(Document document, int userId)
+        {
+            var user = _context.Utilisateurs.Find(userId);
+            if (user == null) return false;
+
+            // Admin-like roles bypass custody (system managers)
+            if (IsAdminLike(user)) return true;
+
+            var userServiceCode = NormalizeServiceCode(user.Service ?? "");
+            if (string.IsNullOrEmpty(userServiceCode)) return false;
+
+            var custodyServiceCode = ServiceTribunalToRbacCode(document.ServiceActuel);
+            return userServiceCode == custodyServiceCode;
+        }
+
+        /// <summary>
+        /// Check if a user's service is the current custodian by comparing service codes directly.
+        /// </summary>
+        public bool IsServiceCustodian(Document document, string serviceCode)
+        {
+            if (string.IsNullOrEmpty(serviceCode)) return false;
+            var normalized = NormalizeServiceCode(serviceCode);
+            var custodyServiceCode = ServiceTribunalToRbacCode(document.ServiceActuel);
+            return normalized == custodyServiceCode;
+        }
+
+        /// <summary>
+        /// Helper: find a document across all document tables.
+        /// </summary>
+        private async Task<Document?> FindDocumentAsync(int documentId)
+        {
+            var doc = await _context.Documents.FindAsync(documentId);
+            if (doc != null) return doc;
+
+            doc = await _context.CourriersAdministratifs.FindAsync(documentId);
+            if (doc != null) return doc;
+
+            doc = await _context.DossiersJuridiques.FindAsync(documentId);
+            if (doc != null) return doc;
+
+            doc = await _context.CourriersSortants.FindAsync(documentId);
+            return doc;
+        }
     }
 
     public class DocumentAccessDto

@@ -214,6 +214,14 @@ namespace WebApplication1.Controllers
             if (courrier == null)
                 return NotFound(new { message = "Courrier non trouvé" });
 
+            // ── CUSTODY CHECK: only the current service holder can modify ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(courrier, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce courrier. Seul le service en charge peut le modifier." });
+            }
+
             // Mise à jour des champs
             courrier.NumeroOrdre = dto.NumeroOrdre;
             courrier.Expediteur = dto.Expediteur;
@@ -238,6 +246,14 @@ namespace WebApplication1.Controllers
             var courrier = await _context.CourriersAdministratifs.FindAsync(id);
             if (courrier == null)
                 return NotFound(new { message = "Courrier non trouvé" });
+
+            // ── CUSTODY CHECK: only the current service holder can delete ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(courrier, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce courrier. Seul le service en charge peut le supprimer." });
+            }
 
             courrier.EstSupprime = true;
             await _context.SaveChangesAsync();
