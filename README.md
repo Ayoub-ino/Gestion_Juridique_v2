@@ -216,9 +216,9 @@ bash scripts/permission-audit.sh
 
 | Test Suite | Count | Command |
 |---|---|---|
-| Backend unit tests | 85 | `dotnet test` |
+| Backend unit tests | 103 | `dotnet test` |
 | Cypress E2E — app.cy.ts | 35 | `npx cypress run --spec cypress/e2e/app.cy.ts` |
-| Cypress E2E — permission-toggle | 24 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
+| Cypress E2E — permission-toggle | 27 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
 | Permission audit | 46 | `bash scripts/permission-audit.sh` |
 
 ---
@@ -323,5 +323,4 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Auto-generated permission matrix: `bash scripts/generate-permission-matrix.sh`
-> Last verified: September 2026 — 85 unit tests, 59 E2E tests, 46 audit checks ✅
+> Last verified: September 2026 — 103 unit tests, 62 E2E tests, 46 audit checks ✅
