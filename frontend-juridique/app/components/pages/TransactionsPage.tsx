@@ -316,16 +316,6 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                       ) : t.statut === "Accepte" ? (
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] text-emerald-600 italic">{t.commentaire || "-"}</span>
-                          {/* Sender can cancel accepted transactions */}
-                          {isSender && canCancelTransfer && (
-                            <button
-                              type="button"
-                              onClick={() => handleAnnuler(t.id)}
-                              className="mt-1 px-2.5 py-1.5 rounded bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 transition whitespace-nowrap"
-                            >
-                              {langue === "fr" ? "Annuler" : "إلغاء"}
-                            </button>
-                          )}
                         </div>
                       ) : t.statut === "Refuse" ? (
                         <div className="flex flex-col gap-1">
