@@ -3,12 +3,18 @@ WebApplication1/**/bin/
 WebApplication1/**/obj/
 WebApplication1/appsettings.Development.json
 *.user
+*.slnx
 
 # Frontend
 frontend-juridique/node_modules/
 frontend-juridique/.next/
 frontend-juridique/out/
+frontend-juridique/.vite/
 frontend-juridique/prisma/dev.db
+
+# Cypress artifacts
+frontend-juridique/cypress/screenshots/
+frontend-juridique/cypress/videos/
 
 # Logs
 *.log
@@ -21,12 +27,13 @@ tmp/
 .vs/
 .vscode/
 *.suo
-
-# AI/tooling artifacts
-.ignore
-
+.vstemporarykeyring
 
 # OS
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# AI/tooling artifacts (internal only, not for repo)
+CHANGELOG_AGENTS.md
+.slim/
