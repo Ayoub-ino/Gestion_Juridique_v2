@@ -84,7 +84,7 @@ namespace WebApplication1.Tests
                 Key = "dashboard",
                 Category = "dashboard",
                 LabelFr = "Tableau de bord",
-                LabelAr = "لوحة القيادة",
+                LabelAr = "لوحة التحكم",
                 DefaultEnabled = true
             });
             ctx.Utilisateurs.Add(new Utilisateur { Login = "admin", Nom = "Admin", Role = "Admin", Service = "Admin" });

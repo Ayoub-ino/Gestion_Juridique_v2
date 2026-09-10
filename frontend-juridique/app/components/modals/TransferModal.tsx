@@ -76,6 +76,7 @@ export function TransferModal({
         setActiveServices(services.filter(s => s.code !== ownService && s.isActive && s.userCount > 0));
         setHistoricalServices(historical.filter((s) => s.isActive));
       } catch {
+        // Fallback to empty arrays on fetch failure
         setActiveServices([]);
         setHistoricalServices([]);
       } finally {
@@ -102,6 +103,7 @@ export function TransferModal({
               token
             );
           } catch {
+            // Individual service user fetch failed — skip this service
             return [];
           }
         });
@@ -116,6 +118,7 @@ export function TransferModal({
         });
         setServiceUsers(unique);
       } catch {
+        // Failed to fetch users for selected services
         setServiceUsers([]);
       }
     };

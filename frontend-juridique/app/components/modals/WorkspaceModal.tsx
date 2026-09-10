@@ -100,11 +100,11 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
     JalsatWaIjra2at: langue === "fr" ? "Sessions et actions" : "الجلسات والإجراءات",
     Ijra2Baht: langue === "fr" ? "Enquêtes" : "التحقيقات",
     MofawidMalaki: langue === "fr" ? "Délégation royale" : "التفويض الملكي",
-    Khibra: langue === "fr" ? "Expertise" : "الخبرة",
+    Khibra: langue === "fr" ? "Expertise judiciaire" : "الخبرة القضائية",
     MustacharMoqarir: langue === "fr" ? "Conseil/rapports" : "المستشار/التقارير",
     TaslimNusakh: langue === "fr" ? "Remise de copies" : "تسليم النسخ",
     Tabligh: langue === "fr" ? "Notification" : "الإبلاغ",
-    TasfiyatSawa2ir: langue === "fr" ? "Règlement des dépens" : "تصفية الصوائر",
+    TasfiyatSawa2ir: langue === "fr" ? "Règlement des dépens" : "تسوية المصاريف",
     Archive: langue === "fr" ? "Archives" : "الأرشيف",
     BureauNotification: langue === "fr" ? "Notification" : "مكتب الإخطار",
     BureauExpertise: langue === "fr" ? "Expertise" : "مكتب الخبرة",
@@ -136,7 +136,7 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
     setLoading(true);
     api.get<WorkspaceDoc>(`/api/Workspace/document/${docId}`, token)
       .then((data) => { setDoc(data); })
-      .catch(() => {})
+      .catch(() => {}) // Silently ignore fetch errors for workspace doc
       .finally(() => setLoading(false));
   }, [docId, token]);
 
@@ -144,14 +144,14 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
     if (!docId || !token) return;
     api.get<Note[]>(`/api/Workspace/document/${docId}/notes`, token)
       .then((data) => setNotes(data))
-      .catch(() => {});
+      .catch(() => {}); // Silently ignore — notes are optional
   }, [docId, token]);
 
   useEffect(() => {
     if (!docId || !token) return;
     api.get<ModifRecord[]>(`/api/Workspace/document/${docId}/modifications`, token)
       .then((data) => setModifications(data))
-      .catch(() => {});
+      .catch(() => {}); // Silently ignore — modifications are optional
   }, [docId, token]);
 
   const handleSave = async () => {

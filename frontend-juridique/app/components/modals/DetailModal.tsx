@@ -120,6 +120,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
       if (!res.ok) return null;
       return await res.blob();
     } catch {
+      // File fetch failed (network error, auth failure, etc.)
       return null;
     }
   };

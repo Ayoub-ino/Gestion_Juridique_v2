@@ -15,7 +15,7 @@ This C# service is called automatically on application startup and can also be t
 | # | Step | Description |
 |---|------|-------------|
 | 1 | Admin User | Creates `admin` / `admin123` if not exists |
-| 2 | RBAC Services | 9 services (BureauOrdre, FathMlafat, Secrétariat, etc.) |
+| 2 | RBAC Services | 9 services (Bureau d'ordre, Ouverture des dossiers, Secrétariat, etc.) |
 | 3 | Permissions | ~35 permission keys across categories (documents, notifications, juridique, recherche, admin, autres) |
 | 4 | ServicePermissions | Maps permissions to each service (permission matrix) |
 | 5 | AdminPermissionOverrides | 20 permissions disabled for admin by default |
@@ -26,16 +26,16 @@ This C# service is called automatically on application startup and can also be t
 
 | Login | Password | Service |
 |-------|----------|---------|
-| admin | admin123 | Admin |
-| bureauordre | bureauordre123 | BureauOrdre |
-| fathmilafat | fathmilafat123 | FathMlafat |
-| secretarait | secretarait123 | Secrétariat |
+| admin | admin123 | Administrateur |
+| bureauordre | bureauordre123 | Bureau d'ordre |
+| fathmilafat | fathmilafat123 | Ouverture des dossiers |
+| secretarait | secretarait123 | Secrétariat général |
 | seances | seances123 | Séances & Procédures |
-| khibra | khibra123 | Expertise |
-| taslimnosakh | taslim123 | Taslim Nusakh |
-| tasfiya | tasfiya123 | Tasfiyat Sawa2ir |
+| khibra | khibra123 | Expertise judiciaire |
+| taslimnosakh | taslim123 | Délivrance des copies |
+| tasfiya | tasfiya123 | Règlement des dépens |
 | archive | archive123 | Archive |
-| atabligh | atabligh123 | Atabligh |
+| atabligh | atabligh123 | Notification |
 
 ### SQL Scripts
 

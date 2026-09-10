@@ -79,14 +79,14 @@ namespace WebApplication1.Services
                     var rbacServices = new List<Service>
                     {
                         new Service { Nom = "Bureau d'ordre", Code = "bureauordre", Description = "Bureau d'ordre et bureau administratif" },
-                        new Service { Nom = "Fath M'lafat", Code = "fathmilafat", Description = "Ouverture des dossiers judiciaires" },
-                        new Service { Nom = "Secrétariat", Code = "secretarait", Description = "Secrétariat général" },
+                        new Service { Nom = "Ouverture des dossiers", Code = "fathmilafat", Description = "Ouverture des dossiers judiciaires" },
+                        new Service { Nom = "Secrétariat général", Code = "secretarait", Description = "Secrétariat général" },
                         new Service { Nom = "Séances & Procédures", Code = "seances&procedures", Description = "Gestion des séances et procédures" },
-                        new Service { Nom = "Khibra (Expertise)", Code = "khibra", Description = "Service d'expertise" },
-                        new Service { Nom = "Taslim Nusakh", Code = "taslimnosakh", Description = "Délivrance des copies" },
-                        new Service { Nom = "Tasfiyat Sawa2ir Takmilia", Code = "tasfiatSawa2irTakmilia", Description = "Règlement des affaires complémentaires" },
+                        new Service { Nom = "Expertise judiciaire", Code = "khibra", Description = "Service d'expertise" },
+                        new Service { Nom = "Délivrance des copies", Code = "taslimnosakh", Description = "Délivrance des copies" },
+                        new Service { Nom = "Règlement des dépens", Code = "tasfiatSawa2irTakmilia", Description = "Règlement des dépens" },
                         new Service { Nom = "Archive", Code = "archive", Description = "Service des archives" },
-                        new Service { Nom = "Atabligh", Code = "atabligh", Description = "Service de notification et التبليغ" }
+                        new Service { Nom = "Notification", Code = "atabligh", Description = "Service de notification et de signification" }
                     };
                     var existingCodes = _context.RbacServices.Select(s => s.Code).ToHashSet();
                     foreach (var svc in rbacServices.Where(s => !existingCodes.Contains(s.Code)))
@@ -161,7 +161,7 @@ namespace WebApplication1.Services
                         new Permission { Key = "ajouter_notes", LabelFr = "Ajouter notes", LabelAr = "إضافة ملاحظات", Category = "autres", DefaultEnabled = true },
                         new Permission { Key = "voir_historique", LabelFr = "Voir historique", LabelAr = "عرض السجل", Category = "autres", DefaultEnabled = true },
                         new Permission { Key = "telecharger_fichiers", LabelFr = "Télécharger fichiers", LabelAr = "تحميل الملفات", Category = "autres", DefaultEnabled = true },
-                        new Permission { Key = "dashboard", LabelFr = "Tableau de bord", LabelAr = "لوحة القيادة", Category = "autres", DefaultEnabled = true },
+                        new Permission { Key = "dashboard", LabelFr = "Tableau de bord", LabelAr = "لوحة التحكم", Category = "autres", DefaultEnabled = true },
                         new Permission { Key = "mes_entites", LabelFr = "Mes entités", LabelAr = "كياني", Category = "autres", DefaultEnabled = true },
                         new Permission { Key = "transactions", LabelFr = "Transactions", LabelAr = "المعاملات", Category = "autres", DefaultEnabled = true },
                         new Permission { Key = "archives_view", LabelFr = "Voir archives", LabelAr = "عرض الأرشيف", Category = "autres", DefaultEnabled = true },
@@ -312,15 +312,15 @@ namespace WebApplication1.Services
                 var rbacServiceList = _context.RbacServices.ToList();
                 var serviceUserDefs = new[]
                 {
-                    new { Login = "bureauordre", Pass = "bureauordre123", Nom = "Agent Bureau d'Ordre", ServiceCode = "bureauordre" },
-                    new { Login = "fathmilafat", Pass = "fathmilafat123", Nom = "Agent Fath M'lafat", ServiceCode = "fathmilafat" },
-                    new { Login = "secretarait", Pass = "secretarait123", Nom = "Agent Secrétariat", ServiceCode = "secretarait" },
+                    new { Login = "bureauordre", Pass = "bureauordre123", Nom = "Agent Bureau d'ordre", ServiceCode = "bureauordre" },
+                    new { Login = "fathmilafat", Pass = "fathmilafat123", Nom = "Agent Ouverture des dossiers", ServiceCode = "fathmilafat" },
+                    new { Login = "secretarait", Pass = "secretarait123", Nom = "Agent Secrétariat général", ServiceCode = "secretarait" },
                     new { Login = "seances", Pass = "seances123", Nom = "Agent Séances & Procédures", ServiceCode = "seances&procedures" },
-                    new { Login = "khibra", Pass = "khibra123", Nom = "Agent Expertise", ServiceCode = "khibra" },
-                    new { Login = "taslimnosakh", Pass = "taslim123", Nom = "Agent Taslim Nusakh", ServiceCode = "taslimnosakh" },
-                    new { Login = "tasfiya", Pass = "tasfiya123", Nom = "Agent Tasfiyat Sawa2ir", ServiceCode = "tasfiatSawa2irTakmilia" },
+                    new { Login = "khibra", Pass = "khibra123", Nom = "Agent Expertise judiciaire", ServiceCode = "khibra" },
+                    new { Login = "taslimnosakh", Pass = "taslim123", Nom = "Agent Délivrance des copies", ServiceCode = "taslimnosakh" },
+                    new { Login = "tasfiya", Pass = "tasfiya123", Nom = "Agent Règlement des dépens", ServiceCode = "tasfiatSawa2irTakmilia" },
                     new { Login = "archive", Pass = "archive123", Nom = "Agent Archive", ServiceCode = "archive" },
-                    new { Login = "atabligh", Pass = "atabligh123", Nom = "Agent Atabligh", ServiceCode = "atabligh" }
+                    new { Login = "atabligh", Pass = "atabligh123", Nom = "Agent Notification", ServiceCode = "atabligh" }
                 };
 
                 var createdUsers = 0;

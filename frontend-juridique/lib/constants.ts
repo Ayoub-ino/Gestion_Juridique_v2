@@ -5,32 +5,32 @@ import { Langue } from "@/app/types";
 export const SERVICE_GROUPS = [
   {
     label: "JalsatWaIjra2at",
-    fr: "Service des audiences",
-    ar: "مصلحة الجلسات والإجراءات",
+    fr: "Séances & audiences",
+    ar: "الجلسات والإجراءات",
     children: [
-      { value: "Ijra2Baht", fr: "Recherche", ar: "إجراء بحث" },
+      { value: "Ijra2Baht", fr: "Enquête & recherche", ar: "البحث والتحقيق" },
       { value: "MofawidMalaki", fr: "Commissaire du roi", ar: "المفوض الملكي" },
-      { value: "Khibra", fr: "Expertise", ar: "الخبرة" },
+      { value: "Khibra", fr: "Expertise judiciaire", ar: "الخبرة القضائية" },
       { value: "MustacharMoqarir", fr: "Conseiller rapporteur", ar: "المستشار المقرر" }
     ]
   },
   {
     label: "TaslimNusakh",
     fr: "Délivrance des copies",
-    ar: "مصلحة تسليم النسخ",
+    ar: "قسم تسليم النسخ",
     children: [
-      { value: "Tabligh", fr: "Notification", ar: "التبليغ" },
-      { value: "TasfiyatSawa2ir", fr: "Règlement des dépens", ar: "تصفية الصوائر" },
+      { value: "Tabligh", fr: "Signification", ar: "التبليغ" },
+      { value: "TasfiyatSawa2ir", fr: "Règlement des dépens", ar: "تسوية المصاريف" },
       { value: "Archive", fr: "Archives", ar: "الأرشيف" }
     ]
   },
   {
     label: "Services indépendants",
     fr: "Services indépendants",
-    ar: "مصالح مستقلة",
+    ar: "المصالح المستقلة",
     children: [
       { value: "KitabaKhasa", fr: "Secrétariat particulier", ar: "الكتابة الخاصة" },
-      { value: "BureauOrdre", fr: "Bureau d'Ordre", ar: "مكتب الضبط" },
+      { value: "BureauOrdre", fr: "Bureau d'ordre", ar: "مكتب الضبط" },
       { value: "OuvertureDossier", fr: "Ouverture des dossiers", ar: "فتح الملفات" }
     ]
   },
@@ -46,7 +46,7 @@ export const SERVICE_GROUPS = [
       { value: "CaisseTribunal", fr: "Caisse du tribunal", ar: "صندوق المحكمة" },
       { value: "BureauRecouvrement", fr: "Recouvrement", ar: "التحصيل" },
       { value: "ProcduresCommissaireRoyal", fr: "Procédures commissaire royal", ar: "إجراءات المفوض الملكي" },
-      { value: "GestionPourvoisCassation", fr: "Pourvois en cassation", ar: "الطعن بالنقص" },
+      { value: "GestionPourvoisCassation", fr: "Pourvois en cassation", ar: "الطعن بالنقض" },
       { value: "RemiseCopieJugement", fr: "Remise copie jugement", ar: "تسليم نسخ الأحكام" },
       { value: "EfficaciteJudiciaire", fr: "Efficacité judiciaire", ar: "الكفاءة القضائية" },
       { value: "Greffe", fr: "Greffe", ar: "القلم" },
@@ -85,19 +85,19 @@ export function getRoleLabel(role: string, langue: Langue): string {
     "Directeur": { fr: "Directeur", ar: "المدير العام" },
     "Consultant": { fr: "Consultant", ar: "مستشار" },
     "Enregistrement": { fr: "Enregistrement", ar: "التسجيل" },
-    "BureauOrdre": { fr: "Agent Bureau d'Ordre", ar: "مكتب الضبط" },
+    "BureauOrdre": { fr: "Agent Bureau d'ordre", ar: "مكتب الضبط" },
     "OuvertureDossier": { fr: "Ouverture des dossiers", ar: "فتح الملفات" },
     "KitabaKhasa": { fr: "Secrétariat particulier", ar: "الكتابة الخاصة" },
     "Jalsat": { fr: "Service des audiences", ar: "مصلحة الجلسات والإجراءات" },
     "Taslim": { fr: "Délivrance des copies", ar: "مصلحة تسليم النسخ" },
     "Notification": { fr: "Bureau de notification", ar: "مكتب التبليغ" },
     "Archive": { fr: "Archives", ar: "الأرشيف" },
-    "Ijra2Baht": { fr: "Recherche", ar: "إجراء بحث" },
+    "Ijra2Baht": { fr: "Enquête & recherche", ar: "البحث والتحقيق" },
     "MofawidMalaki": { fr: "Commissaire du roi", ar: "المفوض الملكي" },
-    "Khibra": { fr: "Expertise", ar: "الخبرة" },
+    "Khibra": { fr: "Expertise judiciaire", ar: "الخبرة القضائية" },
     "MustacharMoqarir": { fr: "Conseiller rapporteur", ar: "المستشار المقرر" },
-    "Tabligh": { fr: "Notification", ar: "التبليغ" },
-    "TasfiyatSawa2ir": { fr: "Règlement des dépens", ar: "تصفية الصوائر" },
+    "Tabligh": { fr: "Signification", ar: "التبليغ" },
+    "TasfiyatSawa2ir": { fr: "Règlement des dépens", ar: "تسوية المصاريف" },
     "CelluleInformatique": { fr: "Cellule informatique", ar: "الوحدة المعلوماتية" },
     "BureauNotification": { fr: "Bureau de notification", ar: "مكتب التبليغ" },
     "BureauExpertise": { fr: "Bureau d'expertise", ar: "مكتب الخبرة" },
@@ -105,18 +105,18 @@ export function getRoleLabel(role: string, langue: Langue): string {
     "CaisseTribunal": { fr: "Caisse du tribunal", ar: "صندوق المحكمة" },
     "BureauRecouvrement": { fr: "Recouvrement", ar: "التحصيل" },
     "ProcduresCommissaireRoyal": { fr: "Procédures commissaire royal", ar: "إجراءات المفوض الملكي" },
-    "GestionPourvoisCassation": { fr: "Pourvois en cassation", ar: "الطعن بالنقص" },
+    "GestionPourvoisCassation": { fr: "Pourvois en cassation", ar: "الطعن بالنقض" },
     "RemiseCopieJugement": { fr: "Remise copie jugement", ar: "تسليم نسخ الأحكام" },
     "EfficaciteJudiciaire": { fr: "Efficacité judiciaire", ar: "الكفاءة القضائية" },
-    "JalsatWaIjra2at": { fr: "Service des audiences", ar: "مصلحة الجلسات والإجراءات" },
-    "TaslimNusakh": { fr: "Délivrance des copies", ar: "مصلحة تسليم النسخ" },
+    "JalsatWaIjra2at": { fr: "Séances & audiences", ar: "الجلسات والإجراءات" },
+    "TaslimNusakh": { fr: "Délivrance des copies", ar: "قسم تسليم النسخ" },
     "Expertise": { fr: "Bureau d'expertise", ar: "مكتب الخبرة" },
     "Informatique": { fr: "Cellule informatique", ar: "الوحدة المعلوماتية" },
     "Finances": { fr: "Gestion financière", ar: "التسيير المالي" },
     "Caisse": { fr: "Caisse du tribunal", ar: "صندوق المحكمة" },
     "Recouvrement": { fr: "Recouvrement", ar: "التحصيل" },
     "Procedures": { fr: "Procédures commissaire royal", ar: "إجراءات المفوض الملكي" },
-    "Pourvois": { fr: "Pourvois en cassation", ar: "الطعن بالنقص" },
+    "Pourvois": { fr: "Pourvois en cassation", ar: "الطعن بالنقض" },
     "RemiseCopie": { fr: "Remise copie jugement", ar: "تسليم نسخ الأحكام" },
     "Stats": { fr: "Efficacité judiciaire", ar: "الكفاءة القضائية" },
     "Greffe": { fr: "Greffe", ar: "القلم" },
@@ -133,12 +133,12 @@ export function getStatusLabel(value: string, langue: Langue): string {
 }
 
 export const WORKFLOW_STEPS = [
-  { labelFr: "Bureau d'Ordre", labelAr: "مكتب الضبط", service: "BureauOrdre" },
+  { labelFr: "Bureau d'ordre", labelAr: "مكتب الضبط", service: "BureauOrdre" },
   { labelFr: "Ouverture des dossiers", labelAr: "فتح الملفات", service: "OuvertureDossier" },
   { labelFr: "Secrétariat particulier", labelAr: "الكتابة الخاصة", service: "KitabaKhasa" },
-  { labelFr: "Service des audiences", labelAr: "مصلحة الجلسات والإجراءات", service: "JalsatWaIjra2at" },
-  { labelFr: "Délivrance & Clôture", labelAr: "مصلحة تسليم النسخ", service: "TaslimNusakh" },
-  { labelFr: "Archivage définitif", labelAr: "الإيداع بالأرشيف النهائي", service: "Archive" }
+  { labelFr: "Séances & audiences", labelAr: "الجلسات والإجراءات", service: "JalsatWaIjra2at" },
+  { labelFr: "Délivrance & Clôture", labelAr: "قسم تسليم النسخ", service: "TaslimNusakh" },
+  { labelFr: "Archivage définitif", labelAr: "الإيداع النهائي بالأرشيف", service: "Archive" }
 ];
 
 export function getWorkflowProgress(serviceActuel: string): { step: number; total: number; pct: number; label: string } {
