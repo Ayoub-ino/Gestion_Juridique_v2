@@ -35,5 +35,4 @@ Desktop.ini
 .DS_Store
 
 # AI/tooling artifacts (internal only, not for repo)
-CHANGELOG_AGENTS.md
-.slim/
+
