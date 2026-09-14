@@ -4,7 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import type { User } from "@/context/AuthContext";
 import { useState, useEffect, useCallback } from "react";
 import { Langue } from "@/app/types";
-import { SERVICE_GROUPS, getRoleLabel } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { api } from "@/lib/api/client";
 
 interface Props {
@@ -65,14 +65,7 @@ export function ProfilPage({ langue, cur, token, user }: Props) {
     } catch (err) { console.error(err); }
   };
 
-  const getServiceLabel = (value: string) => {
-    for (const group of SERVICE_GROUPS) {
-      for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
-      }
-    }
-    return getRoleLabel(value, langue);
-  };
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   const activeSubstitute = substitutes.find(s => s.isActive);
 
@@ -82,19 +75,19 @@ export function ProfilPage({ langue, cur, token, user }: Props) {
         <h3 className="font-bold text-sm text-slate-800 mb-4">{langue === "fr" ? "Mes informations" : "معلوماتي"}</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Nom complet" : "الاسم الكامل"}</label>
+            <span className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Nom complet" : "الاسم الكامل"}</span>
             <p className="text-xs font-bold text-slate-800 p-2.5 bg-slate-50 rounded-lg border border-slate-200">{user?.nom || "-"}</p>
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Login</label>
+            <span className="block text-[11px] font-bold text-slate-500 mb-1">Login</span>
             <p className="text-xs font-bold text-slate-800 p-2.5 bg-slate-50 rounded-lg border border-slate-200">{user?.login || "-"}</p>
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Service" : "المصلحة"}</label>
+            <span className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Service" : "المصلحة"}</span>
             <p className="text-xs font-bold text-slate-800 p-2.5 bg-slate-50 rounded-lg border border-slate-200">{getServiceLabel(user?.service || "")}</p>
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Rôle" : "الدور"}</label>
+            <span className="block text-[11px] font-bold text-slate-500 mb-1">{langue === "fr" ? "Rôle" : "الدور"}</span>
             <p className="text-xs font-bold text-slate-800 p-2.5 bg-slate-50 rounded-lg border border-slate-200">{user?.role || "-"}</p>
           </div>
         </div>
@@ -120,8 +113,8 @@ export function ProfilPage({ langue, cur, token, user }: Props) {
             </p>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Choisir un remplaçant" : "اختر بديلاً"}</label>
-                <select value={selectedSubstitute} onChange={(e) => setSelectedSubstitute(Number(e.target.value))}
+                <label htmlFor="substitute-select" className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Choisir un remplaçant" : "اختر بديلاً"}</label>
+                <select id="substitute-select" value={selectedSubstitute} onChange={(e) => setSelectedSubstitute(Number(e.target.value))}
                   className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500">
                   <option value={0}>-- {langue === "fr" ? "Aucun" : "لا أحد"} --</option>
                   {allUsers.map(u => (

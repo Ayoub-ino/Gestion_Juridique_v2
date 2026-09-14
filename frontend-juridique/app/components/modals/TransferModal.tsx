@@ -194,6 +194,7 @@ export function TransferModal({
                 {activeServices.map((svc) => (
                   <label
                     key={svc.code}
+                    htmlFor={`transfer-svc-${svc.code}`}
                     className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer transition ${
                       selectedServices.includes(svc.code)
                         ? "bg-blue-600 text-white border-blue-600"
@@ -201,6 +202,7 @@ export function TransferModal({
                     }`}
                   >
                     <input
+                      id={`transfer-svc-${svc.code}`}
                       type="checkbox"
                       checked={selectedServices.includes(svc.code)}
                       onChange={() => toggleService(svc.code)}
@@ -235,6 +237,7 @@ export function TransferModal({
                   {historicalServices.map((svc) => (
                     <label
                       key={svc.code}
+                      htmlFor={`transfer-hsvc-${svc.code}`}
                       className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer transition ${
                         selectedServices.includes(svc.code)
                           ? "bg-amber-500 text-white border-amber-500"
@@ -242,6 +245,7 @@ export function TransferModal({
                       }`}
                     >
                       <input
+                        id={`transfer-hsvc-${svc.code}`}
                         type="checkbox"
                         checked={selectedServices.includes(svc.code)}
                         onChange={() => toggleService(svc.code)}
@@ -256,9 +260,9 @@ export function TransferModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <span className="block text-xs font-bold text-slate-700 mb-2">
               {langue === "fr" ? "Attribuer à des utilisateurs (optionnel)" : "تخصيص لمستخدمين (اختياري)"}
-            </label>
+            </span>
             {selectedServices.length === 0 ? (
               <p className="text-xs text-slate-400 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 {langue === "fr" ? "Sélectionner d'abord un service" : "حدد مصلحة أولاً"}
@@ -269,8 +273,9 @@ export function TransferModal({
               </p>
             ) : (
               <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-white">
-                <label className="flex items-center gap-2 p-2.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
+                <label htmlFor="transfer-select-all" className="flex items-center gap-2 p-2.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
                   <input
+                    id="transfer-select-all"
                     type="checkbox"
                     checked={selectedUserIds.length === serviceUsers.length}
                     ref={(el) => {
@@ -294,11 +299,13 @@ export function TransferModal({
                 {serviceUsers.map((u) => (
                   <label
                     key={u.id}
+                    htmlFor={`transfer-user-${u.id}`}
                     className={`flex items-center gap-2 p-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer transition ${
                       selectedUserIds.includes(u.id) ? "bg-blue-50" : ""
                     }`}
                   >
                     <input
+                      id={`transfer-user-${u.id}`}
                       type="checkbox"
                       checked={selectedUserIds.includes(u.id)}
                       onChange={() => {
@@ -323,8 +330,9 @@ export function TransferModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.commentaire}</label>
+            <label htmlFor="transfer-message" className="block text-xs font-bold text-slate-700 mb-2">{cur.commentaire}</label>
             <textarea
+              id="transfer-message"
               rows={3}
               value={transferMessage}
               onChange={(e) => setTransferMessage(e.target.value)}
@@ -333,8 +341,9 @@ export function TransferModal({
             />
           </div>
 
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+          <label htmlFor="transfer-must-return" className="flex items-center gap-2 text-xs font-bold text-slate-700">
             <input
+              id="transfer-must-return"
               type="checkbox"
               checked={transferMustReturn}
               onChange={(e) => setTransferMustReturn(e.target.checked)}

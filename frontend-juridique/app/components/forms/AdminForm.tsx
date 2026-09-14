@@ -100,10 +100,11 @@ export function AdminForm({
       {/* ===== Référence & Objet ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="admin-ref" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.tblRef} <span className="text-red-500">*</span>
           </label>
           <input
+            id="admin-ref"
             type="text"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
@@ -113,10 +114,11 @@ export function AdminForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="admin-titre" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.tblTitre} <span className="text-red-500">*</span>
           </label>
           <textarea
+            id="admin-titre"
             rows={2}
             value={objet}
             onChange={(e) => setObjet(e.target.value)}
@@ -129,10 +131,11 @@ export function AdminForm({
 
       {/* ===== Service ===== */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-2">
+        <label htmlFor="admin-service-origine" className="block text-xs font-bold text-slate-700 mb-2">
           {cur.serviceOrigine}
         </label>
         <input
+          id="admin-service-origine"
           type="text"
           value={serviceOrigine}
           onChange={(e) => setServiceOrigine(e.target.value)}
@@ -145,10 +148,11 @@ export function AdminForm({
       {/* ===== LIGNE 1 : المرسل (Expéditeur) - TEXTE LIBRE ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="admin-provenance" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.provenance} <span className="text-red-500">*</span>
           </label>
           <input
+            id="admin-provenance"
             type="text"
             value={expediteur}
             onChange={(e) => setExpediteur(e.target.value)}
@@ -158,8 +162,9 @@ export function AdminForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
+          <label htmlFor="admin-date-arrivee" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
           <input
+            id="admin-date-arrivee"
             type="date"
             value={dateArrivee}
             onChange={(e) => setDateArrivee(e.target.value)}
@@ -172,10 +177,11 @@ export function AdminForm({
       {/* ===== LIGNE 2 : المصدر (Source) - DROPDOWN ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="admin-source" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.tblSource} <span className="text-red-500">*</span>
           </label>
           <select
+            id="admin-source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
             className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -193,8 +199,9 @@ export function AdminForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.dateMessage}</label>
+          <label htmlFor="admin-date-message" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateMessage}</label>
           <input
+            id="admin-date-message"
             type="date"
             value={dateMessage}
             onChange={(e) => setDateMessage(e.target.value)}
@@ -206,8 +213,9 @@ export function AdminForm({
       {/* ===== LIGNE 3 : Numéro interne & Année de numérotation ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroInterne}</label>
+          <label htmlFor="admin-numero-interne" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroInterne}</label>
           <input
+            id="admin-numero-interne"
             type="text"
             value={numeroInterne}
             onChange={(e) => setNumeroInterne(e.target.value)}
@@ -216,8 +224,9 @@ export function AdminForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
+          <label htmlFor="admin-annee" className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
           <input
+            id="admin-annee"
             type="text"
             value={anneeNumerotation}
             onChange={(e) => setAnneeNumerotation(e.target.value)}
@@ -230,10 +239,11 @@ export function AdminForm({
       {/* ===== LIGNE 4 : Transmissible & État ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.transmissible}</label>
+          <span className="block text-xs font-bold text-slate-700 mb-2">{cur.transmissible}</span>
           <div className="flex gap-4 mt-1">
-            <label className="flex items-center gap-2 text-xs font-medium">
+            <label htmlFor="admin-transmissible-oui" className="flex items-center gap-2 text-xs font-medium">
               <input
+                id="admin-transmissible-oui"
                 type="radio"
                 name="transmissible"
                 value="Oui"
@@ -242,8 +252,9 @@ export function AdminForm({
               />
               {cur.oui}
             </label>
-            <label className="flex items-center gap-2 text-xs font-medium">
+            <label htmlFor="admin-transmissible-non" className="flex items-center gap-2 text-xs font-medium">
               <input
+                id="admin-transmissible-non"
                 type="radio"
                 name="transmissible"
                 value="Non"
@@ -255,8 +266,9 @@ export function AdminForm({
           </div>
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
+          <label htmlFor="admin-etat" className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
           <select
+            id="admin-etat"
             value={etat}
             onChange={(e) => setEtat(e.target.value)}
             className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -277,8 +289,9 @@ export function AdminForm({
       {/* ===== LIGNE 5 : Fichier & Notes ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
+          <label htmlFor="admin-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
           <input
+            id="admin-fichier"
             ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.xlsx,.xls,.csv"
@@ -288,8 +301,9 @@ export function AdminForm({
           {fichier && <p className="text-[10px] text-slate-500 mt-1">{fichier.name}</p>}
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
+          <label htmlFor="admin-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
           <textarea
+            id="admin-notes"
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -302,7 +316,7 @@ export function AdminForm({
       {/* ===== MODE DE TRAITEMENT ===== */}
       <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-2">{cur.modeTraitement} <span className="text-red-500">*</span></label>
+          <span className="block text-xs font-bold text-slate-800 mb-2">{cur.modeTraitement} <span className="text-red-500">*</span></span>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {[
               { value: "archivage", label: cur.archivage },
@@ -311,6 +325,7 @@ export function AdminForm({
             ].map((option) => (
               <label
                 key={option.value}
+                htmlFor={`admin-mode-${option.value}`}
                 className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer ${
                   modeTraitement === option.value
                     ? "bg-blue-600 text-white border-blue-600"
@@ -318,6 +333,7 @@ export function AdminForm({
                 }`}
               >
                 <input
+                  id={`admin-mode-${option.value}`}
                   type="radio"
                   name="modeTraitement"
                   checked={modeTraitement === option.value}
@@ -336,7 +352,7 @@ export function AdminForm({
 
         {modeTraitement === "unique" && (
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-2">{cur.serviceDest}</label>
+            <span className="block text-xs font-bold text-slate-800 mb-2">{cur.serviceDest}</span>
             <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 max-h-64 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {SERVICE_GROUPS.map((group) => (
@@ -346,6 +362,7 @@ export function AdminForm({
                       {group.children.map((svc) => (
                         <label
                           key={svc.value}
+                          htmlFor={`admin-dest-${svc.value}`}
                           className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
                             serviceDestinataire === svc.value
                               ? "bg-blue-600 text-white border-blue-600"
@@ -353,6 +370,7 @@ export function AdminForm({
                           }`}
                         >
                           <input
+                            id={`admin-dest-${svc.value}`}
                             type="radio"
                             name="serviceDestinataire"
                             checked={serviceDestinataire === svc.value}
@@ -372,14 +390,15 @@ export function AdminForm({
 
         {modeTraitement === "diffusion" && (
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-2">{cur.servicesDiff}</label>
+            <span className="block text-xs font-bold text-slate-800 mb-2">{cur.servicesDiff}</span>
             <div className="grid grid-cols-2 gap-2 bg-white p-4 border border-slate-300 rounded-lg max-h-48 overflow-y-auto">
               {SERVICE_GROUPS.map((group) => (
                 <div key={group.label}>
                   <p className="text-[10px] font-bold text-slate-500 mb-1">{group.fr}</p>
                   {group.children.map((svc) => (
-                    <label key={svc.value} className="flex items-center gap-2 text-xs font-medium">
+                    <label key={svc.value} htmlFor={`admin-diff-${svc.value}`} className="flex items-center gap-2 text-xs font-medium">
                       <input
+                        id={`admin-diff-${svc.value}`}
                         type="checkbox"
                         value={svc.value}
                         checked={Boolean(servicesDiffusion.includes(svc.value))}

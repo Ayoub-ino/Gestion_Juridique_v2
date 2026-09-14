@@ -71,7 +71,7 @@ export function Sidebar({
     <aside className="w-80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex flex-col border-e border-slate-200 dark:border-slate-700 shadow-sm z-10 sticky top-0 h-screen">
       <div className="p-6 border-b border-slate-100 flex items-center gap-4">
         <div className="w-10 h-10 bg-white border border-slate-200 rounded-xl p-1 overflow-hidden flex items-center justify-center shadow-sm">
-          <Image src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Coat_of_arms_of_Morocco.svg" alt="Blason" width={36} height={36} className="w-full h-full object-contain" />
+          <Image src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Coat_of_arms_of_Morocco.svg" alt="Blason" width={36} height={36} loading="eager" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0">
           <h3 className="font-bold text-xs text-slate-900 uppercase truncate">{cur.courAppel}</h3>

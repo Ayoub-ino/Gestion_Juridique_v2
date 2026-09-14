@@ -127,23 +127,23 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.code} *</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
+              <label htmlFor="liste-code" className="block text-xs font-bold text-slate-700 mb-1">{cur.code} *</label>
+              <input id="liste-code" type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.valeurFr} *</label>
-              <input type="text" value={form.valueFr} onChange={(e) => setForm({ ...form, valueFr: e.target.value })} required
+              <label htmlFor="liste-valeur-fr" className="block text-xs font-bold text-slate-700 mb-1">{cur.valeurFr} *</label>
+              <input id="liste-valeur-fr" type="text" value={form.valueFr} onChange={(e) => setForm({ ...form, valueFr: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.valeurAr} *</label>
-              <input type="text" value={form.valueAr} onChange={(e) => setForm({ ...form, valueAr: e.target.value })} required dir="rtl"
+              <label htmlFor="liste-valeur-ar" className="block text-xs font-bold text-slate-700 mb-1">{cur.valeurAr} *</label>
+              <input id="liste-valeur-ar" type="text" value={form.valueAr} onChange={(e) => setForm({ ...form, valueAr: e.target.value })} required dir="rtl"
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Ordre" : "الترتيب"}</label>
-              <input type="number" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: parseInt(e.target.value) || 1 })}
+              <label htmlFor="liste-ordre" className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Ordre" : "الترتيب"}</label>
+              <input id="liste-ordre" type="number" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: parseInt(e.target.value) || 1 })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div className="flex items-end gap-2">

@@ -4,23 +4,29 @@ namespace WebApplication1.Helpers
 {
     public static class ServiceMapper
     {
-        public static ServiceTribunal MapToServiceEnum(string serviceName)
+        /// <summary>
+        /// Try to map a service name/code to a ServiceTribunal enum value.
+        /// Returns true if a mapping exists; false means the service is unknown
+        /// and should NOT fall back to BureauOrdre (which would leak data).
+        /// </summary>
+        public static bool TryMapToServiceEnum(string serviceName, out ServiceTribunal result)
         {
-            if (Enum.TryParse<ServiceTribunal>(serviceName, true, out var result))
-                return result;
+            if (Enum.TryParse<ServiceTribunal>(serviceName, true, out result))
+                return true;
 
-            return serviceName switch
+            // Use nullable to detect unmatched cases (BureauOrdre == 0 == default)
+            ServiceTribunal? mapped = serviceName switch
             {
                 // --- RBAC service codes (seeded in RbacServices, stored in Utilisateur.Service) ---
                 "bureauordre" => ServiceTribunal.BureauOrdre,
-                "fathmilafat" => ServiceTribunal.OuvertureDossier,      // "Ouverture des dossiers judiciaires"
-                "secretarait" => ServiceTribunal.KitabaKhasa,           // Secrétariat
-                "seances&procedures" => ServiceTribunal.JalsatWaIjra2at, // Séances & Procédures = Service des audiences
-                "khibra" => ServiceTribunal.Khibra,                     // Expertise
-                "taslimnosakh" => ServiceTribunal.TaslimNusakh,         // Délivrance des copies
-                "tasfiatSawa2irTakmilia" => ServiceTribunal.TasfiyatSawa2ir, // Règlement des affaires complémentaires
+                "fathmilafat" => ServiceTribunal.OuvertureDossier,
+                "secretarait" => ServiceTribunal.KitabaKhasa,
+                "seances&procedures" => ServiceTribunal.JalsatWaIjra2at,
+                "khibra" => ServiceTribunal.Khibra,
+                "taslimnosakh" => ServiceTribunal.TaslimNusakh,
+                "tasfiatSawa2irTakmilia" => ServiceTribunal.TasfiyatSawa2ir,
                 "archive" => ServiceTribunal.Archive,
-                "atabligh" => ServiceTribunal.Tabligh,                  // Notification (التبليغ)
+                "atabligh" => ServiceTribunal.Tabligh,
 
                 // --- Legacy French service names (pre-RBAC) ---
                 "Bureau d'ordre et bureau administratif" => ServiceTribunal.BureauOrdre,
@@ -41,8 +47,33 @@ namespace WebApplication1.Helpers
                 "Cellule informatique" => ServiceTribunal.CelluleInformatique,
                 "Direction" => ServiceTribunal.Direction,
                 "Greffe" => ServiceTribunal.Greffe,
-                _ => ServiceTribunal.BureauOrdre
+                _ => (ServiceTribunal?)null
             };
+
+            if (mapped.HasValue)
+            {
+                result = mapped.Value;
+                return true;
+            }
+
+            result = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Map a service name to its enum value. For truly unknown codes,
+        /// returns default via TryMapToServiceEnum so callers can handle the
+        /// "no matching service" case gracefully (return empty results)
+        /// instead of leaking BureauOrdre data.
+        /// </summary>
+        public static ServiceTribunal MapToServiceEnum(string serviceName)
+        {
+            if (TryMapToServiceEnum(serviceName, out var result))
+                return result;
+
+            // Unknown code: still return a value for backward compat,
+            // but callers should prefer TryMapToServiceEnum for proper scoping.
+            return result;
         }
 
         public static bool TryParseUserId(string? userIdStr, out int userId)

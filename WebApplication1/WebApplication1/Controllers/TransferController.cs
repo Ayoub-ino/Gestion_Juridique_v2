@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Helpers;
 using WebApplication1.Security;
 using WebApplication1.Services;
 
@@ -191,30 +192,9 @@ namespace WebApplication1.Controllers
 
         private static ServiceTribunal GetServiceEnum(string serviceName)
         {
-            if (Enum.TryParse<ServiceTribunal>(serviceName, true, out var result))
-                return result;
-
-            return serviceName switch
-            {
-                "Bureau d'ordre et bureau administratif" => ServiceTribunal.BureauOrdre,
-                "Bureau de Gestion des Dossiers Judiciaires" => ServiceTribunal.OuvertureDossier,
-                "JalsatWaIjra2at" => ServiceTribunal.JalsatWaIjra2at,
-                "TaslimNusakh" => ServiceTribunal.TaslimNusakh,
-                "Bureau de Notification" => ServiceTribunal.BureauNotification,
-                "Archive" => ServiceTribunal.Archive,
-                "Bureau d'expertise" => ServiceTribunal.BureauExpertise,
-                "Bureau des procédures du commissaire royal" => ServiceTribunal.ProcduresCommissaireRoyal,
-                "Bureau de Gestion des Pourvois en Cassation" => ServiceTribunal.GestionPourvoisCassation,
-                "Remise de copie de jugement" => ServiceTribunal.RemiseCopieJugement,
-                "Bureau de Recouvrement" => ServiceTribunal.BureauRecouvrement,
-                "Caisse du Tribunal" => ServiceTribunal.CaisseTribunal,
-                "Service de Gestion Financière" => ServiceTribunal.GestionFinanciere,
-                "Bureau de l'efficacité judiciaire et des statistiques" => ServiceTribunal.EfficaciteJudiciaire,
-                "Cellule informatique" => ServiceTribunal.CelluleInformatique,
-                "Direction" => ServiceTribunal.Direction,
-                "Greffe" => ServiceTribunal.Greffe,
-                _ => ServiceTribunal.BureauOrdre
-            };
+            // Use the centralized ServiceMapper which handles all RBAC codes,
+            // enum names, and legacy French names.
+            return ServiceMapper.MapToServiceEnum(serviceName);
         }
     }
 

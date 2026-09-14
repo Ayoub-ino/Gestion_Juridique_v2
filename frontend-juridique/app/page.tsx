@@ -34,7 +34,8 @@ const SortantTable = lazy(() => import("@/app/components/tables/SortantTable").t
 
 import { translations } from "@/lib/translations";
 import { normalizeStatus, getDocKey, getErrorMessage } from "@/lib/utils";
-import { getServiceLabel, getStatusLabel, USER_SERVICE_TO_ENUM, WORKFLOW_STEPS } from "@/lib/constants";
+import { getStatusLabel, USER_SERVICE_TO_ENUM, WORKFLOW_STEPS } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { exportRows, importFromFile, downloadExcelTemplate, ExportFormat, ExportRow } from "@/lib/exportImport";
 import { useListItems } from "@/app/hooks/useListItems";
@@ -171,6 +172,7 @@ export default function Home() {
   const [workspaceDocId, setWorkspaceDocId] = useState<number | null>(null);
 
   const { listeCourriers, refetch } = useDocuments(token, langue, vueActive);
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   const fetchPending = useCallback(async () => {
     if (!token) return;
@@ -963,7 +965,6 @@ export default function Home() {
       resetForm();
       setVueActive("dashboard");
     } catch (error) {
-      console.error("Erreur submit:", error);
       let msg = getErrorMessage(error) || "Erreur inconnue";
       // Traduire les erreurs backend en FR/AR
       if (msg.includes("numéro d'ordre existe déjà")) {
@@ -1459,12 +1460,13 @@ export default function Home() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-2">
+                        <label htmlFor="courrier-tiers" className="block text-xs font-bold text-slate-700 mb-2">
                           {vueActive.startsWith("entrant") ? cur.provenance :
                            (vueActive === "sortant-normal" || vueActive === "sortant-demande") ? cur.destinataireExterne :
                            cur.destination} <span className="text-red-500">*</span>
                         </label>
                         <input
+                          id="courrier-tiers"
                           type="text"
                           value={tiers}
                           onChange={(e) => setTiers(e.target.value)}
@@ -1473,8 +1475,9 @@ export default function Home() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-2">{cur.tblRef} <span className="text-red-500">*</span></label>
+                        <label htmlFor="courrier-reference" className="block text-xs font-bold text-slate-700 mb-2">{cur.tblRef} <span className="text-red-500">*</span></label>
                         <input
+                          id="courrier-reference"
                           type="text"
                           value={reference}
                           onChange={(e) => setReference(e.target.value)}
@@ -1486,8 +1489,9 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-2">{cur.tblTitre} <span className="text-red-500">*</span></label>
+                      <label htmlFor="courrier-objet" className="block text-xs font-bold text-slate-700 mb-2">{cur.tblTitre} <span className="text-red-500">*</span></label>
                       <textarea
+                        id="courrier-objet"
                         rows={3}
                         value={objet}
                         onChange={(e) => setObjet(e.target.value)}
@@ -1498,9 +1502,10 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-2">                          {cur.serviceOrigine}
+                      <label htmlFor="courrier-service" className="block text-xs font-bold text-slate-700 mb-2">                          {cur.serviceOrigine}
                       </label>
                       <input
+                        id="courrier-service"
                         type="text"
                         value={userService}
                         disabled
@@ -1720,8 +1725,8 @@ export default function Home() {
       )}
 
       {showRetournerModal && (
-        <div className="fixed inset-0 z-[999] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowRetournerModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div role="presentation" className="fixed inset-0 z-[999] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowRetournerModal(false)}>
+          <div role="presentation" className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h3 className="font-bold text-sm text-slate-800">
                 {langue === "fr" ? "Documents à retourner" : "الوثائق المرجعة"} ({retournerDocs.length})

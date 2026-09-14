@@ -13,9 +13,10 @@ export function LangueSwitcher() {
     const updateLang = () => {
       try {
         const savedLang = localStorage.getItem("langue");
-        if (savedLang === "fr" || savedLang === "ar") {
-          document.documentElement.lang = savedLang;
-        }
+        // Default to Arabic (RTL) when no preference is stored, matching the layout default.
+        const lang = savedLang === "fr" ? "fr" : "ar";
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
       } catch { /* localStorage may be unavailable in SSR */ }
     };
 

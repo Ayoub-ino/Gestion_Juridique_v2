@@ -152,8 +152,8 @@ export function MesEntitesView({
             >                        📋 {cur.chargerModele}
             </button>
             {canImport && (
-              <label className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-[10px] font-bold border border-violet-700 hover:bg-violet-700 cursor-pointer flex items-center gap-1">                        📥 {cur.importExcel}
-                <input type="file" accept=".xlsx,.xls" onChange={onImportExcel} className="hidden" />
+              <label htmlFor="mesentites-import-file" className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-[10px] font-bold border border-violet-700 hover:bg-violet-700 cursor-pointer flex items-center gap-1">                        📥 {cur.importExcel}
+                <input id="mesentites-import-file" type="file" accept=".xlsx,.xls" onChange={onImportExcel} className="hidden" />
               </label>
             )}
           </div>

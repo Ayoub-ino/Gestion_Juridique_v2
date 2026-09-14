@@ -289,10 +289,11 @@ export function JuridiqueForm({
         {/* Document lié & Dossier principal */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-doc-lie" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.docsReference}
             </label>
             <select
+              id="jur-doc-lie"
               value={docLie}
               onChange={(e) => setDocLie(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -303,10 +304,11 @@ export function JuridiqueForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-dossier-principal" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.dossierPrincipal}
             </label>
             <select
+              id="jur-dossier-principal"
               value={dossierPrincipal}
               onChange={(e) => setDossierPrincipal(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -321,10 +323,11 @@ export function JuridiqueForm({
         {/* Source du document lié & Dossier parent (avec bouton parcourir) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-source-doc" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.source_service} <span className="text-red-500">*</span>
             </label>
             <select
+              id="jur-source-doc"
               value={sourceDocLie}
               onChange={(e) => setSourceDocLie(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -337,11 +340,12 @@ export function JuridiqueForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-parent-dossier" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.parentDossier}
             </label>
             <div className="flex gap-2">
               <input
+                id="jur-parent-dossier"
                 type="text"
                 value={parentDossier}
                 readOnly
@@ -362,8 +366,9 @@ export function JuridiqueForm({
         {/* Date & N° Bureau d'ordre */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
+            <label htmlFor="jur-date-arrivee" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
             <input
+              id="jur-date-arrivee"
               type="date"
               value={juridiqueDate}
               onChange={(e) => setJuridiqueDate(e.target.value)}
@@ -371,8 +376,9 @@ export function JuridiqueForm({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureauOrdre}</label>
+            <label htmlFor="jur-bo" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureauOrdre}</label>
             <input
+              id="jur-bo"
               type="text"
               value={numeroBureauOrdre}
               onChange={(e) => setNumeroBureauOrdre(e.target.value)}
@@ -385,8 +391,9 @@ export function JuridiqueForm({
         {/* Année & État */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
+            <label htmlFor="jur-annee" className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
             <input
+              id="jur-annee"
               type="text"
               value={autoYearSuffix}
               onChange={(e) => setAutoYearSuffix(e.target.value)}
@@ -395,8 +402,9 @@ export function JuridiqueForm({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
+            <label htmlFor="jur-etat" className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
             <select
+              id="jur-etat"
               value={juridiqueEtat}
               onChange={(e) => setJuridiqueEtat(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -412,8 +420,9 @@ export function JuridiqueForm({
         {/* Service & Type de dossier */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.service} <span className="text-red-500">*</span></label>
+            <label htmlFor="jur-service" className="block text-xs font-bold text-slate-700 mb-2">{cur.service} <span className="text-red-500">*</span></label>
             <select
+              id="jur-service"
               value={juridiqueService}
               onChange={(e) => setJuridiqueService(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -432,10 +441,11 @@ export function JuridiqueForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-type" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.tblType}
             </label>
             <select
+              id="jur-type"
               value={typeDossier}
               onChange={(e) => setTypeDossier(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -451,10 +461,11 @@ export function JuridiqueForm({
         {/* N° première instance & Fichier */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
+            <label htmlFor="jur-num-premiere" className="block text-xs font-bold text-slate-700 mb-2">
               {cur.numeroPremiereInstance}
             </label>
             <input
+              id="jur-num-premiere"
               type="text"
               value={numeroPremiereInstance}
               onChange={(e) => setNumeroPremiereInstance(e.target.value)}
@@ -463,8 +474,9 @@ export function JuridiqueForm({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
+            <label htmlFor="jur-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
             <input
+              id="jur-fichier"
               ref={fileInputRef}
               type="file"
               accept=".pdf,.doc,.docx,.xlsx,.xls,.csv"
@@ -477,8 +489,9 @@ export function JuridiqueForm({
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
+          <label htmlFor="jur-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
           <textarea
+            id="jur-notes"
             rows={2}
             value={juridiqueNotes}
             onChange={(e) => setJuridiqueNotes(e.target.value)}
@@ -534,7 +547,7 @@ export function JuridiqueForm({
       <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
         {/* Circuit de traitement */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-2">{cur.circuitTraitement}</label>
+          <span className="block text-xs font-bold text-slate-800 mb-2">{cur.circuitTraitement}</span>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {[
               { value: "maktab_dabt", label: cur.maktabDabt },
@@ -542,6 +555,7 @@ export function JuridiqueForm({
             ].map((option) => (
               <label
                 key={option.value}
+                htmlFor={`jur-circuit-${option.value}`}
                 className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer ${
                   circuitJuridique === option.value
                     ? "bg-blue-600 text-white border-blue-600"
@@ -549,6 +563,7 @@ export function JuridiqueForm({
                 }`}
               >
                 <input
+                  id={`jur-circuit-${option.value}`}
                   type="radio"
                   name="circuitJuridique"
                   checked={circuitJuridique === option.value}
@@ -637,8 +652,9 @@ export function JuridiqueForm({
                 <div className="space-y-5">
                   <h3 className="font-bold text-slate-800 text-sm text-center">{cur.maktabDabt}</h3>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.numDossierAppel}</label>
+                    <label htmlFor="jur-num-dossier-appel" className="block text-xs font-bold text-slate-700 mb-1">{cur.numDossierAppel}</label>
                     <input
+                      id="jur-num-dossier-appel"
                       type="text"
                       value={numeroDossierAppel}
                       onChange={(e) => setNumeroDossierAppel(e.target.value)}
@@ -647,7 +663,7 @@ export function JuridiqueForm({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.typeProcedure}</label>
+                    <span className="block text-xs font-bold text-slate-700 mb-1">{cur.typeProcedure}</span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[
                         { value: "ordinaire", label: cur.ordinaire },
@@ -656,6 +672,7 @@ export function JuridiqueForm({
                       ].map((option) => (
                         <label
                           key={option.value}
+                          htmlFor={`jur-procedure-${option.value}`}
                           className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
                             typeProcedure === option.value
                               ? "bg-blue-600 text-white border-blue-600"
@@ -663,6 +680,7 @@ export function JuridiqueForm({
                           }`}
                         >
                           <input
+                            id={`jur-procedure-${option.value}`}
                             type="radio"
                             name="typeProcedure"
                             checked={typeProcedure === option.value}
@@ -694,8 +712,9 @@ export function JuridiqueForm({
                 <div className="space-y-5">
                   <h3 className="font-bold text-slate-800 text-sm text-center">{cur.ouvertureDossier}</h3>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.numCourAppel}</label>
+                    <label htmlFor="jur-num-cour-appel" className="block text-xs font-bold text-slate-700 mb-1">{cur.numCourAppel}</label>
                     <input
+                      id="jur-num-cour-appel"
                       type="text"
                       value={numCourAppel}
                       onChange={(e) => setNumCourAppel(e.target.value)}
@@ -704,8 +723,9 @@ export function JuridiqueForm({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.conseillerRapporteur}</label>
+                    <label htmlFor="jur-conseiller" className="block text-xs font-bold text-slate-700 mb-1">{cur.conseillerRapporteur}</label>
                     <input
+                      id="jur-conseiller"
                       type="text"
                       value={conseillerRapporteur}
                       onChange={(e) => setConseillerRapporteur(e.target.value)}
@@ -714,8 +734,9 @@ export function JuridiqueForm({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.dateAudience}</label>
+                    <label htmlFor="jur-date-audience" className="block text-xs font-bold text-slate-700 mb-1">{cur.dateAudience}</label>
                     <input
+                      id="jur-date-audience"
                       type="date"
                       value={dateAudience}
                       onChange={(e) => setDateAudience(e.target.value)}
@@ -752,7 +773,7 @@ export function JuridiqueForm({
                 <div className="space-y-5">
                   <h3 className="font-bold text-slate-800 text-sm text-center">{cur.kitabaKhasa}</h3>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{cur.titreKitabaKhasa}</label>
+                    <span className="block text-xs font-bold text-slate-700 mb-1">{cur.titreKitabaKhasa}</span>
                     <div className="grid grid-cols-1 gap-2">
                       {[
                         { value: "islah_khata2", label: cur.islahKhata2 },
@@ -761,6 +782,7 @@ export function JuridiqueForm({
                       ].map((option) => (
                         <label
                           key={option.value}
+                          htmlFor={`jur-exception-${option.value}`}
                           className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
                             typeException === option.value
                               ? "bg-blue-600 text-white border-blue-600"
@@ -768,6 +790,7 @@ export function JuridiqueForm({
                           }`}
                         >
                           <input
+                            id={`jur-exception-${option.value}`}
                             type="radio"
                             name="typeExceptionStep"
                             checked={typeException === option.value}
@@ -1045,6 +1068,7 @@ export function JuridiqueForm({
                             ].map((option) => (
                               <label
                                 key={option.value}
+                                htmlFor={`jur-autorite-${option.value}`}
                                 className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
                                   autoriteRetrait === option.value
                                     ? "bg-blue-600 text-white border-blue-600"
@@ -1052,6 +1076,7 @@ export function JuridiqueForm({
                                 }`}
                               >
                                 <input
+                                  id={`jur-autorite-${option.value}`}
                                   type="radio"
                                   name="autoriteRetrait"
                                   checked={autoriteRetrait === option.value}
@@ -1122,7 +1147,7 @@ export function JuridiqueForm({
           <div className="space-y-4 p-5 bg-amber-50/60 border border-amber-200 rounded-lg">
             <h3 className="font-bold text-slate-800 text-sm text-center mb-4">{cur.kitabaKhasa}</h3>
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-amber-900">{cur.titreKitabaKhasa}</label>
+              <span className="block text-xs font-bold text-amber-900">{cur.titreKitabaKhasa}</span>
               <div className="grid grid-cols-1 gap-2">
                 {[
                   { value: "islah_khata2", label: cur.islahKhata2 },
@@ -1131,6 +1156,7 @@ export function JuridiqueForm({
                 ].map((option) => (
                   <label
                     key={option.value}
+                    htmlFor={`jur-kitaba-${option.value}`}
                     className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer ${
                       typeException === option.value
                         ? "bg-blue-600 text-white border-blue-600"
@@ -1138,6 +1164,7 @@ export function JuridiqueForm({
                     }`}
                   >
                     <input
+                      id={`jur-kitaba-${option.value}`}
                       type="radio"
                       name="typeExceptionDirect"
                       checked={typeException === option.value}

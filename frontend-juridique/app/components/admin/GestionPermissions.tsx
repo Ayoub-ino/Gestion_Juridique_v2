@@ -455,6 +455,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
                 {perms.map(p => (
                   <label
                     key={p.key}
+                    htmlFor={`perm-${p.key}`}
                     className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-medium cursor-pointer transition-all duration-200 ${
                       p.enabled
                         ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white border-blue-600 shadow-sm"
@@ -462,6 +463,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
                     }`}
                   >
                     <input
+                      id={`perm-${p.key}`}
                       type="checkbox"
                       checked={p.enabled}
                       onChange={() =>

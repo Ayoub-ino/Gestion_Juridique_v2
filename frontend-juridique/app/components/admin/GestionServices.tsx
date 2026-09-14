@@ -136,19 +136,19 @@ export function GestionServices({ langue, cur, token, onExport }: Props) {
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Nom *" : "الاسم *"}</label>
-              <input type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
+              <label htmlFor="service-nom" className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Nom *" : "الاسم *"}</label>
+              <input id="service-nom" type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Code *" : "الكود *"}</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
+              <label htmlFor="service-code" className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Code *" : "الكود *"}</label>
+              <input id="service-code" type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
                 placeholder={langue === "fr" ? "ex: bureauordre" : "مثال: bureauordre"}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Description" : "الوصف"}</label>
-              <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+              <label htmlFor="service-description" className="block text-xs font-bold text-slate-700 mb-1">{langue === "fr" ? "Description" : "الوصف"}</label>
+              <input id="service-description" type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div className="flex items-end gap-2 md:col-span-3">

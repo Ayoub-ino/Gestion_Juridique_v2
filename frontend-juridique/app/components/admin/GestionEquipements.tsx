@@ -3,7 +3,8 @@
 import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect, useCallback } from "react";
 import { Langue, EquipmentItem } from "@/app/types";
-import { SERVICE_GROUPS, getRoleLabel } from "@/lib/constants";
+import { SERVICE_GROUPS } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { api } from "@/lib/api/client";
@@ -77,14 +78,7 @@ export function GestionEquipements({ langue, cur, token, onExport }: Props) {
     } catch (err) { console.error(err); }
   };
 
-  const getServiceLabel = (value: string) => {
-    for (const group of SERVICE_GROUPS) {
-      for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
-      }
-    }
-    return getRoleLabel(value, langue);
-  };
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   return (
     <div className="space-y-5">
@@ -117,38 +111,38 @@ export function GestionEquipements({ langue, cur, token, onExport }: Props) {
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.serie} *</label>
-              <input type="text" value={form.serial} onChange={(e) => setForm({ ...form, serial: e.target.value })} required
+              <label htmlFor="equip-serial" className="block text-xs font-bold text-slate-700 mb-1">{cur.serie} *</label>
+              <input id="equip-serial" type="text" value={form.serial} onChange={(e) => setForm({ ...form, serial: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.code}</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })}
+              <label htmlFor="equip-code" className="block text-xs font-bold text-slate-700 mb-1">{cur.code}</label>
+              <input id="equip-code" type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.tblType} *`}</label>
-              <input type="text" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} required
+              <label htmlFor="equip-type" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.tblType} *`}</label>
+              <input id="equip-type" type="text" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.etat} *`}</label>
-              <input type="text" value={form.etat} onChange={(e) => setForm({ ...form, etat: e.target.value })} required
+              <label htmlFor="equip-etat" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.etat} *`}</label>
+              <input id="equip-etat" type="text" value={form.etat} onChange={(e) => setForm({ ...form, etat: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.numeroInterne}</label>
-              <input type="text" value={form.numeroInventaire} onChange={(e) => setForm({ ...form, numeroInventaire: e.target.value })}
+              <label htmlFor="equip-inventaire" className="block text-xs font-bold text-slate-700 mb-1">{cur.numeroInterne}</label>
+              <input id="equip-inventaire" type="text" value={form.numeroInventaire} onChange={(e) => setForm({ ...form, numeroInventaire: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.bureau}</label>
-              <input type="text" value={form.bureau} onChange={(e) => setForm({ ...form, bureau: e.target.value })}
+              <label htmlFor="equip-bureau" className="block text-xs font-bold text-slate-700 mb-1">{cur.bureau}</label>
+              <input id="equip-bureau" type="text" value={form.bureau} onChange={(e) => setForm({ ...form, bureau: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.service} *`}</label>
-              <select value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} required
+              <label htmlFor="equip-service" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.service} *`}</label>
+              <select id="equip-service" value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500">
                 <option value="">{cur.choisirService}</option>
                 {SERVICE_GROUPS.map(group => (

@@ -4,7 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect, useCallback } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { SERVICE_GROUPS, getRoleLabel } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { ExportFormat } from "@/lib/exportImport";
 import { api } from "@/lib/api/client";
@@ -122,15 +122,12 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
     setSelectedIds([]);
   };
 
-  const getServiceLabel = (value: string) => {
-    for (const group of SERVICE_GROUPS) {
-      for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
-      }
-    }
-    return getRoleLabel(value, langue);
-  };
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
+  // Identify refusal notifications: transactions where the sender receives a notification
+  // that their transfer was refused (marked with [REFUS] in the message)
+  const refusalNotifications = notifications.filter(n => n.message && n.message.startsWith("[REFUS]") && n.statut === "EnAttente");
+  const transferNotifications = notifications.filter(n => !n.message || !n.message.startsWith("[REFUS]"));
   const pendingCount = notifications.filter(n => n.statut === "EnAttente").length;
 
   return (
@@ -193,6 +190,11 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-bold text-sm text-slate-800">{n.documentSujet}</h4>
+                    {n.message && n.message.startsWith("[REFUS]") && (
+                      <span className="px-2 py-1 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
+                        {langue === "fr" ? "⚠️ Transfert refusé par le destinataire" : "⚠️ رفض المستلم التحويل"}
+                      </span>
+                    )}
                     <span className={`px-2 py-1 rounded text-[10px] font-bold ${n.statut === "EnAttente" ? "bg-amber-100 text-amber-700" : n.statut === "Accepte" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                       {n.statut === "EnAttente" ? (langue === "fr" ? "En attente" : "في الانتظار") : n.statut === "Accepte" ? (langue === "fr" ? "Accepté" : "مقبول") : (langue === "fr" ? "Refusé" : "مرفوض")}
                     </span>
@@ -210,8 +212,11 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                       </span>
                     )}
                     {n.message && (
-                      <span className="px-2 py-0.5 rounded bg-slate-100 font-bold">
-                        {langue === "fr" ? "Message" : "رسالة"} : {n.message}
+                      <span className={`px-2 py-0.5 rounded font-bold ${n.message.startsWith("[REFUS]") ? "bg-red-50 text-red-600 border border-red-200" : "bg-slate-100"}`}>
+                        {n.message.startsWith("[REFUS]")
+                          ? (langue === "fr" ? `Motif du refus: ${n.message.replace("[REFUS]", "").trim()}` : `سبب الرفض: ${n.message.replace("[REFUS]", "").trim()}`)
+                          : `${langue === "fr" ? "Message" : "رسالة"} : ${n.message}`
+                        }
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-slate-100 font-bold">
@@ -226,8 +231,8 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                         placeholder={langue === "fr" ? "Votre réponse..." : "ردك..."}
                         className="w-full p-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500" />
                       <div className="flex gap-2 items-center">
-                        <label className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer">
-                          <input type="checkbox" checked={!!retours[n.id]}
+                        <label htmlFor={`notif-retour-${n.id}`} className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer">
+                          <input id={`notif-retour-${n.id}`} type="checkbox" checked={!!retours[n.id]}
                             onChange={(e) => setRetours(prev => ({ ...prev, [n.id]: e.target.checked }))}
                             className="w-3 h-3" />
                           {langue === "fr" ? "Doit revenir" : "يجب الرجوع"}

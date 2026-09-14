@@ -1,5 +1,5 @@
-import * as XLSX from "xlsx";
-import mammoth from "mammoth";
+// NOTE: `xlsx` and `mammoth` are heavy. They are imported dynamically inside the
+// functions that need them so they stay out of the initial client bundle.
 
 export type ExportFormat = "export excel" | "export word";
 
@@ -30,7 +30,7 @@ function getNowFR(): string {
   return new Date().toLocaleDateString("fr-FR") + " " + new Date().toLocaleTimeString("fr-FR");
 }
 
-export function exportRows(rows: ExportRow[], filename: string, format: ExportFormat, label?: string): boolean {
+export async function exportRows(rows: ExportRow[], filename: string, format: ExportFormat, label?: string): Promise<boolean> {
   if (rows.length === 0) {
     return false;
   }
@@ -38,7 +38,7 @@ export function exportRows(rows: ExportRow[], filename: string, format: ExportFo
 
   switch (format) {
     case "export excel":
-      exportExcel(rows, headers, filename, label);
+      await exportExcel(rows, headers, filename, label);
       break;
     case "export word":
       exportWord(rows, headers, filename, label);
@@ -58,8 +58,9 @@ function buildHeaderLines(label?: string): string[] {
   return lines;
 }
 
-function exportExcel(rows: ExportRow[], headers: string[], filename: string, label?: string) {
+async function exportExcel(rows: ExportRow[], headers: string[], filename: string, label?: string) {
   try {
+    const XLSX = await import("xlsx");
     const dateStr = getNowFR();
     const hdr = buildHeaderLines(label);
 
@@ -137,7 +138,8 @@ function exportWord(rows: ExportRow[], headers: string[], filename: string, labe
   }
 }
 
-export function downloadExcelTemplate(langue: "fr" | "ar" = "fr") {
+export async function downloadExcelTemplate(langue: "fr" | "ar" = "fr") {
+  const XLSX = await import("xlsx");
   const dateStr = getNowFR();
   const hdr = buildHeaderLines();
   
@@ -236,8 +238,9 @@ export function importFromFile(file: File): Promise<ImportResult> {
       reader.readAsText(file, "UTF-8");
     } else if (ext === "xlsx" || ext === "xls") {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          const XLSX = await import("xlsx");
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const wb = XLSX.read(data, { type: "array" });
           const ws = wb.Sheets[wb.SheetNames[0]];
@@ -303,6 +306,7 @@ export function importFromFile(file: File): Promise<ImportResult> {
       reader.onload = async (e) => {
         try {
           const arrayBuffer = e.target?.result as ArrayBuffer;
+          const mammoth = (await import("mammoth")).default;
           const result = await mammoth.extractRawText({ arrayBuffer });
           const text = result.value;
           if (!text.trim()) { resolve({ columns: [], data: [] }); return; }

@@ -169,25 +169,25 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.nomComplet} *`}</label>
-              <input type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
+              <label htmlFor="user-nom" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.nomComplet} *`}</label>
+              <input id="user-nom" type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.login} *</label>
-              <input type="text" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} required
+              <label htmlFor="user-login" className="block text-xs font-bold text-slate-700 mb-1">{cur.login} *</label>
+              <input id="user-login" type="text" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.motDePasse} *`}</label>
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+              <label htmlFor="user-password" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.motDePasse} *`}</label>
+              <input id="user-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
                 placeholder={editingId ? (langue === "fr" ? "Laisser vide pour ne pas changer" : "اتركه فارغاً لعدم التغيير") : ""}
                 required={!editingId}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.service} *`}</label>
-              <select value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: parseInt(e.target.value) })} required
+              <label htmlFor="user-service" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.service} *`}</label>
+              <select id="user-service" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: parseInt(e.target.value) })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500">
                 <option value={0}>{cur.selectionnerService}</option>
                 {rbacServices.map(svc => (

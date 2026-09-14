@@ -45,7 +45,10 @@ namespace WebApplication1.Controllers
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
-                var userServiceEnum = ServiceMapper.MapToServiceEnum(userService);
+                if (!ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum))
+                {
+                    return Ok(new object[0]);
+                }
                 query = query.Where(c => c.ServiceActuel == userServiceEnum);
             }
 
@@ -86,12 +89,15 @@ namespace WebApplication1.Controllers
                 if (dto == null)
                     return BadRequest(new { error = "Données invalides" });
 
-                // Vérifier que le numéro d'ordre n'existe pas déjà
-                var exists = await _context.CourriersAdministratifs
-                    .AnyAsync(c => c.NumeroOrdre == dto.NumeroOrdre);
-
-                if (exists)
-                    return Conflict(new { error = "Ce numéro d'ordre existe déjà" });
+                // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
+                var numeroRef = dto.NumeroReference ?? dto.NumeroOrdre;
+                if (!string.IsNullOrWhiteSpace(numeroRef))
+                {
+                    var refExists = await _context.Documents
+                        .AnyAsync(d => d.NumeroReference == numeroRef);
+                    if (refExists)
+                        return Conflict(new { error = "Ce numéro de référence existe déjà" });
+                }
 
                 // ===== 1. CRÉATION DU COURRIER =====
                 var courrier = new CourrierAdministratif
@@ -217,6 +223,16 @@ namespace WebApplication1.Controllers
             }
 
             // Mise à jour des champs
+            // Vérifier l'unicité du numéro de référence (exclure le document courant)
+            var numeroRef = dto.NumeroReference ?? dto.NumeroOrdre;
+            if (!string.IsNullOrWhiteSpace(numeroRef))
+            {
+                var refExists = await _context.Documents
+                    .AnyAsync(d => d.NumeroReference == numeroRef && d.Id != id);
+                if (refExists)
+                    return Conflict(new { error = "Ce numéro de référence existe déjà" });
+            }
+
             courrier.NumeroOrdre = dto.NumeroOrdre;
             courrier.Expediteur = dto.Expediteur;
             courrier.Objet = dto.Objet;

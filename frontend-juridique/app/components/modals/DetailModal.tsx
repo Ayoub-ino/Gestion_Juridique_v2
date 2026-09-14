@@ -4,7 +4,8 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useEffect, useState, useCallback } from "react";
 import { CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { SERVICE_GROUPS, getRoleLabel, WORKFLOW_STEPS, getWorkflowProgress, getDelayDays } from "@/lib/constants";
+import { WORKFLOW_STEPS, getWorkflowProgress, getDelayDays } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { api } from "@/lib/api/client";
 import Image from "next/image";
 import { API_BASE_URL } from "@/lib/config/env";
@@ -225,14 +226,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
     }
   };
 
-  const getServiceLabel = (value: string) => {
-    for (const group of SERVICE_GROUPS) {
-      for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
-      }
-    }
-    return getRoleLabel(value, langue);
-  };
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   const fetchDocDetails = useCallback(async () => {
     if (!doc || !token) return;

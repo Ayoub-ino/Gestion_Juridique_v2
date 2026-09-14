@@ -4,7 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect } from "react";
 import { Langue, CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { getRoleLabel } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/types/api.generated";
 
@@ -93,42 +93,26 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
   const [editingNoteText, setEditingNoteText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const SERVICE_LABELS: Record<string, string> = {
-    BureauOrdre: langue === "fr" ? "Bureau d'ordre" : "مكتب الضبط",
-    OuvertureDossier: langue === "fr" ? "Ouverture dossier" : "فتح الملفات",
-    KitabaKhasa: langue === "fr" ? "Écriture spéciale" : "الكتابة الخاصة",
-    JalsatWaIjra2at: langue === "fr" ? "Sessions et actions" : "الجلسات والإجراءات",
-    Ijra2Baht: langue === "fr" ? "Enquêtes" : "التحقيقات",
-    MofawidMalaki: langue === "fr" ? "Délégation royale" : "التفويض الملكي",
-    Khibra: langue === "fr" ? "Expertise judiciaire" : "الخبرة القضائية",
-    MustacharMoqarir: langue === "fr" ? "Conseil/rapports" : "المستشار/التقارير",
-    TaslimNusakh: langue === "fr" ? "Remise de copies" : "تسليم النسخ",
-    Tabligh: langue === "fr" ? "Notification" : "الإبلاغ",
-    TasfiyatSawa2ir: langue === "fr" ? "Règlement des dépens" : "تسوية المصاريف",
-    Archive: langue === "fr" ? "Archives" : "الأرشيف",
-    BureauNotification: langue === "fr" ? "Notification" : "مكتب الإخطار",
-    BureauExpertise: langue === "fr" ? "Expertise" : "مكتب الخبرة",
-    CelluleInformatique: langue === "fr" ? "Informatique" : "الوحدة المعلوماتية",
-    GestionFinanciere: langue === "fr" ? "Finance" : "التسيير المالي",
-    CaisseTribunal: langue === "fr" ? "Caisse" : "صندوق المحكمة",
-    BureauRecouvrement: langue === "fr" ? "Recouvrement" : "التحصيل",
-    ProcduresCommissaireRoyal: langue === "fr" ? "Commissaire Royal" : "إجراءات المندوب الملكي",
-    GestionPourvoisCassation: langue === "fr" ? "Pourvois" : "الطعون بالنقض",
-    RemiseCopieJugement: langue === "fr" ? "Copie jugement" : "تسليم نسخ الحكم",
-    Greffe: langue === "fr" ? "Greffe" : "القلم",
-    Direction: langue === "fr" ? "Direction" : "المديرية",
-    EfficaciteJudiciaire: langue === "fr" ? "Efficacité" : "الفعالية القضائية",
-    Enregistrement: langue === "fr" ? "Enregistrement" : "التسجيل",
-  };
+  const { getServiceLabel: resolveServiceLabel } = useServiceLabels(token, langue);
 
   const getServiceLabel = (val: string | number | null | undefined): string => {
     if (val === null || val === undefined) return "";
     if (typeof val === "number") {
-      const keys = Object.keys(SERVICE_LABELS);
-      if (val >= 0 && val < keys.length) return SERVICE_LABELS[keys[val]] || String(val);
+      // Numeric enum value — map to ServiceTribunal enum name
+      const enumNames = [
+        "BureauOrdre", "OuvertureDossier", "KitabaKhasa", "JalsatWaIjra2at",
+        "Ijra2Baht", "MofawidMalaki", "Khibra", "MustacharMoqarir",
+        "TaslimNusakh", "Tabligh", "TasfiyatSawa2ir", "Archive",
+        "BureauNotification", "BureauExpertise", "CelluleInformatique",
+        "GestionFinanciere", "CaisseTribunal", "BureauRecouvrement",
+        "ProcduresCommissaireRoyal", "GestionPourvoisCassation",
+        "RemiseCopieJugement", "Greffe", "Direction",
+        "EfficaciteJudiciaire"
+      ];
+      if (val >= 0 && val < enumNames.length) return resolveServiceLabel(enumNames[val]);
       return String(val);
     }
-    return SERVICE_LABELS[val] || getRoleLabel(val, langue) || String(val);
+    return resolveServiceLabel(val);
   };
 
   useEffect(() => {
@@ -231,10 +215,10 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
     }
     return (
       <div key={key} className="space-y-1">
-        <label className="text-[10px] text-slate-500 dark:text-slate-400">{label}</label>
+        <label htmlFor={`ws-field-${key}`} className="text-[10px] text-slate-500 dark:text-slate-400">{label}</label>
         <input
           type="text"
-          value={editFields[key] || ""}
+          id={`ws-field-${key}`} value={editFields[key] || ""}
           onChange={(e) => setEditFields({ ...editFields, [key]: e.target.value })}
           className="w-full p-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
         />
@@ -245,8 +229,8 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
   if (!docId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div role="presentation" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div role="presentation" className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
           <div>

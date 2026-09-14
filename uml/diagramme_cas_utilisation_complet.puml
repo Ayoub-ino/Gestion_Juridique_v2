@@ -1,0 +1,463 @@
+@startuml Diagramme de Cas d'Utilisation Complet - Gestion Juridique
+' ============================================================
+' Diagramme de Cas d'Utilisation GLOBAL
+' Projet : Gestion Juridique - Cour d'Appel Administrative de Fes
+' Auteurs : Ayoub AGROUKH & Ikrame OUDGHIRI
+' Date : 2026
+'
+' Source : Analyse complète du code (SeederService.cs, PermissionMatrix,
+'          RequirePermissionAttribute, Controllers, Cypress E2E tests)
+' ============================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #F9F9F9
+  BorderColor #333333
+  FontSize 12
+}
+skinparam actor {
+  BackgroundColor #4A90D9
+  FontColor white
+  BorderColor #2C5F8A
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #CCCCCC
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #CCAA00
+  FontSize 10
+}
+
+' ============================================================
+' ACTEURS PRINCIPAUX (9 services RBAC + Admin)
+' ============================================================
+
+actor "Administrateur" as Admin
+actor "Agent Bureau\nd'Ordre" as BO <<bureauordre>>
+actor "Agent Ouverture\ndes Dossiers" as OD <<fathmilafat>>
+actor "Agent Secrétariat" as Sec <<secretarait>>
+actor "Agent Séances\n& Procédures" as Seance <<seances>>
+actor "Agent Expertise\nJudiciaire" as Expert <<khibra>>
+actor "Agent Délivrance\ndes Copies" as Taslim <<taslimnosakh>>
+actor "Agent Règlement\ndes Dépens" as Tasfiya <<tasfiya>>
+actor "Agent Archive" as Arch <<archive>>
+actor "Agent Notification" as Tabligh <<atabligh>>
+
+' ============================================================
+' SYSTÈME
+' ============================================================
+
+rectangle "Système de Gestion Juridique\n(Cour d'Appel Administrative de Fès)" {
+
+  ' === AUTHENTIFICATION ===
+  rectangle "Authentification" {
+    usecase "UC-01 : S'authentifier\n(JWT + BCrypt)" as UC_Auth
+    usecase "UC-02 : Consulter\nson profil" as UC_Profil
+  }
+
+  ' === TABLEAU DE BORD ===
+  rectangle "Tableau de bord" {
+    usecase "UC-03 : Consulter le\ntableau de bord\n(stats, activité)" as UC_Dashboard
+  }
+
+  ' === GESTION DES DOCUMENTS ===
+  rectangle "Gestion des Documents" {
+    usecase "UC-04 : Créer un courrier\nadministratif" as UC_CreerAdmin
+    usecase "UC-05 : Créer un dossier\njuridique" as UC_CreerJuridique
+    usecase "UC-06 : Créer/Modifier\nun courrier sortant" as UC_CreerSortant
+    usecase "UC-07 : Modifier\nun document" as UC_Modifier
+    usecase "UC-08 : Supprimer un document\n(soft delete → corbeille)" as UC_Supprimer
+    usecase "UC-09 : Consulter les détails\nd'un document" as UC_Detail
+    usecase "UC-10 : Télécharger\nun fichier" as UC_Download
+    usecase "UC-11 : Importer des documents\nvia Excel" as UC_ImportExcel
+  }
+
+  ' === TRANSFERT & CIRCUIT ===
+  rectangle "Transfert & Circuit Juridique" {
+    usecase "UC-12 : Transférer un document\n(unique / diffusion / 1..n)" as UC_Transferer
+    usecase "UC-13 : Transférer un dossier\njudiciaire (circuit)" as UC_TransferJuridique
+    usecase "UC-14 : Avancer l'étape\njudiciaire (Jalsat)" as UC_AvancerEtape
+    usecase "UC-15 : Reculer l'étape\njudiciaire (retour)" as UC_ReculerEtape
+    usecase "UC-16 : Ouvrir un dossier\njudiciaire" as UC_OuvrirDossier
+    usecase "UC-17 : Clôturer un dossier" as UC_Clôturer
+  }
+
+  ' === TRANSACTIONS & NOTIFICATIONS ===
+  rectangle "Transactions & Notifications" {
+    usecase "UC-18 : Accepter un transfert" as UC_Accepter
+    usecase "UC-19 : Refuser un transfert\n(motif obligatoire)" as UC_Refuser
+    usecase "UC-20 : Annuler un transfert" as UC_Annuler
+    usecase "UC-21 : Consulter les\ntransactions en cours" as UC_Transactions
+    usecase "UC-22 : Voir les notifications\n+ doit-revenir" as UC_Notifications
+  }
+
+  ' === RECHERCHE & EXPORT ===
+  rectangle "Recherche & Export" {
+    usecase "UC-23 : Recherche avancée\nde documents" as UC_Recherche
+    usecase "UC-24 : Exporter en Excel" as UC_ExportExcel
+    usecase "UC-25 : Exporter en Word" as UC_ExportWord
+  }
+
+  ' === ESPACE DE TRAVAIL ===
+  rectangle "Espace de travail" {
+    usecase "UC-26 : Ouvrir l'espace\nde travail (ACL)" as UC_Workspace
+    usecase "UC-27 : Ajouter des notes" as UC_Notes
+    usecase "UC-28 : Consulter l'historique\ndes modifications" as UC_Historique
+  }
+
+  ' === MES ENTITÉS ===
+  rectangle "Mes Entités" {
+    usecase "UC-29 : Consulter mes entités\n(documents reçus)" as UC_MesEntites
+    usecase "UC-30 : Consulter mes dossiers\nen cours" as UC_DossiersEnCours
+  }
+
+  ' === ARCHIVES ===
+  rectangle "Archives & Corbeille" {
+    usecase "UC-31 : Archiver un document" as UC_Archiver
+    usecase "UC-32 : Voir la corbeille" as UC_VoirCorbeille
+    usecase "UC-33 : Restaurer un document" as UC_Restaurer
+    usecase "UC-34 : Supprimer définitivement" as UC_PermanentDelete
+    usecase "UC-35 : Voir les archives" as UC_VoirArchives
+    usecase "UC-36 : Enregistrer un retrait\nde dossier" as UC_Retrait
+  }
+
+  ' === ADMINISTRATION RBAC ===
+  rectangle "Administration RBAC" {
+    usecase "UC-37 : Gérer les utilisateurs\n(CRUD + soft-delete)" as UC_GererUsers
+    usecase "UC-38 : Gérer les services\nRBAC (soft-delete)" as UC_GererServices
+    usecase "UC-39 : Gérer la matrice\ndes permissions\n(18 permissions)" as UC_GererPermissions
+    usecase "UC-40 : Gérer les overrides\nadmin (séparation)" as UC_GererAdminOverrides
+    usecase "UC-41 : Gérer les\néquipements" as UC_GererEquipements
+    usecase "UC-42 : Gérer les listes\ndynamiques" as UC_GererListes
+    usecase "UC-43 : Gérer les services\nhistoriques" as UC_GererServicesHist
+  }
+}
+
+' ============================================================
+' RELATIONS ACTEURS → CAS D'UTILISATION
+' (Chaque flèche annotée avec la permission RBAC requise)
+' ============================================================
+
+' --- Tous les utilisateurs (authentification) ---
+Admin --> UC_Auth
+BO --> UC_Auth
+OD --> UC_Auth
+Sec --> UC_Auth
+Seance --> UC_Auth
+Expert --> UC_Auth
+Taslim --> UC_Auth
+Tasfiya --> UC_Auth
+Arch --> UC_Auth
+Tabligh --> UC_Auth
+
+' Profil (tous sauf Arch/Tabligh)
+Admin --> UC_Profil
+BO --> UC_Profil
+OD --> UC_Profil
+Sec --> UC_Profil
+Seance --> UC_Profil
+Expert --> UC_Profil
+Taslim --> UC_Profil
+Tasfiya --> UC_Profil
+Arch --> UC_Profil
+Tabligh --> UC_Profil
+
+' Dashboard (tous — les admins voient un dashboard restreint)
+BO --> UC_Dashboard : <<dashboard>>
+OD --> UC_Dashboard : <<dashboard>>
+Sec --> UC_Dashboard : <<dashboard>>
+Seance --> UC_Dashboard : <<dashboard>>
+Expert --> UC_Dashboard : <<dashboard>>
+Taslim --> UC_Dashboard : <<dashboard>>
+Tasfiya --> UC_Dashboard : <<dashboard>>
+Arch --> UC_Dashboard : <<dashboard>>
+Tabligh --> UC_Dashboard : <<dashboard>>
+
+' ============================================================
+' GESTION DES DOCUMENTS — par service
+' ============================================================
+
+' UC-04 : Créer courrier administratif
+BO --> UC_CreerAdmin : <<creer_courrier_admin>>
+
+' UC-05 : Créer dossier juridique
+OD --> UC_CreerJuridique : <<creer_courrier_juridique>>
+
+' UC-06 : Créer/Modifier courrier sortant
+BO --> UC_CreerSortant : <<creer_modifier>>
+Sec --> UC_CreerSortant : <<creer_modifier>>
+
+' UC-07 : Modifier un document
+BO --> UC_Modifier : <<creer_modifier>>
+OD --> UC_Modifier : <<creer_modifier>>
+
+' UC-08 : Supprimer (soft delete)
+BO --> UC_Supprimer : <<supprimer>>
+Arch --> UC_Supprimer : <<supprimer>>
+
+' UC-09 : Consulter détails (tous les agents)
+BO --> UC_Detail
+OD --> UC_Detail
+Sec --> UC_Detail
+Seance --> UC_Detail
+Expert --> UC_Detail
+Taslim --> UC_Detail
+Tasfiya --> UC_Detail
+Arch --> UC_Detail
+Tabligh --> UC_Detail
+
+' UC-10 : Télécharger fichier
+BO --> UC_Download : <<telecharger_fichiers>>
+OD --> UC_Download : <<telecharger_fichiers>>
+Sec --> UC_Download : <<telecharger_fichiers>>
+Seance --> UC_Download : <<telecharger_fichiers>>
+Expert --> UC_Download : <<telecharger_fichiers>>
+Taslim --> UC_Download : <<telecharger_fichiers>>
+Tasfiya --> UC_Download : <<telecharger_fichiers>>
+Arch --> UC_Download : <<telecharger_fichiers>>
+
+' UC-11 : Importer Excel
+BO --> UC_ImportExcel : <<creer_courrier_admin>>
+OD --> UC_ImportExcel : <<creer_courrier_juridique>>
+
+' ============================================================
+' TRANSFERT & CIRCUIT JURIDIQUE
+' ============================================================
+
+' UC-12 : Transférer (tous les agents sauf Archive/Tabligh pour transfert normal)
+BO --> UC_Transferer : <<transferer>>
+OD --> UC_Transferer : <<transferer>>
+Sec --> UC_Transferer : <<transferer>>
+Seance --> UC_Transferer : <<transferer>>
+Expert --> UC_Transferer : <<transferer>>
+Taslim --> UC_Transferer : <<transferer>>
+Tasfiya --> UC_Transferer : <<transferer>>
+Tabligh --> UC_Transferer : <<transferer>>
+
+' UC-13 : Transférer juridique
+OD --> UC_TransferJuridique : <<transferer_juridique>>
+Seance --> UC_TransferJuridique : <<transferer_juridique>>
+Expert --> UC_TransferJuridique : <<transferer_juridique>>
+Taslim --> UC_TransferJuridique : <<transferer_juridique>>
+Tasfiya --> UC_TransferJuridique : <<transferer_juridique>>
+Arch --> UC_TransferJuridique : <<transferer_juridique>>
+Tabligh --> UC_TransferJuridique : <<transferer_juridique>>
+
+' UC-14/15 : Avancer/Reculer étape (Séances & Expertise uniquement)
+Seance --> UC_AvancerEtape : <<etape_suivante>>
+Expert --> UC_AvancerEtape : <<etape_suivante>>
+Seance --> UC_ReculerEtape : <<etape_precedente>>
+Expert --> UC_ReculerEtape : <<etape_precedente>>
+
+' UC-16 : Ouvrir dossier (Ouverture des dossiers uniquement)
+OD --> UC_OuvrirDossier : <<ouvrir_dossier>>
+
+' UC-17 : Clôturer
+OD --> UC_Clôturer : <<cloturer>>
+
+' ============================================================
+' TRANSACTIONS & NOTIFICATIONS
+' ============================================================
+
+' UC-18/19/20 : Accepter/Refuser/Annuler (tous les agents)
+BO --> UC_Accepter : <<accepter>>
+OD --> UC_Accepter : <<accepter>>
+Sec --> UC_Accepter : <<accepter>>
+Seance --> UC_Accepter : <<accepter>>
+Expert --> UC_Accepter : <<accepter>>
+Taslim --> UC_Accepter : <<accepter>>
+Tasfiya --> UC_Accepter : <<accepter>>
+Arch --> UC_Accepter : <<accepter>>
+Tabligh --> UC_Accepter : <<accepter>>
+
+BO --> UC_Refuser : <<refuser>>
+OD --> UC_Refuser : <<refuser>>
+Sec --> UC_Refuser : <<refuser>>
+Seance --> UC_Refuser : <<refuser>>
+Expert --> UC_Refuser : <<refuser>>
+Taslim --> UC_Refuser : <<refuser>>
+Tasfiya --> UC_Refuser : <<refuser>>
+Arch --> UC_Refuser : <<refuser>>
+Tabligh --> UC_Refuser : <<refuser>>
+
+BO --> UC_Annuler : <<annuler_transfert>>
+OD --> UC_Annuler : <<annuler_transfert>>
+Sec --> UC_Annuler : <<annuler_transfert>>
+Seance --> UC_Annuler : <<annuler_transfert>>
+Expert --> UC_Annuler : <<annuler_transfert>>
+Taslim --> UC_Annuler : <<annuler_transfert>>
+Tasfiya --> UC_Annuler : <<annuler_transfert>>
+Arch --> UC_Annuler : <<annuler_transfert>>
+Tabligh --> UC_Annuler : <<annuler_transfert>>
+
+' UC-21/22 : Transactions + Notifications (tous les agents)
+BO --> UC_Transactions : <<transactions>>
+OD --> UC_Transactions : <<transactions>>
+Sec --> UC_Transactions : <<transactions>>
+Seance --> UC_Transactions : <<transactions>>
+Expert --> UC_Transactions : <<transactions>>
+Taslim --> UC_Transactions : <<transactions>>
+Tasfiya --> UC_Transactions : <<transactions>>
+Arch --> UC_Transactions : <<transactions>>
+Tabligh --> UC_Transactions : <<transactions>>
+
+BO --> UC_Notifications
+OD --> UC_Notifications
+Sec --> UC_Notifications
+
+' ============================================================
+' RECHERCHE & EXPORT
+' ============================================================
+
+BO --> UC_Recherche : <<recherche_avancee>>
+OD --> UC_Recherche : <<recherche_avancee>>
+Sec --> UC_Recherche : <<recherche_avancee>>
+Seance --> UC_Recherche : <<recherche_avancee>>
+Expert --> UC_Recherche : <<recherche_avancee>>
+Taslim --> UC_Recherche : <<recherche_avancee>>
+Tasfiya --> UC_Recherche : <<recherche_avancee>>
+Arch --> UC_Recherche : <<recherche_avancee>>
+Tabligh --> UC_Recherche : <<recherche_avancee>>
+
+BO --> UC_ExportExcel : <<export_excel>>
+OD --> UC_ExportExcel : <<export_excel>>
+Sec --> UC_ExportExcel : <<export_excel>>
+Seance --> UC_ExportExcel : <<export_excel>>
+Expert --> UC_ExportExcel : <<export_excel>>
+Taslim --> UC_ExportExcel : <<export_excel>>
+Tasfiya --> UC_ExportExcel : <<export_excel>>
+Arch --> UC_ExportExcel : <<export_excel>>
+Tabligh --> UC_ExportExcel : <<export_excel>>
+
+BO --> UC_ExportWord : <<export_word>>
+OD --> UC_ExportWord : <<export_word>>
+Sec --> UC_ExportWord : <<export_word>>
+Seance --> UC_ExportWord : <<export_word>>
+Expert --> UC_ExportWord : <<export_word>>
+Taslim --> UC_ExportWord : <<export_word>>
+Tasfiya --> UC_ExportWord : <<export_word>>
+Arch --> UC_ExportWord : <<export_word>>
+Tabligh --> UC_ExportWord : <<export_word>>
+
+' ============================================================
+' ESPACE DE TRAVAIL
+' ============================================================
+
+BO --> UC_Workspace : <<voir_workspace>>
+OD --> UC_Workspace : <<voir_workspace>>
+Sec --> UC_Workspace : <<voir_workspace>>
+Seance --> UC_Workspace : <<voir_workspace>>
+Expert --> UC_Workspace : <<voir_workspace>>
+Taslim --> UC_Workspace : <<voir_workspace>>
+Tasfiya --> UC_Workspace : <<voir_workspace>>
+Arch --> UC_Workspace : <<voir_workspace>>
+
+BO --> UC_Notes : <<ajouter_notes>>
+OD --> UC_Notes : <<ajouter_notes>>
+Sec --> UC_Notes : <<ajouter_notes>>
+Seance --> UC_Notes : <<ajouter_notes>>
+Expert --> UC_Notes : <<ajouter_notes>>
+
+BO --> UC_Historique : <<voir_historique>>
+OD --> UC_Historique : <<voir_historique>>
+Sec --> UC_Historique : <<voir_historique>>
+Seance --> UC_Historique : <<voir_historique>>
+Expert --> UC_Historique : <<voir_historique>>
+Taslim --> UC_Historique : <<voir_historique>>
+Tasfiya --> UC_Historique : <<voir_historique>>
+Arch --> UC_Historique : <<voir_historique>>
+
+' ============================================================
+' MES ENTITÉS
+' ============================================================
+
+BO --> UC_MesEntites : <<mes_entites>>
+OD --> UC_MesEntites : <<mes_entites>>
+Sec --> UC_MesEntites : <<mes_entites>>
+Seance --> UC_MesEntites : <<mes_entites>>
+Expert --> UC_MesEntites : <<mes_entites>>
+Taslim --> UC_MesEntites : <<mes_entites>>
+Tasfiya --> UC_MesEntites : <<mes_entites>>
+Arch --> UC_MesEntites : <<mes_entites>>
+Tabligh --> UC_MesEntites : <<mes_entites>>
+
+' ============================================================
+' ARCHIVES & CORBEILLE
+' ============================================================
+
+Arch --> UC_Archiver : <<archiver>>
+Arch --> UC_VoirCorbeille : <<voir_corbeille>>
+Arch --> UC_Restaurer : <<restaurer>>
+Arch --> UC_PermanentDelete : <<supprimer>>
+Arch --> UC_VoirArchives : <<archives_view>>
+Arch --> UC_Retrait : <<retrait_archive>>
+
+' ============================================================
+' ADMINISTRATION RBAC (Admin uniquement)
+' ============================================================
+
+Admin --> UC_GererUsers : <<gerer_utilisateurs>>
+Admin --> UC_GererServices : <<gerer_services>>
+Admin --> UC_GererPermissions : <<gerer_permissions>>
+Admin --> UC_GererAdminOverrides : <<gerer_permissions>>
+Admin --> UC_GererEquipements : <<gerer_equipements>>
+Admin --> UC_GererListes : <<gerer_listes>>
+Admin --> UC_GererServicesHist : <<gerer_services>>
+
+' ============================================================
+' RELATIONS INCLUDE / EXTEND
+' ============================================================
+
+UC_CreerAdmin ..> UC_Transferer : <<include>>
+UC_CreerJuridique ..> UC_TransferJuridique : <<include>>
+UC_Archiver ..> UC_VoirArchives : <<include>>
+UC_PermanentDelete ..> UC_VoirCorbeille : <<include>>
+UC_Retrait ..> UC_VoirArchives : <<include>>
+UC_Download ..> UC_Detail : <<include>>
+UC_Notes ..> UC_Workspace : <<include>>
+UC_Historique ..> UC_Workspace : <<include>>
+
+UC_Restaurer ..> UC_Supprimer : <<extend>>
+UC_Annuler ..> UC_Transferer : <<extend>>
+
+' ============================================================
+' NOTE DÉTAILLÉE : Matrice RBAC
+' ============================================================
+note right of UC_GererPermissions
+  **Matrice RBAC dynamique :**
+  9 services × 37 permissions
+  AdminPermissionOverrides :
+  20 permissions désactivées
+  par défaut pour l'Admin
+  (séparation des tâches)
+end note
+
+note bottom of UC_Auth
+  **Authentification :**
+  JWT (Bearer token)
+  BCrypt (hachage mots de passe)
+  ClockSkew = TimeSpan.Zero
+  Token valable 8 heures
+end note
+
+note bottom of UC_Transferer
+  **Transfert multi-destinataires :**
+  targetUserIds[] → 1 transaction/utilisateur
+  Custody check : seul le détenteur
+  du document peut le transférer
+  Transaction en SQL avec rollback
+end note
+
+note bottom of UC_Refuser
+  **Refus avec retour :**
+  Motif obligatoire
+  doitrevenir → rollback
+  StatutPrecedent
+  Notification au service émetteur
+end note
+
+@enduml

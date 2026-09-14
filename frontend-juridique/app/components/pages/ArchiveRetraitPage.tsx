@@ -118,8 +118,8 @@ export function ArchiveRetraitPage({
   if (!selectedDoc) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] bg-black/40 flex items-start justify-center pt-8 p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+    <div role="presentation" className="fixed inset-0 z-[999] bg-black/40 flex items-start justify-center pt-8 p-4 overflow-y-auto" onClick={onClose}>
+      <div role="presentation" className="bg-white rounded-xl shadow-2xl w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
           <div>
             <p className="text-xs text-blue-600 font-bold">
@@ -135,10 +135,11 @@ export function ArchiveRetraitPage({
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="retrait-effectue-par" className="block text-xs font-bold text-slate-700 mb-1">
                 {langue === "fr" ? "Effectué par" : "تنفيذ"}
               </label>
               <input
+                id="retrait-effectue-par"
                 type="text"
                 value={effectuePar}
                 onChange={(e) => setEffectuePar(e.target.value)}
@@ -146,10 +147,11 @@ export function ArchiveRetraitPage({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="retrait-motif" className="block text-xs font-bold text-slate-700 mb-1">
                 {langue === "fr" ? "* Motif du retrait" : "* سبب الإخراج"}
               </label>
               <input
+                id="retrait-motif"
                 type="text"
                 value={motifRetrait}
                 onChange={(e) => setMotifRetrait(e.target.value)}
@@ -158,10 +160,11 @@ export function ArchiveRetraitPage({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="retrait-date-retour" className="block text-xs font-bold text-slate-700 mb-1">
                 {langue === "fr" ? "Date de retour (Optionnel)" : "تاريخ الإرجاع (اختياري)"}
               </label>
               <input
+                id="retrait-date-retour"
                 type="date"
                 value={dateRetour}
                 onChange={(e) => setDateRetour(e.target.value)}
@@ -169,10 +172,11 @@ export function ArchiveRetraitPage({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="retrait-date-retrait" className="block text-xs font-bold text-slate-700 mb-1">
                 {langue === "fr" ? "Date du retrait" : "تاريخ الإخراج"}
               </label>
               <input
+                id="retrait-date-retrait"
                 type="date"
                 value={dateRetrait}
                 onChange={(e) => setDateRetrait(e.target.value)}
@@ -181,10 +185,11 @@ export function ArchiveRetraitPage({
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label htmlFor="retrait-notes" className="block text-xs font-bold text-slate-700 mb-1">
               {langue === "fr" ? "Notes" : "ملاحظات"}
             </label>
             <textarea
+              id="retrait-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}

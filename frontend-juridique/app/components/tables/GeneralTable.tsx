@@ -57,9 +57,9 @@ export function GeneralTable({
             <ExportButtons onExcel={() => onExport("export excel")} onWord={() => onExport("export word")} />
           )}
           {onImportExcel && canImport && (
-            <label className="px-2 py-1 rounded bg-violet-600 text-white text-[10px] font-bold border border-violet-700 hover:bg-violet-700 cursor-pointer">
+            <label htmlFor="gen-table-import-file" className="px-2 py-1 rounded bg-violet-600 text-white text-[10px] font-bold border border-violet-700 hover:bg-violet-700 cursor-pointer">
               📥 {cur.importExcel}
-              <input ref={importExcelRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f && onImportExcel) onImportExcel(f); e.target.value = ""; }} className="hidden" />
+              <input id="gen-table-import-file" ref={importExcelRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f && onImportExcel) onImportExcel(f); e.target.value = ""; }} className="hidden" />
             </label>
           )}
         </div>

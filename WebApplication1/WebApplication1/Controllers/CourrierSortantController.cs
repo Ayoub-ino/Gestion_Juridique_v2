@@ -43,9 +43,19 @@ namespace WebApplication1.Controllers
                 var creatorService = user?.Service ?? "BureauOrdre";
                 var creatorServiceEnum = ServiceMapper.MapToServiceEnum(creatorService);
 
+                // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
+                var numeroRef = dto.Reference ?? "REF-" + DateTime.Now.Ticks.ToString();
+                if (!string.IsNullOrWhiteSpace(dto.Reference))
+                {
+                    var refExists = await _context.Documents
+                        .AnyAsync(d => d.NumeroReference == dto.Reference);
+                    if (refExists)
+                        return Conflict(new { error = "Ce numéro de référence existe déjà" });
+                }
+
                 var sortant = new CourrierSortant
                 {
-                    NumeroReference = dto.Reference ?? "REF-" + DateTime.Now.Ticks.ToString(),
+                    NumeroReference = numeroRef,
                     Sujet = dto.Objet ?? "Sans objet",
                     Objet = dto.Objet ?? "Sans objet",
                     DateCreation = DateTime.Now,
@@ -94,8 +104,14 @@ namespace WebApplication1.Controllers
                 var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
                 if (!isAdminLike && !string.IsNullOrEmpty(user?.Service))
                 {
-                    var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service);
-                    query = query.Where(c => c.ServiceActuel == userServiceEnum);
+                    if (ServiceMapper.TryMapToServiceEnum(user.Service, out var userServiceEnum))
+                    {
+                        query = query.Where(c => c.ServiceActuel == userServiceEnum);
+                    }
+                    else
+                    {
+                        return Ok(new object[0]);
+                    }
                 }
             }
 

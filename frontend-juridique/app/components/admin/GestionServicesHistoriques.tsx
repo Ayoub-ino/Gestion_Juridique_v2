@@ -170,24 +170,24 @@ export function GestionServicesHistoriques({ langue, cur, token }: Props) {
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.nomService} *`}</label>
-              <input type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
+              <label htmlFor="svchist-nom" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.nomService} *`}</label>
+              <input id="svchist-nom" type="text" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{`${cur.codeService} *`}</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
+              <label htmlFor="svchist-code" className="block text-xs font-bold text-slate-700 mb-1">{`${cur.codeService} *`}</label>
+              <input id="svchist-code" type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required
                 placeholder={langue === "fr" ? "ex: recherche" : "مثال: recherche"}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.descriptionService}</label>
-              <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+              <label htmlFor="svchist-description" className="block text-xs font-bold text-slate-700 mb-1">{cur.descriptionService}</label>
+              <input id="svchist-description" type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.serviceParent}</label>
-              <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}
+              <label htmlFor="svchist-parent" className="block text-xs font-bold text-slate-700 mb-1">{cur.serviceParent}</label>
+              <select id="svchist-parent" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white">
                 <option value="">{cur.aucunServiceParent}</option>
                 {rootServices.map(s => (
@@ -196,14 +196,14 @@ export function GestionServicesHistoriques({ langue, cur, token }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{cur.ordreAffichage}</label>
-              <input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: parseInt(e.target.value) || 0 })}
+              <label htmlFor="svchist-ordre" className="block text-xs font-bold text-slate-700 mb-1">{cur.ordreAffichage}</label>
+              <input id="svchist-ordre" type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: parseInt(e.target.value) || 0 })}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
             </div>
             <div className="md:col-span-2 flex items-center gap-2">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              <input id="svchist-actif" type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
                 className="w-4 h-4 rounded border-slate-300" />
-              <label className="text-xs text-slate-700">{cur.actif}</label>
+              <label htmlFor="svchist-actif" className="text-xs text-slate-700">{cur.actif}</label>
             </div>
             <div className="md:col-span-2 flex items-end gap-2">
               <button type="submit" className="px-6 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition">

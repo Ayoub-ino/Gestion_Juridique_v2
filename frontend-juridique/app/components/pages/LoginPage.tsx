@@ -38,7 +38,7 @@ export default function LoginPage({ langue = "ar" }: { langue?: Langue }) {
         </div>
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <Image src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Coat_of_arms_of_Morocco.svg" alt="Blason" width={64} height={64} className="w-16 h-16" />
+            <Image src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Coat_of_arms_of_Morocco.svg" alt="Blason" width={64} height={64} loading="eager" className="w-16 h-16" />
           </div>
           <h2 className="text-xl font-bold text-slate-800">{cur.courAppel}</h2>
           <p className="text-sm text-slate-500">{cur.loginSubtitle}</p>
@@ -46,8 +46,9 @@ export default function LoginPage({ langue = "ar" }: { langue?: Langue }) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700">{cur.login}</label>
+            <label htmlFor="login-input" className="block text-sm font-medium text-slate-700">{cur.login}</label>
             <input
+              id="login-input"
               type="text"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
@@ -56,8 +57,9 @@ export default function LoginPage({ langue = "ar" }: { langue?: Langue }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700">{cur.motDePasse}</label>
+            <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">{cur.motDePasse}</label>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

@@ -28,6 +28,15 @@ namespace WebApplication1.Services
             return role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
         }
 
+        /// <summary>
+        /// Try to resolve the user's service to a ServiceTribunal enum.
+        /// Returns false for unknown/new services (user sees no documents).
+        /// </summary>
+        private static bool TryResolveUserService(Utilisateur user, out ServiceTribunal serviceEnum)
+        {
+            return ServiceMapper.TryMapToServiceEnum(user.Service ?? "", out serviceEnum);
+        }
+
         private async Task<Utilisateur?> LoadUserOrNullAsync(int userId) =>
             await _context.Utilisateurs.FindAsync(userId);
 
@@ -40,7 +49,8 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userServiceEnum))
+                return ServiceResult.Ok(new List<object>());
 
             var query = _context.Transactions
                 .Include(t => t.Document)
@@ -81,7 +91,8 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userServiceEnum))
+                return ServiceResult.Ok(new List<object>());
 
             var transactions = await _context.Transactions
                 .Include(t => t.Document)
@@ -121,9 +132,9 @@ namespace WebApplication1.Services
             if (transaction.Statut != StatutTransaction.EnAttente)
                 return ServiceResult.Fail(400, "Cette transaction n'est plus en attente");
 
-            // Permission 'accepter' is enforced by the middleware ([RequirePermission]);
-            // here we only enforce the service-ownership check.
-            var userEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userEnum))
+                return ServiceResult.Fail(403, "Service utilisateur inconnu");
+
             if (transaction.ServiceDestination != userEnum)
                 return ServiceResult.Fail(403, "Accès refusé");
 
@@ -176,9 +187,9 @@ namespace WebApplication1.Services
             if (transaction.Statut != StatutTransaction.EnAttente)
                 return ServiceResult.Fail(400, "Cette transaction n'est plus en attente");
 
-            // Permission 'refuser' is enforced by the middleware ([RequirePermission]);
-            // here we only enforce the service-ownership check.
-            var userEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userEnum))
+                return ServiceResult.Fail(403, "Service utilisateur inconnu");
+
             if (transaction.ServiceDestination != userEnum)
                 return ServiceResult.Fail(403, "Accès refusé");
 
@@ -210,6 +221,23 @@ namespace WebApplication1.Services
                 await _accessService.RevokeAccessAsync(transaction.DocumentId, receiverRbacCode);
             }
 
+            // ── SENDER NOTIFICATION: create a notification for the sender's service ──
+            // so the sender sees "Your transfer was refused" with the receiver's message
+            // in their Notifications tab. This transaction is directed TO the sender's service.
+            var senderNotificationTx = new Transaction
+            {
+                DocumentId = transaction.DocumentId,
+                ServiceOrigine = transaction.ServiceDestination,  // receiver's service
+                ServiceDestination = transaction.ServiceOrigine,  // sender's service
+                DateTransaction = DateTime.Now,
+                Remarques = commentaire,
+                UtilisateurId = userIdStr,
+                Statut = StatutTransaction.EnAttente,
+                DoitRevenir = transaction.DoitRevenir,
+                Commentaire = "[REFUS]"
+            };
+            _context.Transactions.Add(senderNotificationTx);
+
             await _context.SaveChangesAsync();
 
             return ServiceResult.Ok(new { message = "Transaction refusée" });
@@ -228,7 +256,8 @@ namespace WebApplication1.Services
                 return ServiceResult.Fail(404, "Transaction non trouvée");
 
             var isAdmin = IsAdminLike(user);
-            var userEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userEnum))
+                return ServiceResult.Fail(403, "Service utilisateur inconnu");
 
             // Standard users: can only cancel 'EnAttente' transactions they sent
             // Admin users: can cancel 'EnAttente' transactions (any sender)
@@ -283,7 +312,8 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new { total = 0, acceptes = 0, refuses = 0, enAttente = 0, pourcentage = 0 });
 
-            var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userServiceEnum))
+                return ServiceResult.Ok(new { total = 0, acceptes = 0, refuses = 0, enAttente = 0, pourcentage = 0 });
 
             var query = _context.Transactions
                 .Where(t => t.ServiceOrigine == userServiceEnum || t.ServiceDestination == userServiceEnum);
@@ -331,7 +361,8 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new { count = 0 });
 
-            var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userServiceEnum))
+                return ServiceResult.Ok(new { count = 0 });
 
             var count = await _context.Transactions
                 .Where(t => t.Statut == StatutTransaction.EnAttente
@@ -350,7 +381,8 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            var userServiceEnum = ServiceMapper.MapToServiceEnum(user.Service ?? "");
+            if (!TryResolveUserService(user, out var userServiceEnum))
+                return ServiceResult.Ok(new List<object>());
 
             var query = _context.Transactions
                 .Include(t => t.Document)

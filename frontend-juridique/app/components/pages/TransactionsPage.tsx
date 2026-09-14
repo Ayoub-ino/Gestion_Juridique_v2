@@ -4,7 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect, useCallback } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { SERVICE_GROUPS, getRoleLabel } from "@/lib/constants";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { exportRows, ExportFormat } from "@/lib/exportImport";
 import { api } from "@/lib/api/client";
@@ -71,14 +71,7 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
     exportRows(rows, "transactions", format, cur.registreTransactions);
   };
 
-  const getServiceLabel = (value: string) => {
-    for (const group of SERVICE_GROUPS) {
-      for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
-      }
-    }
-    return getRoleLabel(value, langue);
-  };
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   const handleAccept = async (id: number) => {
     if (!canAccept) { alert(cur.permissionRefusee); return; }
@@ -261,7 +254,26 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                     <td className="p-3">
                       {t.statut === "EnAttente" ? (
                         <div className="flex flex-col gap-1.5">
-                          {isReceiver && (
+                          {/* Refusal notification: sender sees refusal message, can only acknowledge */}
+                          {isSender && t.commentaire === "[REFUS]" && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] text-red-500 font-bold">
+                                {langue === "fr"
+                                  ? `⚠️ Votre transfert a été refusé. Motif: ${t.message}`
+                                  : `⚠️ تم رفض تحويلك. السبب: ${t.message}`
+                                }
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAccept(t.id)}
+                                className="px-2.5 py-1.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold hover:bg-slate-300 transition whitespace-nowrap self-start"
+                              >
+                                {langue === "fr" ? "Accusé de réception" : "تأكيد الاستلام"}
+                              </button>
+                            </div>
+                          )}
+                          {/* Regular receiver actions */}
+                          {isReceiver && t.commentaire !== "[REFUS]" && (
                           <div className="flex gap-1.5 items-center">
                             <input
                               type="text"
@@ -270,8 +282,9 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                               placeholder={langue === "fr" ? "Commentaire..." : "تعليق..."}
                               className="w-32 p-1.5 border border-slate-300 rounded text-[10px] outline-none focus:border-blue-500"
                             />
-                            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 cursor-pointer whitespace-nowrap">
+                            <label htmlFor={`trans-retour-${t.id}`} className="flex items-center gap-1 text-[10px] font-bold text-slate-600 cursor-pointer whitespace-nowrap">
                               <input
+                                id={`trans-retour-${t.id}`}
                                 type="checkbox"
                                 checked={!!retours[t.id]}
                                 onChange={(e) => setRetours(prev => ({ ...prev, [t.id]: e.target.checked }))}
@@ -282,8 +295,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                           </div>
                           )}
                           <div className="flex gap-1.5">
-                            {/* Receiver: Accepter + Refuser */}
-                            {isReceiver && canAccept && (
+                            {/* Receiver: Accepter + Refuser (only for real transfers, not refusal notifications) */}
+                            {isReceiver && t.commentaire !== "[REFUS]" && canAccept && (
                             <button
                               type="button"
                               onClick={() => handleAccept(t.id)}
@@ -292,7 +305,7 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                               {langue === "fr" ? "Accepter" : "قبول"}
                             </button>
                             )}
-                            {isReceiver && canRefuse && (
+                            {isReceiver && t.commentaire !== "[REFUS]" && canRefuse && (
                             <button
                               type="button"
                               onClick={() => handleRefuse(t.id)}
@@ -301,8 +314,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                               {langue === "fr" ? "Refuser" : "رفض"}
                             </button>
                             )}
-                            {/* Sender: Annuler l'envoi only */}
-                            {isSender && canCancelTransfer && (
+                            {/* Sender: Annuler l'envoi — only for pending transfers they sent, NOT refusal notifications */}
+                            {isSender && t.commentaire !== "[REFUS]" && canCancelTransfer && (
                             <button
                               type="button"
                               onClick={() => handleAnnuler(t.id)}

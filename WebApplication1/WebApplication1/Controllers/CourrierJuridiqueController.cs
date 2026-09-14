@@ -44,7 +44,11 @@ namespace WebApplication1.Controllers
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
-                var userServiceEnum = ServiceMapper.MapToServiceEnum(userService);
+                if (!ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum))
+                {
+                    // Unknown service code — no matching documents exist
+                    return Ok(new object[0]);
+                }
                 query = query.Where(c => c.ServiceActuel == userServiceEnum);
             }
 
@@ -93,6 +97,16 @@ namespace WebApplication1.Controllers
 
             var user = await _context.Utilisateurs.FindAsync(userId);
             var creatorServiceEnum = ServiceMapper.MapToServiceEnum(user?.Service ?? "BureauOrdre");
+
+            // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
+            var numeroRef = dto.Reference ?? "";
+            if (!string.IsNullOrWhiteSpace(numeroRef))
+            {
+                var refExists = await _context.Documents
+                    .AnyAsync(d => d.NumeroReference == numeroRef);
+                if (refExists)
+                    return Conflict(new { error = "Ce numéro de référence existe déjà" });
+            }
 
             var juridique = new DossierJuridique
             {
@@ -157,6 +171,16 @@ namespace WebApplication1.Controllers
             {
                 if (!_accessService.IsUserCustodian(juridique, userId))
                     return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce dossier. Seul le service en charge peut le modifier." });
+            }
+
+            // Vérifier l'unicité du numéro de référence (exclure le document courant)
+            var numeroRef = dto.Reference ?? juridique.NumeroReference;
+            if (!string.IsNullOrWhiteSpace(numeroRef) && numeroRef != juridique.NumeroReference)
+            {
+                var refExists = await _context.Documents
+                    .AnyAsync(d => d.NumeroReference == numeroRef && d.Id != id);
+                if (refExists)
+                    return Conflict(new { error = "Ce numéro de référence existe déjà" });
             }
 
             juridique.NumeroReference = dto.Reference ?? juridique.NumeroReference;

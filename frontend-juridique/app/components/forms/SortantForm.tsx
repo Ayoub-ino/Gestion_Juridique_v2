@@ -59,8 +59,9 @@ export function SortantForm({
       {/* Champs existants */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.dateEnvoi} <span className="text-red-500">*</span></label>
+          <label htmlFor="sortant-date-envoi" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateEnvoi} <span className="text-red-500">*</span></label>
           <input
+            id="sortant-date-envoi"
             type="date"
             value={dateEnvoi}
             onChange={(e) => setDateEnvoi(e.target.value)}
@@ -68,8 +69,9 @@ export function SortantForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.typeCourrier}</label>
+          <label htmlFor="sortant-type" className="block text-xs font-bold text-slate-700 mb-2">{cur.typeCourrier}</label>
           <input
+            id="sortant-type"
             type="text"
             value={typeCourrier}
             disabled
@@ -82,8 +84,9 @@ export function SortantForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Service */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.service} <span className="text-red-500">*</span></label>
+          <label htmlFor="sortant-service" className="block text-xs font-bold text-slate-700 mb-2">{cur.service} <span className="text-red-500">*</span></label>
           <select
+            id="sortant-service"
             value={service}
             onChange={(e) => setService(e.target.value)}
             className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -103,8 +106,9 @@ export function SortantForm({
 
         {/* Numéro de bureau d'ordre */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureauOrdre}</label>
+          <label htmlFor="sortant-bo" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureauOrdre}</label>
           <input
+            id="sortant-bo"
             type="text"
             value={numeroBureauOrdre}
             onChange={(e) => setNumeroBureauOrdre(e.target.value)}
@@ -117,10 +121,11 @@ export function SortantForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Tribunal d'origine */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="sortant-tribunal-origine" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.tribunalOrigine}
           </label>
           <input
+            id="sortant-tribunal-origine"
             type="text"
             value={tribunalOrigine}
             onChange={(e) => setTribunalOrigine(e.target.value)}
@@ -131,10 +136,11 @@ export function SortantForm({
 
         {/* Tribunal de destination */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="sortant-tribunal-dest" className="block text-xs font-bold text-slate-700 mb-2">
             {cur.tribunalDestination}
           </label>
           <input
+            id="sortant-tribunal-dest"
             type="text"
             value={tribunalDestination}
             onChange={(e) => setTribunalDestination(e.target.value)}
@@ -147,8 +153,9 @@ export function SortantForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Document PDF/Word */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
+          <label htmlFor="sortant-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
           <input
+            id="sortant-fichier"
             ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.xlsx,.xls,.csv"
@@ -160,8 +167,9 @@ export function SortantForm({
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
+          <label htmlFor="sortant-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
           <textarea
+            id="sortant-notes"
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
