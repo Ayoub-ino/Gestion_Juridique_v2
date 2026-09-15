@@ -24,6 +24,7 @@ interface RawDoc {
   demandeur?: string;
   source?: string;
   serviceActuel?: string;
+  serviceActuelCode?: string;
   statutActuel?: string;
   filePath?: string | null;
   transmissible?: boolean | string;
@@ -87,6 +88,7 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
           source: c.expediteur || c.source || cur.inconnu,
           serviceActuel: getServiceLabel(c.serviceActuel || "BureauOrdre", langue),
           serviceActuelKey: c.serviceActuel || "BureauOrdre",
+          serviceActuelCode: c.serviceActuelCode || undefined,
           statut: getStatusLabel(c.statutActuel || "Nouveau", langue),
           filePath: c.filePath || undefined,
           description: c.objet || "Aucune description",
@@ -113,6 +115,7 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
           source: c.demandeur || c.source || cur.inconnu,
           serviceActuel: getServiceLabel(c.serviceActuel || "BureauOrdre", langue),
           serviceActuelKey: c.serviceActuel || "BureauOrdre",
+          serviceActuelCode: c.serviceActuelCode || undefined,
           statut: getStatusLabel(c.statutActuel || "Nouveau", langue),
           filePath: c.filePath || undefined,
           description: c.objet || "Aucune description",
@@ -142,6 +145,7 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
             source: cur.serviceEmetteur,
             serviceActuel: getServiceLabel(c.serviceActuel || "BureauOrdre", langue),
             serviceActuelKey: c.serviceActuel || "BureauOrdre",
+            serviceActuelCode: c.serviceActuelCode || undefined,
             statut: getStatusLabel(statutBrut, langue),
             destinataireExterne: c.destinataireExterne || cur.inconnu,
             dateEnvoi: c.dateEnvoi ? new Date(c.dateEnvoi).toLocaleDateString() : "-",

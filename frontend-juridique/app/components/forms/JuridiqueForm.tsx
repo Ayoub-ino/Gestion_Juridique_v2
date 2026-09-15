@@ -5,8 +5,9 @@
 import type { TranslationKeys } from "@/lib/translations";
 
 import { useRef } from "react";
-import { SERVICE_GROUPS } from "@/lib/constants";
 import { Langue } from "@/app/types";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 
 interface JuridiqueFormProps {
   // Nouveaux champs
@@ -141,6 +142,8 @@ export function JuridiqueForm({
   userRole
 }: JuridiqueFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { token } = useAuth();
+  const { groups: serviceGroups } = useServiceOptions(token, langue);
 
   // Fonction pour sélectionner un dossier parent
   const handleSelectParentFolder = async () => {
@@ -429,11 +432,11 @@ export function JuridiqueForm({
               required
             >
               <option value="">{cur.choisirService}</option>
-              {SERVICE_GROUPS.map((group) => (
-                <optgroup key={group.label} label={group.fr}>
+              {serviceGroups.map((group) => (
+                <optgroup key={group.key} label={group.label}>
                   {group.children.map((svc) => (
                     <option key={svc.value} value={svc.value}>
-                      {langue === "fr" ? svc.fr : svc.ar}
+                      {svc.label}
                     </option>
                   ))}
                 </optgroup>

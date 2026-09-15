@@ -44,12 +44,15 @@ namespace WebApplication1.Controllers
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
-                if (!ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum))
-                {
-                    // Unknown service code — no matching documents exist
-                    return Ok(new object[0]);
-                }
-                query = query.Where(c => c.ServiceActuel == userServiceEnum);
+                // Scope by the dynamic RBAC service code so services created from the
+                // admin panel work without code changes. Legacy rows (no code stored)
+                // still match through their ServiceTribunal enum value.
+                var userServiceCode = ServiceMapper.NormalizeServiceCode(userService);
+                var hasLegacyEnum = ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum);
+                query = hasLegacyEnum
+                    ? query.Where(c => c.ServiceActuelCode == userServiceCode
+                        || (c.ServiceActuelCode == null && c.ServiceActuel == userServiceEnum))
+                    : query.Where(c => c.ServiceActuelCode == userServiceCode);
             }
 
             var juridiques = await query
@@ -61,6 +64,7 @@ namespace WebApplication1.Controllers
                     c.Sujet,
                     c.DateCreation,
                     c.ServiceActuel,
+                    c.ServiceActuelCode,
                     c.StatutActuel,
                     c.FilePath,
                     DernierTransfert = c.Transactions
@@ -97,6 +101,9 @@ namespace WebApplication1.Controllers
 
             var user = await _context.Utilisateurs.FindAsync(userId);
             var creatorServiceEnum = ServiceMapper.MapToServiceEnum(user?.Service ?? "BureauOrdre");
+            var creatorServiceCode = ServiceMapper.NormalizeServiceCode(user?.Service) is { Length: > 0 } creatorCode
+                ? creatorCode
+                : DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
 
             // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
             var numeroRef = dto.Reference ?? "";
@@ -127,6 +134,7 @@ namespace WebApplication1.Controllers
                 TaslimTransaction = dto.TaslimTransaction,
                 AutoriteRetrait = dto.AutoriteRetrait,
                 ServiceActuel = creatorServiceEnum,
+                ServiceActuelCode = creatorServiceCode,
                 StatutActuel = StatutDossier.Nouveau,
                 DateCreation = DateTime.Now
             };
@@ -140,7 +148,9 @@ namespace WebApplication1.Controllers
                 {
                     DocumentId = juridique.Id,
                     ServiceOrigine = creatorServiceEnum,
+                    ServiceOrigineCode = creatorServiceCode,
                     ServiceDestination = ServiceTribunal.OuvertureDossier,
+                    ServiceDestinationCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.OuvertureDossier),
                     Statut = StatutTransaction.Accepte,
                     Remarques = "Créé et transféré",
                     DateTransaction = DateTime.Now
@@ -150,7 +160,6 @@ namespace WebApplication1.Controllers
             }
 
             // ── Auto-grant Owner access to creator's service ──
-            var creatorServiceCode = DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
             await _accessService.GrantOwnerAsync(juridique.Id, creatorServiceCode, userId);
 
             return CreatedAtAction(nameof(Get), new { id = juridique.Id }, new { message = "Dossier juridique créé avec succès", id = juridique.Id });

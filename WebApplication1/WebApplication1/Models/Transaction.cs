@@ -37,5 +37,14 @@ namespace WebApplication1.Models
         // When set, this transaction was routed to a historical (record-only) entity
         // that does not have login credentials — the transfer is auto-accepted.
         public string? HistoricalServiceCode { get; set; }
+
+        // ── Dynamic service routing codes ──
+        // RBAC service codes (Service.Code) for origin and destination.
+        // These supersede ServiceOrigine/ServiceDestination, which are backed by
+        // the fixed ServiceTribunal enum and cannot represent services created
+        // dynamically from the admin panel. Null for legacy rows — callers fall
+        // back to the enum in that case.
+        public string? ServiceOrigineCode { get; set; }
+        public string? ServiceDestinationCode { get; set; }
     }
 }

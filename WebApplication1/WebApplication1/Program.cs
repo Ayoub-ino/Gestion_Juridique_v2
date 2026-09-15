@@ -67,6 +67,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<WebApplication1.Services.PermissionService>();
 builder.Services.AddScoped<WebApplication1.Services.PermissionValidationService>();
 builder.Services.AddScoped<WebApplication1.Services.SeederService>();
+builder.Services.AddScoped<WebApplication1.Services.ServiceCatalog>();
 builder.Services.AddScoped<WebApplication1.Services.TransactionService>();
 builder.Services.AddScoped<WebApplication1.Services.WorkspaceService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentAccessService>();

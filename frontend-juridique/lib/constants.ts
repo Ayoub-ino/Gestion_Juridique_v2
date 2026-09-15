@@ -123,7 +123,29 @@ export function getRoleLabel(role: string, langue: Langue): string {
   };
   const found = map[role];
   if (found) return langue === "fr" ? found.fr : found.ar;
-  return role;
+  return humanizeCode(role);
+}
+
+/**
+ * Last-resort display for an identifier with no known label.
+ * Turns `seancesProcedures`, `seances_procedures` or `seances-procedures`
+ * into "Seances Procedures" so a raw service code is never shown to the user.
+ * Values that are already words ("User", "Archive") are left untouched.
+ */
+export function humanizeCode(value: string): string {
+  if (!value) return value;
+  const spaced = value
+    .replace(/[_-]+/g, " ")
+    .replace(/&/g, " & ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+  return spaced
+    .split(" ")
+    .map((word) =>
+      word.length > 1 ? word.charAt(0).toUpperCase() + word.slice(1) : word
+    )
+    .join(" ");
 }
 
 export function getStatusLabel(value: string, langue: Langue): string {

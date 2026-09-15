@@ -21,6 +21,7 @@ namespace WebApplication1.Controllers
     {
         private readonly AppDbContext _context;
         private readonly DocumentAccessService _accessService;
+        private readonly ServiceCatalog _serviceCatalog;
 
         private static readonly Dictionary<ServiceTribunal, List<ServiceTribunal>> ParentChildren = new()
         {
@@ -28,10 +29,11 @@ namespace WebApplication1.Controllers
             { ServiceTribunal.TaslimNusakh, new() { ServiceTribunal.Tabligh, ServiceTribunal.TasfiyatSawa2ir, ServiceTribunal.Archive } },
         };
 
-        public TransferController(AppDbContext context, DocumentAccessService accessService)
+        public TransferController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog)
         {
             _context = context;
             _accessService = accessService;
+            _serviceCatalog = serviceCatalog;
         }
 
         [HttpPost]
@@ -71,26 +73,32 @@ namespace WebApplication1.Controllers
 
             var serviceOrigine = document.ServiceActuel;
 
+            // RBAC code of the service that currently holds the document.
+            // Works for dynamically-created services too (enum cannot represent them).
+            var sourceCode = ServiceMapper.ResolveDocumentServiceCode(document);
+
             // Check if the destination is a Historique (record-only) service
             var isHistorical = dto.IsHistoricalService == true;
-            string? historicalServiceCode = isHistorical ? dto.ServiceDestination : null;
 
-            ServiceTribunal serviceDestination;
-            if (isHistorical)
-            {
-                // For historical services, use a placeholder destination
-                // The actual routing is tracked via HistoricalServiceCode
-                serviceDestination = ServiceTribunal.Archive;
-            }
-            else
-            {
-                serviceDestination = GetServiceEnum(dto.ServiceDestination);
-            }
+            // Resolve the destination to a real RBAC service code, reading the live
+            // database so services created/removed in the admin panel work instantly.
+            var destCode = await _serviceCatalog.ResolveCodeAsync(dto.ServiceDestination);
+            if (string.IsNullOrEmpty(destCode))
+                return BadRequest(new { error = $"Service '{dto.ServiceDestination}' invalide" });
 
-            var destinations = new List<ServiceTribunal> { serviceDestination };
-            if (!isHistorical && !dto.TargetUserId.HasValue && ParentChildren.TryGetValue(serviceDestination, out var children))
+            string? historicalServiceCode = isHistorical ? destCode : null;
+
+            // Enum counterpart — a best-effort legacy mirror. Dynamic services fall
+            // back to the enum default, which is harmless: all real routing reads the code.
+            var serviceDestination = ServiceMapper.MapToServiceEnum(destCode);
+
+            var destinationCodes = new List<string> { destCode! };
+            if (!isHistorical && !dto.TargetUserId.HasValue && !(dto.TargetUserIds?.Count > 0))
             {
-                destinations.AddRange(children);
+                foreach (var childCode in ExpandChildServiceCodes(destCode!))
+                {
+                    if (!destinationCodes.Contains(childCode)) destinationCodes.Add(childCode);
+                }
             }
 
             var transactionIds = new List<int>();
@@ -102,11 +110,12 @@ namespace WebApplication1.Controllers
                     ? new List<int> { dto.TargetUserId.Value }
                     : new List<int>();
 
-            foreach (var dest in destinations)
+            foreach (var targetCode in destinationCodes)
             {
                 // Historique services are record-only entities with no login —
                 // auto-accept the transfer immediately since no one can accept/refuse.
                 var statut = isHistorical ? StatutTransaction.Accepte : StatutTransaction.EnAttente;
+                var destEnum = ServiceMapper.MapToServiceEnum(targetCode);
 
                 if (targetUserIds.Count > 0)
                 {
@@ -117,7 +126,9 @@ namespace WebApplication1.Controllers
                         {
                             DocumentId = document.Id,
                             ServiceOrigine = serviceOrigine,
-                            ServiceDestination = dest,
+                            ServiceOrigineCode = sourceCode,
+                            ServiceDestination = destEnum,
+                            ServiceDestinationCode = targetCode,
                             DateTransaction = DateTime.Now,
                             Remarques = dto.Message,
                             UtilisateurId = userId.ToString(),
@@ -139,7 +150,9 @@ namespace WebApplication1.Controllers
                     {
                         DocumentId = document.Id,
                         ServiceOrigine = serviceOrigine,
-                        ServiceDestination = dest,
+                        ServiceOrigineCode = sourceCode,
+                        ServiceDestination = destEnum,
+                        ServiceDestinationCode = targetCode,
                         DateTransaction = DateTime.Now,
                         Remarques = dto.Message,
                         UtilisateurId = userId.ToString(),
@@ -155,46 +168,46 @@ namespace WebApplication1.Controllers
                 }
             }
 
-            // For historical services, keep document.ServiceActuel as-is (or set to Archive)
-            // since the document is not actually routed to a live service
+            // For historical services, keep document custody as-is since the document is
+            // not actually routed to a live service.
             if (!isHistorical)
             {
                 document.ServiceActuel = serviceDestination;
-                document.StatutActuel = StatutDossier.EnInstance;
+                document.ServiceActuelCode = destCode;
             }
-            else
-            {
-                document.StatutActuel = StatutDossier.EnInstance;
-            }
+            document.StatutActuel = StatutDossier.EnInstance;
 
             await _context.SaveChangesAsync();
 
             // ── Auto-grant document access ──
-            // Map ServiceTribunal enum values to RBAC Service.Code values
-            // (enum names differ from RBAC codes for 6 of 9 services)
-            var senderRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(serviceOrigine);
-            await _accessService.GrantEditorAsync(document.Id, senderRbacCode, userId);
+            // The sending service keeps Editor access; every destination service gets Editor.
+            await _accessService.GrantEditorAsync(document.Id, sourceCode, userId);
 
-            // Destination service gets Editor access
             if (!isHistorical)
             {
-                var destRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(serviceDestination);
-                await _accessService.GrantEditorAsync(document.Id, destRbacCode, userId);
+                foreach (var targetCode in destinationCodes)
+                    await _accessService.GrantEditorAsync(document.Id, targetCode, userId);
             }
 
             return Ok(new
             {
                 message = "Transfert effectué avec succès",
                 transactionIds,
-                destinations = destinations.Select(d => d.ToString()).ToList()
+                destinations = destinationCodes
             });
         }
 
-        private static ServiceTribunal GetServiceEnum(string serviceName)
+        /// <summary>
+        /// Legacy behaviour: transferring to a parent service without naming a specific
+        /// user also records the transfer for that service's sub-units.
+        /// </summary>
+        private static IEnumerable<string> ExpandChildServiceCodes(string destCode)
         {
-            // Use the centralized ServiceMapper which handles all RBAC codes,
-            // enum names, and legacy French names.
-            return ServiceMapper.MapToServiceEnum(serviceName);
+            if (!ServiceMapper.TryMapToServiceEnum(destCode, out var destEnum)) yield break;
+            if (!ParentChildren.TryGetValue(destEnum, out var children)) yield break;
+
+            foreach (var child in children)
+                yield return DocumentAccessService.ServiceTribunalToRbacCode(child);
         }
     }
 

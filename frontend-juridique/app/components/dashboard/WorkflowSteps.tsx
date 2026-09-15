@@ -2,7 +2,8 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule } from "@/app/types";
-import { getServiceLabel } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 
 interface WorkflowStep {
   labelFr: string;
@@ -67,6 +68,9 @@ export function WorkflowSteps({
   langue,
   docsPerStep = [],
 }: WorkflowStepsProps) {
+  const { token } = useAuth();
+  const { getServiceLabel } = useServiceLabels(token, langue);
+
   const getLabel = (step: WorkflowStep) => (langue === "fr" ? step.labelFr : step.labelAr);
 
   return (
@@ -77,7 +81,7 @@ export function WorkflowSteps({
           <h3 className="font-bold text-slate-900 text-sm">{cur.fluxDossier}</h3>
           {selectedDoc ? (
             <p className="text-[11px] text-slate-500 font-semibold">
-              {cur.emplacementActuel}: {getServiceLabel(selectedDoc.serviceActuel, langue)}
+              {cur.emplacementActuel}: {getServiceLabel(selectedDoc.serviceActuelCode || selectedDoc.serviceActuel)}
               <span className="mx-1.5 text-slate-300">|</span>
               {cur.tblRef}: <span className="text-blue-600">{selectedDoc.reference}</span>
             </p>

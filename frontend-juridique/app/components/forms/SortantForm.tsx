@@ -2,7 +2,8 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 import { useRef } from "react";
-import { SERVICE_GROUPS } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 
 interface SortantFormProps {
   // Champs existants
@@ -47,6 +48,8 @@ export function SortantForm({
   setTribunalDestination
 }: SortantFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { token } = useAuth();
+  const { groups: serviceGroups } = useServiceOptions(token, langue);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -92,11 +95,11 @@ export function SortantForm({
             className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
           >
             <option value="">-- {cur.choisirService} --</option>
-            {SERVICE_GROUPS.map((group) => (
-              <optgroup key={group.label} label={group.fr}>
+            {serviceGroups.map((group) => (
+              <optgroup key={group.key} label={group.label}>
                 {group.children.map((svc) => (
                   <option key={svc.value} value={svc.value}>
-                    {langue === "fr" ? svc.fr : svc.ar}
+                    {svc.label}
                   </option>
                 ))}
               </optgroup>

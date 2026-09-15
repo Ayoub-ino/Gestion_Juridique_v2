@@ -10,6 +10,10 @@ namespace WebApplication1.Services
     /// Domain logic for transactions (transfers between services): pending lists,
     /// accept / refuse / cancel transitions, stats and history.
     /// Controllers remain thin: parse the request, call a service method, map the result.
+    ///
+    /// Routing is keyed on RBAC service codes (dynamic — supports services created
+    /// from the admin panel). The ServiceTribunal enum columns are kept as a legacy
+    /// mirror and are only consulted for rows created before the code columns existed.
     /// </summary>
     public class TransactionService
     {
@@ -29,13 +33,35 @@ namespace WebApplication1.Services
         }
 
         /// <summary>
-        /// Try to resolve the user's service to a ServiceTribunal enum.
-        /// Returns false for unknown/new services (user sees no documents).
+        /// Canonical RBAC code of the service the user belongs to.
+        /// Works for any service, including dynamically-created ones.
         /// </summary>
-        private static bool TryResolveUserService(Utilisateur user, out ServiceTribunal serviceEnum)
-        {
-            return ServiceMapper.TryMapToServiceEnum(user.Service ?? "", out serviceEnum);
-        }
+        private static string ResolveUserServiceCode(Utilisateur user) =>
+            ServiceMapper.NormalizeServiceCode(user.Service);
+
+        /// <summary>
+        /// Legacy enum equivalent of the user's service, used only to match rows
+        /// written before the code columns existed.
+        /// </summary>
+        private static bool TryResolveUserService(Utilisateur user, out ServiceTribunal serviceEnum) =>
+            ServiceMapper.TryMapToServiceEnum(user.Service ?? "", out serviceEnum);
+
+        /// <summary>
+        /// A refusal notice is a pending transaction sent back to the original sender
+        /// so they learn why their transfer was refused. It is flagged in Commentaire
+        /// and only needs an acknowledgement — never a state transition.
+        /// </summary>
+        private static bool IsRefusalNotice(Transaction t) => t.Commentaire == "[REFUS]";
+
+        private static string TransactionOriginCode(Transaction t) =>
+            string.IsNullOrWhiteSpace(t.ServiceOrigineCode)
+                ? DocumentAccessService.ServiceTribunalToRbacCode(t.ServiceOrigine)
+                : ServiceMapper.NormalizeServiceCode(t.ServiceOrigineCode);
+
+        private static string TransactionDestinationCode(Transaction t) =>
+            string.IsNullOrWhiteSpace(t.ServiceDestinationCode)
+                ? DocumentAccessService.ServiceTribunalToRbacCode(t.ServiceDestination)
+                : ServiceMapper.NormalizeServiceCode(t.ServiceDestinationCode);
 
         private async Task<Utilisateur?> LoadUserOrNullAsync(int userId) =>
             await _context.Utilisateurs.FindAsync(userId);
@@ -49,35 +75,47 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            if (!TryResolveUserService(user, out var userServiceEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Ok(new List<object>());
+
+            var hasLegacy = TryResolveUserService(user, out var legacyEnum);
 
             var query = _context.Transactions
                 .Include(t => t.Document)
-                .Where(t => t.Statut == StatutTransaction.EnAttente
-                    && t.ServiceDestination == userServiceEnum
-                    && (t.TargetUserId == null || t.TargetUserId == userId));
+                .Where(t => t.Statut == StatutTransaction.EnAttente);
 
-            var transactions = await query
+            query = hasLegacy
+                ? query.Where(t => t.ServiceDestinationCode == userCode
+                    || (t.ServiceDestinationCode == null && t.ServiceDestination == legacyEnum))
+                : query.Where(t => t.ServiceDestinationCode == userCode);
+
+            var raw = await query
                 .OrderByDescending(t => t.DateTransaction)
+                .ToListAsync();
+
+            var transactions = raw
+                .Where(t => t.TargetUserId == null || t.TargetUserId == userId)
                 .Select(t => new
                 {
                     id = t.Id,
                     documentId = t.DocumentId,
                     documentType = t.Document is CourrierAdministratif ? "entrant-admin"
                                  : t.Document is DossierJuridique ? "entrant-juridique"
-                                 : t.Document is CourrierSortant ? ((CourrierSortant)t.Document).TypeSortant == "demande" ? "sortant-demande" : "sortant-normal"
+                                 : t.Document is CourrierSortant ? (((CourrierSortant)t.Document).TypeSortant == "demande" ? "sortant-demande" : "sortant-normal")
                                  : "unknown",
                     documentSujet = t.Document.Objet ?? t.Document.Sujet ?? "",
-                    sourceServiceId = t.ServiceOrigine.ToString(),
-                    destinationServiceId = t.ServiceDestination.ToString(),
+                    sourceServiceId = t.ServiceOrigineCode ?? t.ServiceOrigine.ToString(),
+                    destinationServiceId = t.ServiceDestinationCode ?? t.ServiceDestination.ToString(),
                     message = t.Remarques ?? "",
+                    // "[REFUS]" flags a refusal notice sent back to the original sender
+                    commentaire = t.Commentaire ?? "",
                     statut = t.Statut.ToString(),
                     dateEnvoi = t.DateTransaction,
                     doitRevenir = t.DoitRevenir,
                     sourceUserName = t.UtilisateurId
                 })
-                .ToListAsync();
+                .ToList();
 
             return ServiceResult.Ok(transactions);
         }
@@ -91,30 +129,48 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            if (!TryResolveUserService(user, out var userServiceEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Ok(new List<object>());
 
-            var transactions = await _context.Transactions
-                .Include(t => t.Document)
-                .Where(t => t.ServiceOrigine == userServiceEnum || t.ServiceDestination == userServiceEnum)
+            var hasLegacy = TryResolveUserService(user, out var legacyEnum);
+
+            var query = _context.Transactions.Include(t => t.Document).AsQueryable();
+
+            query = hasLegacy
+                ? query.Where(t => t.ServiceOrigineCode == userCode
+                    || t.ServiceDestinationCode == userCode
+                    || (t.ServiceOrigineCode == null && t.ServiceOrigine == legacyEnum)
+                    || (t.ServiceDestinationCode == null && t.ServiceDestination == legacyEnum))
+                : query.Where(t => t.ServiceOrigineCode == userCode
+                    || t.ServiceDestinationCode == userCode);
+
+            var raw = await query
                 .OrderByDescending(t => t.DateTransaction)
-                .Select(t => new
-                {
-                    id = t.Id,
-                    documentId = t.DocumentId,
-                    documentSujet = t.Document.Objet ?? t.Document.Sujet ?? "",
-                    sourceServiceId = t.ServiceOrigine.ToString(),
-                    destinationServiceId = t.ServiceDestination.ToString(),
-                    message = t.Remarques ?? "",
-                    statut = t.Statut.ToString(),
-                    dateEnvoi = t.DateTransaction,
-                    doitRevenir = t.DoitRevenir,
-                    commentaire = t.Commentaire,
-                    motifRefus = t.MotifRefus,
-                    // Role: "sender" if user's service sent it, "receiver" if destination
-                    role = t.ServiceOrigine == userServiceEnum ? "sender" : "receiver"
-                })
                 .ToListAsync();
+
+            var transactions = raw
+                .Select(t =>
+                {
+                    var originCode = TransactionOriginCode(t);
+                    return new
+                    {
+                        id = t.Id,
+                        documentId = t.DocumentId,
+                        documentSujet = t.Document.Objet ?? t.Document.Sujet ?? "",
+                        sourceServiceId = t.ServiceOrigineCode ?? t.ServiceOrigine.ToString(),
+                        destinationServiceId = t.ServiceDestinationCode ?? t.ServiceDestination.ToString(),
+                        message = t.Remarques ?? "",
+                        statut = t.Statut.ToString(),
+                        dateEnvoi = t.DateTransaction,
+                        doitRevenir = t.DoitRevenir,
+                        commentaire = t.Commentaire,
+                        motifRefus = t.MotifRefus,
+                        // Role: "sender" if the user's service sent it, "receiver" if destination
+                        role = originCode == userCode ? "sender" : "receiver"
+                    };
+                })
+                .ToList();
 
             return ServiceResult.Ok(transactions);
         }
@@ -132,25 +188,35 @@ namespace WebApplication1.Services
             if (transaction.Statut != StatutTransaction.EnAttente)
                 return ServiceResult.Fail(400, "Cette transaction n'est plus en attente");
 
-            if (!TryResolveUserService(user, out var userEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Fail(403, "Service utilisateur inconnu");
 
-            if (transaction.ServiceDestination != userEnum)
+            var destCode = TransactionDestinationCode(transaction);
+            if (destCode != userCode)
                 return ServiceResult.Fail(403, "Accès refusé");
 
-            transaction.Statut = StatutTransaction.Accepte;
-            transaction.Commentaire = commentaire;
+            var originCode = TransactionOriginCode(transaction);
 
-            if (transaction.DoitRevenir)
+            transaction.Statut = StatutTransaction.Accepte;
+            // Keep the original marker so the sender's notification stays identifiable
+            if (!IsRefusalNotice(transaction)) transaction.Commentaire = commentaire;
+
+            // A refusal notice is only an acknowledgement by the original sender —
+            // it must never re-route the document.
+            if (transaction.DoitRevenir && !IsRefusalNotice(transaction))
             {
                 transaction.Document.ServiceActuel = transaction.ServiceOrigine;
+                transaction.Document.ServiceActuelCode = originCode;
                 transaction.Document.StatutActuel = StatutDossier.EnInstance;
 
                 var retourTransaction = new Transaction
                 {
                     DocumentId = transaction.DocumentId,
                     ServiceOrigine = transaction.ServiceDestination,
+                    ServiceOrigineCode = destCode,
                     ServiceDestination = transaction.ServiceOrigine,
+                    ServiceDestinationCode = originCode,
                     DateTransaction = DateTime.Now,
                     Remarques = "Document retourné automatiquement (doitRevenir)",
                     UtilisateurId = userIdStr,
@@ -160,12 +226,12 @@ namespace WebApplication1.Services
                 _context.Transactions.Add(retourTransaction);
 
                 // Revoke receiver's access — document is returning to sender
-                var receiverRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
-                await _accessService.RevokeAccessAsync(transaction.DocumentId, receiverRbacCode);
+                await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
             }
             else
             {
                 transaction.Document.ServiceActuel = transaction.ServiceDestination;
+                transaction.Document.ServiceActuelCode = destCode;
                 transaction.Document.StatutActuel = StatutDossier.EnCours;
             }
 
@@ -187,11 +253,15 @@ namespace WebApplication1.Services
             if (transaction.Statut != StatutTransaction.EnAttente)
                 return ServiceResult.Fail(400, "Cette transaction n'est plus en attente");
 
-            if (!TryResolveUserService(user, out var userEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Fail(403, "Service utilisateur inconnu");
 
-            if (transaction.ServiceDestination != userEnum)
+            var destCode = TransactionDestinationCode(transaction);
+            if (destCode != userCode)
                 return ServiceResult.Fail(403, "Accès refusé");
+
+            var originCode = TransactionOriginCode(transaction);
 
             transaction.Statut = StatutTransaction.Refuse;
             transaction.MotifRefus = commentaire;
@@ -200,13 +270,16 @@ namespace WebApplication1.Services
             {
                 transaction.DoitRevenir = true;
                 transaction.Document.ServiceActuel = transaction.ServiceOrigine;
+                transaction.Document.ServiceActuelCode = originCode;
                 transaction.Document.StatutActuel = StatutDossier.EnCours;
 
                 var retourTransaction = new Transaction
                 {
                     DocumentId = transaction.DocumentId,
                     ServiceOrigine = transaction.ServiceDestination,
+                    ServiceOrigineCode = destCode,
                     ServiceDestination = transaction.ServiceOrigine,
+                    ServiceDestinationCode = originCode,
                     DateTransaction = DateTime.Now,
                     Remarques = $"Document retourné après refus (doitRevenir): {commentaire ?? ""}",
                     UtilisateurId = userIdStr,
@@ -217,8 +290,7 @@ namespace WebApplication1.Services
                 _context.Transactions.Add(retourTransaction);
 
                 // Revoke receiver's access — document is returning to sender
-                var receiverRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
-                await _accessService.RevokeAccessAsync(transaction.DocumentId, receiverRbacCode);
+                await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
             }
 
             // ── SENDER NOTIFICATION: create a notification for the sender's service ──
@@ -227,13 +299,17 @@ namespace WebApplication1.Services
             var senderNotificationTx = new Transaction
             {
                 DocumentId = transaction.DocumentId,
-                ServiceOrigine = transaction.ServiceDestination,  // receiver's service
-                ServiceDestination = transaction.ServiceOrigine,  // sender's service
+                ServiceOrigine = transaction.ServiceDestination,   // receiver's service
+                ServiceOrigineCode = destCode,                     // receiver's code
+                ServiceDestination = transaction.ServiceOrigine,   // sender's service
+                ServiceDestinationCode = originCode,               // sender's code
                 DateTransaction = DateTime.Now,
                 Remarques = commentaire,
                 UtilisateurId = userIdStr,
                 Statut = StatutTransaction.EnAttente,
-                DoitRevenir = transaction.DoitRevenir,
+                // The document was already returned (if requested) by the refusal above;
+                // this row is a notice, not a transfer, so it must not carry DoitRevenir.
+                DoitRevenir = false,
                 Commentaire = "[REFUS]"
             };
             _context.Transactions.Add(senderNotificationTx);
@@ -256,15 +332,18 @@ namespace WebApplication1.Services
                 return ServiceResult.Fail(404, "Transaction non trouvée");
 
             var isAdmin = IsAdminLike(user);
-            if (!TryResolveUserService(user, out var userEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode) && !isAdmin)
                 return ServiceResult.Fail(403, "Service utilisateur inconnu");
+
+            var originCode = TransactionOriginCode(transaction);
 
             // Standard users: can only cancel 'EnAttente' transactions they sent
             // Admin users: can cancel 'EnAttente' transactions (any sender)
             // No one can cancel already-accepted or refused transactions — that would corrupt document state
             if (transaction.Statut != StatutTransaction.EnAttente)
                 return ServiceResult.Fail(400, "Seules les transactions en attente peuvent être annulées");
-            if (!isAdmin && transaction.ServiceOrigine != userEnum)
+            if (!isAdmin && originCode != userCode)
                 return ServiceResult.Fail(403, "Vous ne pouvez annuler que les transferts que vous avez envoyés");
 
             // Cancel this transaction itself
@@ -288,13 +367,14 @@ namespace WebApplication1.Services
             // Restore the document to the original service
             var document = transaction.Document;
             document.ServiceActuel = transaction.ServiceOrigine;
+            document.ServiceActuelCode = originCode;
             document.StatutActuel = transaction.StatutPrecedent ?? StatutDossier.EnCours;
 
             await _context.SaveChangesAsync();
 
             // Revoke DocumentAccess for the destination service (they can no longer modify)
-            var destRbacCode = DocumentAccessService.ServiceTribunalToRbacCode(transaction.ServiceDestination);
-            await _accessService.RevokeAccessAsync(transaction.DocumentId, destRbacCode);
+            var destCode = TransactionDestinationCode(transaction);
+            await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
 
             return ServiceResult.Ok(new
             {
@@ -312,11 +392,19 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new { total = 0, acceptes = 0, refuses = 0, enAttente = 0, pourcentage = 0 });
 
-            if (!TryResolveUserService(user, out var userServiceEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Ok(new { total = 0, acceptes = 0, refuses = 0, enAttente = 0, pourcentage = 0 });
 
-            var query = _context.Transactions
-                .Where(t => t.ServiceOrigine == userServiceEnum || t.ServiceDestination == userServiceEnum);
+            var hasLegacy = TryResolveUserService(user, out var legacyEnum);
+
+            var query = hasLegacy
+                ? _context.Transactions.Where(t => t.ServiceOrigineCode == userCode
+                    || t.ServiceDestinationCode == userCode
+                    || (t.ServiceOrigineCode == null && t.ServiceOrigine == legacyEnum)
+                    || (t.ServiceDestinationCode == null && t.ServiceDestination == legacyEnum))
+                : _context.Transactions.Where(t => t.ServiceOrigineCode == userCode
+                    || t.ServiceDestinationCode == userCode);
 
             var total = await query.CountAsync();
             var acceptes = await query.CountAsync(t => t.Statut == StatutTransaction.Accepte);
@@ -337,17 +425,26 @@ namespace WebApplication1.Services
 
         public async Task<ServiceResult> GetStatsByServiceAsync()
         {
-            var stats = await _context.Transactions
-                .GroupBy(t => t.ServiceOrigine)
+            // Group by the dynamic code when available, else fall back to the enum name.
+            var rows = await _context.Transactions
+                .Select(t => new
+                {
+                    Service = t.ServiceOrigineCode != null ? t.ServiceOrigineCode : t.ServiceOrigine.ToString(),
+                    t.Statut
+                })
+                .ToListAsync();
+
+            var stats = rows
+                .GroupBy(t => t.Service)
                 .Select(g => new
                 {
-                    service = g.Key.ToString(),
+                    service = g.Key,
                     total = g.Count(),
                     acceptes = g.Count(t => t.Statut == StatutTransaction.Accepte),
                     refuses = g.Count(t => t.Statut == StatutTransaction.Refuse),
                     enAttente = g.Count(t => t.Statut == StatutTransaction.EnAttente)
                 })
-                .ToListAsync();
+                .ToList();
 
             return ServiceResult.Ok(stats);
         }
@@ -361,12 +458,19 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new { count = 0 });
 
-            if (!TryResolveUserService(user, out var userServiceEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Ok(new { count = 0 });
 
-            var count = await _context.Transactions
-                .Where(t => t.Statut == StatutTransaction.EnAttente
-                    && t.ServiceDestination == userServiceEnum)
+            var hasLegacy = TryResolveUserService(user, out var legacyEnum);
+
+            var query = hasLegacy
+                ? _context.Transactions.Where(t => t.ServiceDestinationCode == userCode
+                    || (t.ServiceDestinationCode == null && t.ServiceDestination == legacyEnum))
+                : _context.Transactions.Where(t => t.ServiceDestinationCode == userCode);
+
+            var count = await query
+                .Where(t => t.Statut == StatutTransaction.EnAttente)
                 .CountAsync();
 
             return ServiceResult.Ok(new { count });
@@ -381,30 +485,40 @@ namespace WebApplication1.Services
             if (IsAdminLike(user))
                 return ServiceResult.Ok(new List<object>());
 
-            if (!TryResolveUserService(user, out var userServiceEnum))
+            var userCode = ResolveUserServiceCode(user);
+            if (string.IsNullOrEmpty(userCode))
                 return ServiceResult.Ok(new List<object>());
+
+            var hasLegacy = TryResolveUserService(user, out var legacyEnum);
 
             var query = _context.Transactions
                 .Include(t => t.Document)
                 .Where(t => t.DoitRevenir
-                    && (t.Statut == StatutTransaction.Refuse || t.Statut == StatutTransaction.EnAttente)
-                    && t.ServiceDestination == userServiceEnum);
+                    && (t.Statut == StatutTransaction.Refuse || t.Statut == StatutTransaction.EnAttente));
 
-            var transactions = await query
+            query = hasLegacy
+                ? query.Where(t => t.ServiceDestinationCode == userCode
+                    || (t.ServiceDestinationCode == null && t.ServiceDestination == legacyEnum))
+                : query.Where(t => t.ServiceDestinationCode == userCode);
+
+            var raw = await query
                 .OrderByDescending(t => t.DateTransaction)
+                .ToListAsync();
+
+            var transactions = raw
                 .Select(t => new
                 {
                     id = t.Id,
                     documentId = t.DocumentId,
                     documentSujet = t.Document.Objet ?? t.Document.Sujet ?? "",
-                    sourceServiceId = t.ServiceOrigine.ToString(),
-                    destinationServiceId = t.ServiceDestination.ToString(),
+                    sourceServiceId = t.ServiceOrigineCode ?? t.ServiceOrigine.ToString(),
+                    destinationServiceId = t.ServiceDestinationCode ?? t.ServiceDestination.ToString(),
                     message = t.MotifRefus ?? "",
                     statut = t.Statut.ToString(),
                     dateEnvoi = t.DateTransaction,
                     doitRevenir = t.DoitRevenir
                 })
-                .ToListAsync();
+                .ToList();
 
             return ServiceResult.Ok(transactions);
         }
@@ -417,8 +531,8 @@ namespace WebApplication1.Services
                 .Select(t => new
                 {
                     id = t.Id,
-                    serviceOrigine = t.ServiceOrigine.ToString(),
-                    serviceDestination = t.ServiceDestination.ToString(),
+                    serviceOrigine = t.ServiceOrigineCode != null ? t.ServiceOrigineCode : t.ServiceOrigine.ToString(),
+                    serviceDestination = t.ServiceDestinationCode != null ? t.ServiceDestinationCode : t.ServiceDestination.ToString(),
                     date = t.DateTransaction,
                     remarques = t.Remarques ?? "",
                     statut = t.Statut.ToString(),

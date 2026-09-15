@@ -13,6 +13,15 @@ namespace WebApplication1.Models
         public DateTime DateCreation { get; set; } = DateTime.Now;
 
         public ServiceTribunal ServiceActuel { get; set; }
+
+        /// <summary>
+        /// RBAC service code of the service currently holding the document.
+        /// Preferred over <see cref="ServiceActuel"/> because it can represent
+        /// dynamically-created services (which have no enum equivalent).
+        /// Null for legacy rows — callers fall back to the enum in that case.
+        /// </summary>
+        public string? ServiceActuelCode { get; set; }
+
         public StatutDossier StatutActuel { get; set; }
 
         public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();

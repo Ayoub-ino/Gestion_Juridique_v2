@@ -53,8 +53,9 @@ export function TransferModal({
   setSelectedUserIds,
   userService
 }: TransferModalProps) {
-  // Determine the user's own service to exclude from destination list
-  const ownService = userService || doc?.serviceActuelKey || "";
+  // Determine the user's own service to exclude from destination list.
+  // Prefer the dynamic RBAC code so newly-created services are handled correctly.
+  const ownService = userService || doc?.serviceActuelCode || doc?.serviceActuelKey || "";
   const { token } = useAuth();
   const [serviceUsers, setServiceUsers] = useState<{ id: number; nom: string }[]>([]);
   const [historicalServices, setHistoricalServices] = useState<{ id: number; code: string; nom: string; isActive?: boolean }[]>([]);
@@ -72,8 +73,13 @@ export function TransferModal({
             token
           ).catch(() => []),
         ]);
-        // Filter out the user's own service and inactive services
-        setActiveServices(services.filter(s => s.code !== ownService && s.isActive && s.userCount > 0));
+        // List every service currently in the project (dynamic — reflects admin
+        // additions/removals immediately), excluding the user's own service.
+        setActiveServices(
+          services.filter(
+            (s) => s.isActive && s.code.toLowerCase() !== ownService.toLowerCase()
+          )
+        );
         setHistoricalServices(historical.filter((s) => s.isActive));
       } catch {
         // Fallback to empty arrays on fetch failure

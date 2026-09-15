@@ -42,6 +42,9 @@ namespace WebApplication1.Controllers
                 var user = await _context.Utilisateurs.FindAsync(userId);
                 var creatorService = user?.Service ?? "BureauOrdre";
                 var creatorServiceEnum = ServiceMapper.MapToServiceEnum(creatorService);
+                var creatorServiceCode = ServiceMapper.NormalizeServiceCode(creatorService) is { Length: > 0 } code
+                    ? code
+                    : DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
 
                 // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
                 var numeroRef = dto.Reference ?? "REF-" + DateTime.Now.Ticks.ToString();
@@ -60,6 +63,7 @@ namespace WebApplication1.Controllers
                     Objet = dto.Objet ?? "Sans objet",
                     DateCreation = DateTime.Now,
                     ServiceActuel = creatorServiceEnum,
+                    ServiceActuelCode = creatorServiceCode,
                     StatutActuel = StatutDossier.Nouveau,
                     NumeroBureauOrdre = dto.Reference ?? "BO-" + DateTime.Now.Ticks.ToString(),
                     DestinataireExterne = dto.Destinataire,
@@ -74,7 +78,6 @@ namespace WebApplication1.Controllers
                 await _context.SaveChangesAsync();
 
                 // ── Auto-grant Owner access to creator's service ──
-                var creatorServiceCode = DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
                 await _accessService.GrantOwnerAsync(sortant.Id, creatorServiceCode, userId);
 
                 return Ok(new
@@ -104,14 +107,15 @@ namespace WebApplication1.Controllers
                 var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
                 if (!isAdminLike && !string.IsNullOrEmpty(user?.Service))
                 {
-                    if (ServiceMapper.TryMapToServiceEnum(user.Service, out var userServiceEnum))
-                    {
-                        query = query.Where(c => c.ServiceActuel == userServiceEnum);
-                    }
-                    else
-                    {
-                        return Ok(new object[0]);
-                    }
+                    // Scope by the dynamic RBAC service code so services created from the
+                    // admin panel work without code changes. Legacy rows (no code stored)
+                    // still match through their ServiceTribunal enum value.
+                    var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
+                    var hasLegacyEnum = ServiceMapper.TryMapToServiceEnum(user.Service, out var userServiceEnum);
+                    query = hasLegacyEnum
+                        ? query.Where(c => c.ServiceActuelCode == userServiceCode
+                            || (c.ServiceActuelCode == null && c.ServiceActuel == userServiceEnum))
+                        : query.Where(c => c.ServiceActuelCode == userServiceCode);
                 }
             }
 
@@ -124,6 +128,7 @@ namespace WebApplication1.Controllers
                     c.Sujet,
                     c.DateCreation,
                     c.ServiceActuel,
+                    c.ServiceActuelCode,
                     c.StatutActuel,
                     c.DestinataireExterne,
                     c.TypeSortant,

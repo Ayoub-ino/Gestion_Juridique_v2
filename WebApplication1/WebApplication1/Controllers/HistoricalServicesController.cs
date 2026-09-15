@@ -21,7 +21,6 @@ namespace WebApplication1.Controllers
         }
 
         [HttpGet]
-        [RequirePermission("gerer_services")]
         public async Task<IActionResult> GetAll()
         {
             var services = await _context.HistoricalServices

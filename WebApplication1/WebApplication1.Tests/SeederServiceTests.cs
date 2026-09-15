@@ -141,6 +141,50 @@ namespace WebApplication1.Tests
         }
 
         [Fact]
+        public async Task SeedCoreAsync_KeepsCustomServicesArchived()
+        {
+            // Regression: the seeder used to re-activate EVERY inactive service, so an
+            // administrator archiving a service from the admin panel never stuck — it
+            // reappeared (in the transfer destinations) on the next startup/seed.
+            var ctx = CreateContext();
+            var seeder = CreateService(ctx);
+
+            ctx.RbacServices.Add(new Service
+            {
+                Nom = "Service personnalisé",
+                Code = "customservice",
+                IsActive = false,
+                DeletedAt = DateTime.Now
+            });
+            ctx.SaveChanges();
+
+            await seeder.SeedCoreAsync(force: true);
+
+            var custom = await ctx.RbacServices.SingleAsync(s => s.Code == "customservice");
+            Assert.False(custom.IsActive);
+            Assert.NotNull(custom.DeletedAt);
+
+            // It must not be resurrected with a fallback user either
+            Assert.False(await ctx.Utilisateurs.AnyAsync(u => u.Service == "customservice"));
+        }
+
+        [Fact]
+        public async Task SeedCoreAsync_RestoresAccidentallyArchivedBuiltInService()
+        {
+            var ctx = CreateContext();
+            var seeder = CreateService(ctx);
+
+            ctx.RbacServices.Add(new Service { Nom = "Expertise judiciaire", Code = "khibra", IsActive = false, DeletedAt = DateTime.Now });
+            ctx.SaveChanges();
+
+            await seeder.SeedCoreAsync(force: true);
+
+            var khibra = await ctx.RbacServices.SingleAsync(s => s.Code == "khibra");
+            Assert.True(khibra.IsActive);
+            Assert.Null(khibra.DeletedAt);
+        }
+
+        [Fact]
         public async Task SeedCoreAsync_NoForce_SkipsNonEmptyTables_SeedsEmptyOnes()
         {
             var ctx = CreateContext();

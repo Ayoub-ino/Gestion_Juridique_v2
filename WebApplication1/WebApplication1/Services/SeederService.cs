@@ -88,6 +88,10 @@ namespace WebApplication1.Services
                         new Service { Nom = "Archive", Code = "archive", Description = "Service des archives" },
                         new Service { Nom = "Notification", Code = "atabligh", Description = "Service de notification et de signification" }
                     };
+                    // Codes owned by this seeder. Only these may be auto-restored below —
+                    // services created from the admin panel must keep the archived state
+                    // an administrator gave them (otherwise archiving never persists).
+                    var seededCodes = rbacServices.Select(s => s.Code).ToHashSet();
                     var existingCodes = _context.RbacServices.Select(s => s.Code).ToHashSet();
                     foreach (var svc in rbacServices.Where(s => !existingCodes.Contains(s.Code)))
                     {
@@ -96,9 +100,10 @@ namespace WebApplication1.Services
                     _context.SaveChanges();
                     Console.WriteLine("RBAC services créés (insert-if-missing).");
 
-                    // Ensure all seeded services are active (restore any accidentally archived ones)
+                    // Ensure the built-in services are active (restore any accidentally archived ones).
+                    // Custom services are deliberately excluded so archiving them sticks.
                     var inactiveSeeded = _context.RbacServices
-                        .Where(s => existingCodes.Contains(s.Code) && !s.IsActive)
+                        .Where(s => seededCodes.Contains(s.Code) && !s.IsActive)
                         .ToList();
                     if (inactiveSeeded.Count > 0)
                     {

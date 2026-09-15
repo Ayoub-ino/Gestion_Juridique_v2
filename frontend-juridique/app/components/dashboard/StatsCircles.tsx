@@ -1,6 +1,7 @@
 "use client";
 
-import { getRoleLabel } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 
 export interface StatsData {
   statuses: {
@@ -22,6 +23,8 @@ interface StatsCirclesProps {
 
 export function StatsCircles({ stats, totalDocs, langue = "fr" }: StatsCirclesProps) {
   const { statuses, serviceBreakdown, SERVICE_COLORS, SERVICE_LABELS } = stats;
+  const { token } = useAuth();
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
   const circumference = 2 * Math.PI * 50;
   const radius = 50;
@@ -144,7 +147,9 @@ export function StatsCircles({ stats, totalDocs, langue = "fr" }: StatsCirclesPr
                       style={{ backgroundColor: SERVICE_COLORS[svc] || "#64748b" }}
                     />
                     <span className="text-slate-600 font-semibold">
-                      {SERVICE_LABELS[svc] || getRoleLabel(svc, langue) || svc}
+                      {/* Localized names for the built-in services first; the live
+                          catalog resolves any service added from the admin panel. */}
+                      {SERVICE_LABELS[svc] || getServiceLabel(svc)}
                     </span>
                     <span className="text-slate-400">
                       ({count})

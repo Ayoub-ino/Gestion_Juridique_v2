@@ -5,6 +5,30 @@ namespace WebApplication1.Helpers
     public static class ServiceMapper
     {
         /// <summary>
+        /// Canonical form used to compare service codes coming from different
+        /// sources (RBAC Service.Code, Utilisateur.Service, Document.ServiceActuelCode).
+        /// Lowercases, trims, and drops spaces/dashes/underscores.
+        /// Keeps '&amp;' so codes such as "seances&amp;procedures" survive intact.
+        /// </summary>
+        public static string NormalizeServiceCode(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return string.Empty;
+            return code.Trim().ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
+        }
+
+        /// <summary>
+        /// Resolve the RBAC service code that currently holds a document.
+        /// Prefers the explicit code (works for dynamic services) and falls back
+        /// to mapping the legacy enum value for rows created before that column existed.
+        /// </summary>
+        public static string ResolveDocumentServiceCode(Document document)
+        {
+            if (!string.IsNullOrWhiteSpace(document.ServiceActuelCode))
+                return NormalizeServiceCode(document.ServiceActuelCode);
+            return Services.DocumentAccessService.ServiceTribunalToRbacCode(document.ServiceActuel);
+        }
+
+        /// <summary>
         /// Try to map a service name/code to a ServiceTribunal enum value.
         /// Returns true if a mapping exists; false means the service is unknown
         /// and should NOT fall back to BureauOrdre (which would leak data).

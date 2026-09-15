@@ -32,6 +32,8 @@ export interface CourrierSimule {
   source: string;
   serviceActuel: string;
   serviceActuelKey?: string;
+  /** Dynamic RBAC service code of the service currently holding the document. */
+  serviceActuelCode?: string;
   statut: string;
   filePath?: string;
   description?: string;

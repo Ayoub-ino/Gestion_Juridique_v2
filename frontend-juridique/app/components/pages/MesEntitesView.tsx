@@ -70,22 +70,35 @@ export function MesEntitesView({
   const [serviceFilter, setServiceFilter] = useState("all");
   const [refFilter, setRefFilter] = useState("");
 
-  // Build flat list of all services for the dropdown
+  // Build flat list of all services for the dropdown.
+  // Starts from the static groups (legacy enum keys) and adds every service
+  // actually present in the loaded documents, so services created dynamically
+  // from the admin panel are filterable without any code change.
   const allServiceOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [];
+    const options = new Map<string, string>();
     for (const group of SERVICE_GROUPS) {
       for (const child of group.children) {
-        options.push({ value: child.value, label: langue === "fr" ? child.fr : child.ar });
+        options.set(child.value, langue === "fr" ? child.fr : child.ar);
       }
     }
-    return options;
-  }, [langue]);
+    for (const doc of filteredGeneral) {
+      for (const code of [doc.serviceActuelCode, doc.serviceActuelKey]) {
+        if (code && !options.has(code)) options.set(code, getServiceLabel(code, langue));
+      }
+    }
+    return Array.from(options, ([value, label]) => ({ value, label }));
+  }, [langue, filteredGeneral, getServiceLabel]);
 
   // Apply service + reference filters to filteredGeneral
   const displayDocs = useMemo(() => {
     let result = filteredGeneral;
     if (serviceFilter !== "all") {
-      result = result.filter((doc) => doc.serviceActuelKey === serviceFilter || doc.serviceActuel === serviceFilter);
+      result = result.filter(
+        (doc) =>
+          doc.serviceActuelKey === serviceFilter ||
+          doc.serviceActuelCode === serviceFilter ||
+          doc.serviceActuel === serviceFilter
+      );
     }
     if (refFilter.trim()) {
       const s = refFilter.trim().toLowerCase();

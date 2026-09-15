@@ -42,8 +42,11 @@ export function MesDossiersEnCoursView({
   // Filter documents that are currently in user's service OR specifically transferred to this user
   const mesDossiers = useMemo(() => {
     return visibleCourriers.filter((doc) => {
-      // Check if document is in user's active service (using enum mapping)
-      const inMyService = doc.serviceActuelKey === userServiceEnum
+      // Check if document is in user's active service.
+      // serviceActuelCode is the dynamic RBAC code (works for services created
+      // from the admin panel); the enum-keyed comparisons cover legacy rows.
+      const inMyService = doc.serviceActuelCode === userService
+        || doc.serviceActuelKey === userServiceEnum
         || doc.serviceActuelKey === userService
         || doc.serviceActuel === userServiceEnum
         || doc.serviceActuel === userService;

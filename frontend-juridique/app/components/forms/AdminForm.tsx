@@ -5,7 +5,8 @@
 import type { TranslationKeys } from "@/lib/translations";
 
 import { useRef } from "react";
-import { SERVICE_GROUPS } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 
 interface AdminFormProps {
   expediteur: string;
@@ -88,6 +89,11 @@ export function AdminForm({
   canEditService
 }: AdminFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { token } = useAuth();
+
+  // Destination services come from the live catalog: anything added in the
+  // admin panel becomes selectable immediately.
+  const { groups: serviceGroups } = useServiceOptions(token, langue);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -355,9 +361,9 @@ export function AdminForm({
             <span className="block text-xs font-bold text-slate-800 mb-2">{cur.serviceDest}</span>
             <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 max-h-64 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {SERVICE_GROUPS.map((group) => (
-                  <div key={group.label}>
-                    <p className="text-[10px] font-bold text-slate-500 mb-1">{group.fr}</p>
+                {serviceGroups.map((group) => (
+                  <div key={group.key}>
+                    <p className="text-[10px] font-bold text-slate-500 mb-1">{group.label}</p>
                     <div className="space-y-1">
                       {group.children.map((svc) => (
                         <label
@@ -377,7 +383,7 @@ export function AdminForm({
                             onChange={() => setServiceDestinataire(svc.value)}
                             required
                           />
-                          {langue === "fr" ? svc.fr : svc.ar}
+                          {svc.label}
                         </label>
                       ))}
                     </div>
@@ -392,9 +398,9 @@ export function AdminForm({
           <div>
             <span className="block text-xs font-bold text-slate-800 mb-2">{cur.servicesDiff}</span>
             <div className="grid grid-cols-2 gap-2 bg-white p-4 border border-slate-300 rounded-lg max-h-48 overflow-y-auto">
-              {SERVICE_GROUPS.map((group) => (
-                <div key={group.label}>
-                  <p className="text-[10px] font-bold text-slate-500 mb-1">{group.fr}</p>
+              {serviceGroups.map((group) => (
+                <div key={group.key}>
+                  <p className="text-[10px] font-bold text-slate-500 mb-1">{group.label}</p>
                   {group.children.map((svc) => (
                     <label key={svc.value} htmlFor={`admin-diff-${svc.value}`} className="flex items-center gap-2 text-xs font-medium">
                       <input
@@ -411,7 +417,7 @@ export function AdminForm({
                         }}
                         className="w-4 h-4 text-blue-600"
                       />
-                      {langue === "fr" ? svc.fr : svc.ar}
+                      {svc.label}
                     </label>
                   ))}
                 </div>

@@ -25,11 +25,19 @@ interface NotificationData {
   sourceServiceId: string;
   destinationServiceId: string;
   message: string;
+  commentaire?: string;
   statut: string;
   dateEnvoi: string;
   doitRevenir: boolean;
   sourceUserName?: string;
 }
+
+/**
+ * Refusal notices are ordinary pending transactions directed back to the original
+ * sender, flagged with the [REFUS] marker in the commentaire column. They carry the
+ * reason the receiver typed in `message` and only need an acknowledgement.
+ */
+const isRefusalNotice = (n: { commentaire?: string }) => n.commentaire === "[REFUS]";
 
 export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger }: Props) {
   const { hasPermission } = useAuth();
@@ -124,10 +132,6 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
 
   const { getServiceLabel } = useServiceLabels(token, langue);
 
-  // Identify refusal notifications: transactions where the sender receives a notification
-  // that their transfer was refused (marked with [REFUS] in the message)
-  const refusalNotifications = notifications.filter(n => n.message && n.message.startsWith("[REFUS]") && n.statut === "EnAttente");
-  const transferNotifications = notifications.filter(n => !n.message || !n.message.startsWith("[REFUS]"));
   const pendingCount = notifications.filter(n => n.statut === "EnAttente").length;
 
   return (
@@ -190,7 +194,7 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-bold text-sm text-slate-800">{n.documentSujet}</h4>
-                    {n.message && n.message.startsWith("[REFUS]") && (
+                    {isRefusalNotice(n) && (
                       <span className="px-2 py-1 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
                         {langue === "fr" ? "⚠️ Transfert refusé par le destinataire" : "⚠️ رفض المستلم التحويل"}
                       </span>
@@ -212,9 +216,9 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                       </span>
                     )}
                     {n.message && (
-                      <span className={`px-2 py-0.5 rounded font-bold ${n.message.startsWith("[REFUS]") ? "bg-red-50 text-red-600 border border-red-200" : "bg-slate-100"}`}>
-                        {n.message.startsWith("[REFUS]")
-                          ? (langue === "fr" ? `Motif du refus: ${n.message.replace("[REFUS]", "").trim()}` : `سبب الرفض: ${n.message.replace("[REFUS]", "").trim()}`)
+                      <span className={`px-2 py-0.5 rounded font-bold ${isRefusalNotice(n) ? "bg-red-50 text-red-600 border border-red-200" : "bg-slate-100"}`}>
+                        {isRefusalNotice(n)
+                          ? (langue === "fr" ? `Motif du refus: ${n.message}` : `سبب الرفض: ${n.message}`)
                           : `${langue === "fr" ? "Message" : "رسالة"} : ${n.message}`
                         }
                       </span>
@@ -225,6 +229,16 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                   </div>
 
                   {n.statut === "EnAttente" && (
+                    isRefusalNotice(n) ? (
+                      /* Refusal notice received by the original sender: acknowledge only —
+                         the receiver already decided, so accept/refuse must not be offered. */
+                      <div className="flex gap-2 items-center">
+                        <button type="button" onClick={() => handleAccept(n.id)}
+                          className="px-4 py-1.5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-300 transition">
+                          {langue === "fr" ? "Accusé de réception" : "تأكيد الاستلام"}
+                        </button>
+                      </div>
+                    ) : (
                     <div className="space-y-2">
                       <textarea rows={2} value={commentaires[n.id] || ""}
                         onChange={(e) => setCommentaires(prev => ({ ...prev, [n.id]: e.target.value }))}
@@ -251,6 +265,7 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                         )}
                       </div>
                     </div>
+                    )
                   )}
                 </div>
               </div>

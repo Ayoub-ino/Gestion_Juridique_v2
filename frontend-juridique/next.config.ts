@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
 
   // Externalize heavy packages from the server bundle (not needed in SSR)
   serverExternalPackages: ["mammoth", "pdfjs-dist", "xlsx"],
+
+  // The dev-tools badge is a fixed-position overlay that covers sidebar controls
+  // and breaks E2E interactions, so it is turned off.
+  devIndicators: false,
 };
 
 export default nextConfig;

@@ -165,13 +165,16 @@ namespace WebApplication1.Controllers
 
             // 6. Appliquer le mouvement
             dossier.ServiceActuel = destination;
+            dossier.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(destination);
             dossier.EtapeJalsatActuelle = dto.Action;
 
             var transaction = new Transaction
             {
                 DocumentId = dossier.Id,
                 ServiceOrigine = currentService,
+                ServiceOrigineCode = DocumentAccessService.ServiceTribunalToRbacCode(currentService),
                 ServiceDestination = destination,
+                ServiceDestinationCode = DocumentAccessService.ServiceTribunalToRbacCode(destination),
                 DateTransaction = DateTime.Now,
                 Remarques = $"Action: {dto.Action}",
                 NomPersonneExterne = dto.AutoriteRetrait ?? ""

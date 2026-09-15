@@ -9,6 +9,7 @@ using WebApplication1.Data;
 using WebApplication1.Models;
 using WebApplication1.Helpers;
 using WebApplication1.Security;
+using WebApplication1.Services;
 
 namespace WebApplication1.Controllers
 {
@@ -18,12 +19,14 @@ namespace WebApplication1.Controllers
     public class CourrierAdminController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly WebApplication1.Services.DocumentAccessService _accessService;
+        private readonly DocumentAccessService _accessService;
+        private readonly ServiceCatalog _serviceCatalog;
 
-        public CourrierAdminController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService)
+        public CourrierAdminController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog)
         {
             _context = context;
             _accessService = accessService;
+            _serviceCatalog = serviceCatalog;
         }
 
         // ========== 1. LISTER LES COURRIERS ADMIN ==========
@@ -45,11 +48,15 @@ namespace WebApplication1.Controllers
             var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
             if (!string.IsNullOrEmpty(userService) && !isAdminLike)
             {
-                if (!ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum))
-                {
-                    return Ok(new object[0]);
-                }
-                query = query.Where(c => c.ServiceActuel == userServiceEnum);
+                // Scope by the dynamic RBAC service code so services created from the
+                // admin panel work without code changes. Legacy rows (no code stored)
+                // still match through their ServiceTribunal enum value.
+                var userServiceCode = ServiceMapper.NormalizeServiceCode(userService);
+                var hasLegacyEnum = ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum);
+                query = hasLegacyEnum
+                    ? query.Where(c => c.ServiceActuelCode == userServiceCode
+                        || (c.ServiceActuelCode == null && c.ServiceActuel == userServiceEnum))
+                    : query.Where(c => c.ServiceActuelCode == userServiceCode);
             }
 
             var courriers = await query
@@ -64,6 +71,7 @@ namespace WebApplication1.Controllers
                     Sujet = c.Sujet,
                     DateCreation = c.DateCreation,
                     ServiceActuel = c.ServiceActuel.ToString(),
+                    ServiceActuelCode = c.ServiceActuelCode,
                     StatutActuel = c.StatutActuel.ToString(),
                     FilePath = c.FilePath,
                     Source = c.Expediteur,
@@ -112,6 +120,7 @@ namespace WebApplication1.Controllers
                     Sujet = dto.Objet,
                     DateCreation = DateTime.Now,
                     ServiceActuel = ServiceTribunal.BureauOrdre,
+                    ServiceActuelCode = "bureauordre",
                     StatutActuel = StatutDossier.Nouveau,
                     NumeroBureauOrdre = dto.NumeroOrdre,
                     Transmissible = dto.Transmissible
@@ -124,13 +133,16 @@ namespace WebApplication1.Controllers
                 if (dto.ModeTraitement == "archivage")
                 {
                     courrier.ServiceActuel = ServiceTribunal.Archive;
+                    courrier.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive);
                     courrier.StatutActuel = StatutDossier.Archive;
 
                     var transaction = new Transaction
                     {
                         DocumentId = courrier.Id,
                         ServiceOrigine = ServiceTribunal.BureauOrdre,
+                        ServiceOrigineCode = "bureauordre",
                         ServiceDestination = ServiceTribunal.Archive,
+                        ServiceDestinationCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive),
                         DateTransaction = DateTime.Now,
                         Remarques = "Archivage direct du courrier",
                         NomPersonneExterne = ""
@@ -142,17 +154,25 @@ namespace WebApplication1.Controllers
                     if (string.IsNullOrEmpty(dto.ServiceDestinataire))
                         return BadRequest(new { error = "Le service destinataire est requis pour le mode 'unique'" });
 
-                    if (!Enum.TryParse<ServiceTribunal>(dto.ServiceDestinataire, true, out var destService))
+                    // Resolve against the live service catalog so services created from
+                    // the admin panel are valid destinations (RBAC code or legacy enum name).
+                    var destCode = await _serviceCatalog.ResolveCodeAsync(dto.ServiceDestinataire);
+                    if (destCode == null)
                         return BadRequest(new { error = $"Service '{dto.ServiceDestinataire}' invalide" });
 
+                    var destService = ServiceMapper.MapToServiceEnum(destCode);
+
                     courrier.ServiceActuel = destService;
+                    courrier.ServiceActuelCode = destCode;
                     courrier.StatutActuel = StatutDossier.EnCours;
 
                     var transaction = new Transaction
                     {
                         DocumentId = courrier.Id,
                         ServiceOrigine = ServiceTribunal.BureauOrdre,
+                        ServiceOrigineCode = "bureauordre",
                         ServiceDestination = destService,
+                        ServiceDestinationCode = destCode,
                         DateTransaction = DateTime.Now,
                         Remarques = $"Transfert vers {destService}",
                         NomPersonneExterne = ""
@@ -165,18 +185,25 @@ namespace WebApplication1.Controllers
                         return BadRequest(new { error = "Au moins un service est requis pour la diffusion" });
 
                     courrier.ServiceActuel = ServiceTribunal.BureauOrdre;
+                    courrier.ServiceActuelCode = "bureauordre";
                     courrier.StatutActuel = StatutDossier.EnCours;
 
                     foreach (var serviceName in dto.ServicesDiffusion)
                     {
-                        if (!Enum.TryParse<ServiceTribunal>(serviceName, true, out var destService))
+                        // Resolve against the live service catalog (dynamic services included)
+                        var diffCode = await _serviceCatalog.ResolveCodeAsync(serviceName);
+                        if (diffCode == null)
                             continue;
+
+                        var destService = ServiceMapper.MapToServiceEnum(diffCode);
 
                         var transaction = new Transaction
                         {
                             DocumentId = courrier.Id,
                             ServiceOrigine = ServiceTribunal.BureauOrdre,
+                            ServiceOrigineCode = "bureauordre",
                             ServiceDestination = destService,
+                            ServiceDestinationCode = diffCode,
                             DateTransaction = DateTime.Now,
                             Remarques = $"Diffusion vers {destService}",
                             NomPersonneExterne = ""
@@ -192,7 +219,9 @@ namespace WebApplication1.Controllers
                 if (ServiceMapper.TryParseUserId(userIdStr, out var creatorUserId))
                 {
                     var creatorUser = await _context.Utilisateurs.FindAsync(creatorUserId);
-                    var creatorServiceCode = (creatorUser?.Service ?? "BureauOrdre").ToLowerInvariant();
+                    var creatorServiceCode = ServiceMapper.NormalizeServiceCode(creatorUser?.Service) is { Length: > 0 } code
+                        ? code
+                        : "bureauordre";
                     await _accessService.GrantOwnerAsync(courrier.Id, creatorServiceCode, creatorUserId);
                 }
 
@@ -284,6 +313,7 @@ namespace WebApplication1.Controllers
                     Sujet = c.Sujet,
                     DateCreation = c.DateCreation,
                     ServiceActuel = c.ServiceActuel.ToString(),
+                    ServiceActuelCode = c.ServiceActuelCode,
                     StatutActuel = c.StatutActuel.ToString(),
                     FilePath = c.FilePath,
                     Source = c.Expediteur,
@@ -313,6 +343,7 @@ namespace WebApplication1.Controllers
         public string? Sujet { get; set; }
         public DateTime DateCreation { get; set; }
         public string? ServiceActuel { get; set; }
+        public string? ServiceActuelCode { get; set; }
         public string? StatutActuel { get; set; }
         public string? FilePath { get; set; }
         public string? Source { get; set; }

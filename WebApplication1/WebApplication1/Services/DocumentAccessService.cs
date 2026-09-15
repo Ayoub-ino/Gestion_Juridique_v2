@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
+using WebApplication1.Helpers;
 using WebApplication1.Models;
 
 namespace WebApplication1.Services
@@ -188,6 +189,20 @@ namespace WebApplication1.Services
         /// </summary>
         public async Task<int> BackfillAllDocumentAccessAsync()
         {
+            // Step 1: backfill the dynamic service code on legacy documents so that
+            // all scoping/routing can read the code instead of the fixed enum.
+            var legacyDocs = await _context.Documents
+                .Where(d => d.ServiceActuelCode == null)
+                .ToListAsync();
+
+            foreach (var doc in legacyDocs)
+            {
+                doc.ServiceActuelCode = ServiceTribunalToRbacCode(doc.ServiceActuel);
+            }
+            if (legacyDocs.Count > 0)
+                await _context.SaveChangesAsync();
+
+            // Step 2: backfill ACL rows for documents that have none.
             var docIdsWithoutAccess = await _context.Documents
                 .Where(d => !_context.DocumentAccesses.Any(da => da.DocumentId == d.Id))
                 .Select(d => d.Id)
@@ -198,7 +213,7 @@ namespace WebApplication1.Services
                 var doc = await _context.Documents.FindAsync(docId);
                 if (doc != null)
                 {
-                    var rbacCode = ServiceTribunalToRbacCode(doc.ServiceActuel);
+                    var rbacCode = ServiceMapper.ResolveDocumentServiceCode(doc);
                     await EnsureAccessInitializedAsync(docId, rbacCode);
                 }
             }
@@ -248,10 +263,8 @@ namespace WebApplication1.Services
         /// Normalize a service code to lowercase with no spaces, matching
         /// the RBAC service codes stored in the Service table.
         /// </summary>
-        private static string NormalizeServiceCode(string service)
-        {
-            return service.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
-        }
+        private static string NormalizeServiceCode(string service) =>
+            ServiceMapper.NormalizeServiceCode(service);
 
         /// <summary>
         /// If a code looks like a ServiceTribunal enum name (lowercase), map it to
@@ -337,14 +350,14 @@ namespace WebApplication1.Services
             // Admin-like roles bypass custody (system managers)
             if (IsAdminLike(user)) return true;
 
-            var userServiceCode = NormalizeServiceCode(user.Service ?? "");
+            var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
             if (string.IsNullOrEmpty(userServiceCode)) return false;
 
             // Find the document across all document types
             var doc = await FindDocumentAsync(documentId);
             if (doc == null) return false;
 
-            var custodyServiceCode = ServiceTribunalToRbacCode(doc.ServiceActuel);
+            var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(doc);
             return userServiceCode == custodyServiceCode;
         }
 
@@ -361,10 +374,10 @@ namespace WebApplication1.Services
             // Admin-like roles bypass custody (system managers)
             if (IsAdminLike(user)) return true;
 
-            var userServiceCode = NormalizeServiceCode(user.Service ?? "");
+            var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
             if (string.IsNullOrEmpty(userServiceCode)) return false;
 
-            var custodyServiceCode = ServiceTribunalToRbacCode(document.ServiceActuel);
+            var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(document);
             return userServiceCode == custodyServiceCode;
         }
 
@@ -374,8 +387,8 @@ namespace WebApplication1.Services
         public bool IsServiceCustodian(Document document, string serviceCode)
         {
             if (string.IsNullOrEmpty(serviceCode)) return false;
-            var normalized = NormalizeServiceCode(serviceCode);
-            var custodyServiceCode = ServiceTribunalToRbacCode(document.ServiceActuel);
+            var normalized = ServiceMapper.NormalizeServiceCode(serviceCode);
+            var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(document);
             return normalized == custodyServiceCode;
         }
 

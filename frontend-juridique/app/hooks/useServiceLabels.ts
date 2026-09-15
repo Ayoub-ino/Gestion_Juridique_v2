@@ -41,25 +41,27 @@ export function useServiceLabels(token: string | null | undefined, langue: Langu
       .catch(() => { /* ignore — will use fallback */ });
   }, [token]);
 
-  const getServiceLabel = useCallback((value: string, _langueOverride?: Langue): string => {
+  const getServiceLabel = useCallback((value: string, langueOverride?: Langue): string => {
     if (!value) return value;
+
+    const targetLangue = langueOverride ?? langue;
 
     // Normalize to lowercase for lookup (RBAC codes are lowercase, enum names are PascalCase)
     const normalized = value.toLowerCase();
 
     // 1. Try dynamic RBAC services (case-insensitive)
     const rbacEntry = rbacMap[normalized];
-    if (rbacEntry) return langue === "fr" ? rbacEntry.fr : rbacEntry.ar;
+    if (rbacEntry) return targetLangue === "fr" ? rbacEntry.fr : rbacEntry.ar;
 
     // 2. Try hardcoded SERVICE_GROUPS (enum values like "BureauOrdre")
     for (const group of SERVICE_GROUPS) {
       for (const child of group.children) {
-        if (child.value === value) return langue === "fr" ? child.fr : child.ar;
+        if (child.value === value) return targetLangue === "fr" ? child.fr : child.ar;
       }
     }
 
     // 3. Try role label fallback
-    return getRoleLabel(value, langue);
+    return getRoleLabel(value, targetLangue);
   }, [rbacMap, langue]);
 
   return { getServiceLabel, rbacMap };

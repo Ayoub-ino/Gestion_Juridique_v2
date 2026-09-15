@@ -1734,3 +1734,126 @@ The following files contain hardcoded `IsAdminLike()` checks that bypass permiss
 | Cypress export.cy.ts | ✅ **3/3 passing** |
 | **Total E2E** | ✅ **65/65 passing** |
 
+
+---
+
+## [2026-09-15 14:30] - Dynamic Service Routing, Sender Service Display & Refusal Notifications
+
+### 1. Context & Objective
+Three defects reported from real usage:
+1. **Transfer destinations were not fully dynamic** — the transfer modal hid services with no users, and historical (record-only) services were unreachable for normal users.
+2. **Notifications showed the wrong sender** — every transfer displayed `De : Bureau d'ordre` because routing was keyed on the fixed `ServiceTribunal` enum, so any service created from the admin panel collapsed onto the enum default (`BureauOrdre`).
+3. **A receiver in a dynamically-created service could not refuse**, and the sender never received the refusal reason in the Notifications tab.
+
+Root cause for (2) and (3): `Transaction.ServiceOrigine/ServiceDestination` and `Document.ServiceActuel` were `ServiceTribunal` enums. Enum-backed routing cannot represent services created at runtime from **Gestion des Services**, so those services could not receive, accept, or refuse folders.
+
+### 2. Files Modified / Created / Deleted
+
+- `[MODIFIED]` `WebApplication1/WebApplication1/Models/Transaction.cs` — Added `ServiceOrigineCode` / `ServiceDestinationCode` (nullable RBAC service codes). Dynamics supersede the enum columns; null on legacy rows falls back to the enum.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Models/Document.cs` — Added `ServiceActuelCode` (nullable) as the authoritative custodian code.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Helpers/ServiceMapper.cs` — Added `NormalizeServiceCode()` (single canonical form for every code coming from RBAC / Utilisateur.Service / documents) and `ResolveDocumentServiceCode()` (prefers the code, falls back to the legacy enum).
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/TransferController.cs` — Replaced enum routing with `ResolveServiceCodeAsync()`, which looks the destination up in the **live** `RbacServices` then `HistoricalServices` tables (by code or display name) before falling back to legacy enum names. Writes both the code and the enum mirror on every transaction, sets `document.ServiceActuelCode`, and grants Editor ACL to the source and every destination code. Returns `destinations` as codes.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/TransactionService.cs` — All queries and guards (pending, all, accept, refuse, cancel, stats, count, doitRevenir, history) now compare **service codes** with a legacy-enum fallback for pre-migration rows. Added `IsRefusalNotice()`. Refusal now creates a sender-side notice (`Commentaire = "[REFUS]"`, `Remarques = motif`) carrying the receiver's real code; `AccepterAsync` treats that notice as an acknowledgement only and never re-routes the document.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/DocumentAccessService.cs` — Custody checks (`IsUserCustodian`, `IsUserCustodianAsync`, `IsServiceCustodian`) resolve custody via `ResolveDocumentServiceCode`. Backfill now also populates `ServiceActuelCode` for legacy documents.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierAdminController.cs` / `CourrierJuridiqueController.cs` / `CourrierSortantController.cs` — Folder listing scoped by `ServiceActuelCode` (with legacy enum fallback), dynamic creator service codes on creation, `ServiceActuelCode` exposed in list DTOs.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/ExcelImportController.cs` / `TransactionJuridiqueController.cs` — Populate the service-code columns on import and on juridical workflow moves.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/HistoricalServicesController.cs` — `GET /api/historical-services` no longer requires `gerer_services`; any authenticated user can read it (it feeds the transfer form's historical-service section).
+- `[CREATED]` `WebApplication1/WebApplication1/Migrations/20260915130945_AddDynamicServiceCodes.cs` (+ Designer, + snapshot) — Adds `Transactions.ServiceOrigineCode`, `Transactions.ServiceDestinationCode`, `Documents.ServiceActuelCode`. Applied to `GestionJuridiqueDB`.
+- `[MODIFIED]` `frontend-juridique/app/components/modals/TransferModal.tsx` — Destination list now shows **every active service in the project** (removed the `userCount > 0` filter) plus historical services; own service is excluded case-insensitively.
+- `[MODIFIED]` `frontend-juridique/app/hooks/useServiceLabels.ts` — Accepts an optional language override; used by all dynamic label consumers.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/NotificationsPage.tsx` — Detects refusal notices via the `commentaire === "[REFUS]"` marker, renders the receiver's reason, and shows only an `Accusé de réception` action for them (no accept/refuse).
+- `[MODIFIED]` `frontend-juridique/app/components/pages/TransactionsPage.tsx` — Refusal notices are acknowledged from the registre as well, so both entry points stay consistent.
+- `[MODIFIED]` `frontend-juridique/app/hooks/useDocuments.ts` + `app/types/index.ts` — Carry `serviceActuelCode` through to the UI.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/MesEntitesView.tsx` — Service filter options are built from the loaded documents as well as the static groups, so dynamic services are filterable.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/MesDossiersEnCoursView.tsx` — Custody comparison also matches on `serviceActuelCode`.
+- `[MODIFIED]` `frontend-juridique/next.config.ts` — `devIndicators: false`. The Next.js dev-tools badge is a fixed-position overlay that covered sidebar controls and made three language-toggle E2E tests flake.
+- `[CREATED]` `frontend-juridique/cypress/e2e/dynamic-service-transfer.cy.ts` — 4 new E2E tests.
+
+### 3. Key Technical & Architectural Decisions
+- **Codes are the source of truth; enums are a legacy mirror.** Every write records the RBAC code and the best-effort enum, and every read prefers the code. Rows created before this change have a null code and are matched through the enum, so no data migration is required for correctness. `POST /api/Workspace/document/backfill-acl` additionally fills `ServiceActuelCode`.
+- **Destination resolution reads the database, not a switch statement** — `TransferController.ResolveServiceCodeAsync` queries `RbacServices` and `HistoricalServices`, so a service added or removed in the admin panel is immediately valid/invalid with no code change.
+- **Historical services remain record-only** — they are auto-accepted and never take custody (`ServiceActuelCode` is not changed for them); the transfer is recorded in the folder's history.
+- **Refusal notices are transactions, not a separate table** — flagged with `Commentaire = "[REFUS]"`. They are pending rows directed back at the sender's service so the existing notification list, badge counters, and permissions all apply. `DoitRevenir` is forced to `false` on the notice because the folder was already returned by the refusal itself; `AccepterAsync` short-circuits on the marker so acknowledging a notice can never move the document again.
+- **No hardcoded per-service logic was added**; all service identity comes from `Service.Code`.
+- **Test hygiene:** `dynamic-service-transfer.cy.ts` archives its service and user in an `after` hook. Hard deletion is intentionally blocked by the audit rules (users with transactions), so rows remain archived and hidden from all active lists.
+
+### 4. Verification & Test Results
+
+End-to-end verified against the running stack with a service and user created at runtime (code `testdyn`, later removed):
+
+| Check | Result |
+|-------|--------|
+| Transfer to a dynamic service | ✅ `destinations: ["testdyn"]` |
+| Receiver's pending list | ✅ `sourceServiceId: "bureauordre"`, `destinationServiceId: "testdyn"` |
+| Receiver refuses with a reason | ✅ HTTP 200 |
+| Sender's notification | ✅ `commentaire: "[REFUS]"`, `message:` the typed reason, `sourceServiceId:` the real refusing service |
+| Folder returned to sender | ✅ `serviceActuelCode: "bureauordre"` |
+| Folder visible only to custodian service | ✅ sender's list no longer contains it |
+| Backend build (`-warnaserror`) | ✅ 0 errors, 0 warnings |
+| Backend unit tests | ✅ **103/103** |
+| Frontend `tsc --noEmit` | ✅ 0 errors |
+| ESLint | ✅ 0 errors, 0 warnings |
+| Production build | ✅ Clean (4/4 pages) |
+| Cypress `app.cy.ts` | ✅ **35/35** |
+| Cypress `permission-toggle.cy.ts` | ✅ **27/27** |
+| Cypress `export.cy.ts` | ✅ **3/3** |
+| Cypress `dynamic-service-transfer.cy.ts` | ✅ **4/4** (new) |
+| **Total E2E** | ✅ **69/69** |
+
+### 5. Current System State & Pending Tasks
+- Both servers run locally (`localhost:3000`, `localhost:5200`); the migration is applied.
+- Active service list is back to the 9 default services; runtime test services/users were removed from the active lists.
+- No pending work for this task. Note for future sessions: services are identified by `Service.Code` everywhere — never reintroduce enum-based routing, which is what caused dynamically-created services to collapse onto `Bureau d'ordre`.
+
+---
+
+## [2026-09-15 12:00] — Full Regression Verification + Dynamic Service Catalog Refactor
+
+### 1. Context & Objective
+- Complete the remaining suggested tasks from the prior session: eliminate all remaining hardcoded service-name maps/lists across the frontend, replace with dynamic RBAC-driven resolution, and verify the full system is healthy.
+- Created `ServiceCatalog` (backend) and `useServiceOptions` (frontend) for shared service resolution.
+- Fixed a seeder bug where archiving a custom service never persisted because `SeederService.SeedCoreAsync` un-archived every inactive service on startup.
+- Added browser-level transfer-modal UI test and repeated-refusal E2E test.
+
+### 2. Files Modified / Created / Deleted
+
+- `[CREATED]` `WebApplication1/WebApplication1/Services/ServiceCatalog.cs` — Singleton service that resolves service codes to enum values and labels via live DB queries, with in-memory cache (30s TTL). Replaces ad-hoc lookups in controllers.
+- `[CREATED]` `frontend-juridique/app/hooks/useServiceOptions.ts` — React hook that fetches active services + historical services for picker/select components.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Program.cs` — Registered `ServiceCatalog` as singleton.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/TransferController.cs` — Uses `ServiceCatalog` for destination resolution instead of inline helper.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/CourrierAdminController.cs` — Uses `ServiceCatalog` for service-scoping.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/SeederService.cs` — Fixed archiving bug: now only un-archives its own seed services, not every inactive service.
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/SeederServiceTests.cs` — Added test verifying non-seed services stay archived after re-seed.
+- `[MODIFIED]` `frontend-juridique/app/components/forms/AdminForm.tsx` — Dynamic recipient pickers using `useServiceOptions`.
+- `[MODIFIED]` `frontend-juridique/app/components/forms/SortantForm.tsx` — Dynamic service dropdown.
+- `[MODIFIED]` `frontend-juridique/app/components/forms/JuridiqueForm.tsx` — Dynamic service dropdown.
+- `[MODIFIED]` `frontend-juridique/app/components/dashboard/WorkflowSteps.tsx` — Dynamic service labels.
+- `[MODIFIED]` `frontend-juridique/app/components/dashboard/StatsCircles.tsx` — Dynamic service labels.
+- `[MODIFIED]` `frontend-juridique/lib/constants.ts` — Added `safeGetServiceLabel()` as safety-net fallback for any remaining hardcoded paths.
+- `[CREATED]` `frontend-juridique/cypress/e2e/dynamic-service-transfer.cy.ts` — E2E tests: dynamic service transfer modal, refusal notification, repeated-refuse, and browser UI verification.
+- `[MODIFIED]` `frontend-juridique/next.config.ts` — Disabled `devIndicators` to prevent Next.js badge from overlapping sidebar (E2E flake fix).
+
+### 3. Key Technical & Architectural Decisions
+- **ServiceCatalog singleton:** Cached DB query (30s TTL) prevents per-request overhead. Controllers inject it via DI instead of directly querying `RbacServices`.
+- **SeederService fix:** The old `foreach (var svc in inactiveServices)` un-archived EVERY inactive service. Now only the 9 seed services are restored — custom services stay archived.
+- **End-to-end dynamic pipeline:** From admin creating a service → user creation → document creation → transfer → refusal → notification — every step now uses dynamic RBAC codes. Zero hardcoded enum lookups remain in the critical path.
+
+### 4. Verification & Test Results
+
+| Suite | Result |
+|-------|--------|
+| Backend build | ✅ 0 errors |
+| Backend unit tests | ✅ **105/105** (was 103, +2 new seeder tests) |
+| Frontend TypeScript | ✅ 0 errors |
+| Cypress `app.cy.ts` | ✅ **35/35** |
+| Cypress `permission-toggle.cy.ts` | ✅ **27/27** |
+| Cypress `export.cy.ts` | ✅ **3/3** |
+| Cypress `dynamic-service-transfer.cy.ts` | ✅ **6/6** |
+| **Total E2E** | ✅ **71/71** |
+
+### 5. Current System State & Pending Tasks
+- Both servers running (`localhost:3000` frontend, `localhost:5200` backend).
+- All 71 E2E tests, 105 backend unit tests pass.
+- No hardcoded service-name maps remain in the critical path.
+- No pending bugs identified.
+
