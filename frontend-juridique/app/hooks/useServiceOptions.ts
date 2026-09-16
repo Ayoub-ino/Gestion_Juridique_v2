@@ -24,13 +24,13 @@ interface RbacService {
   userCount: number;
 }
 
-export interface ServiceOption {
+interface ServiceOption {
   /** Value submitted to the API — the RBAC service code (or a legacy enum name). */
   value: string;
   label: string;
 }
 
-export interface ServiceOptionGroup {
+interface ServiceOptionGroup {
   key: string;
   label: string;
   children: ServiceOption[];

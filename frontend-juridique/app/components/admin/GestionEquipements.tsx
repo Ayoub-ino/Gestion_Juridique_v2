@@ -9,6 +9,7 @@ import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -29,7 +30,7 @@ export function GestionEquipements({ langue, cur, token, onExport }: Props) {
   const fetchItems = useCallback(async () => {
     try {
       setItems(await api.get<EquipmentItem[]>("/api/Equipment", token));
-    } catch (err) { console.error("Erreur fetch equipment:", err); }
+    } catch (err) { console.warn("Erreur fetch equipment:", err); }
   }, [token]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -53,29 +54,29 @@ export function GestionEquipements({ langue, cur, token, onExport }: Props) {
         await api.post("/api/Equipment", { ...form, estCharge: true }, token);
       }
 
-      alert(editingId ? cur.equipementModifie : cur.equipementCree);
+      notify(editingId ? cur.equipementModifie : cur.equipementCree);
       setShowForm(false);
       setEditingId(null);
       setForm({ serial: "", code: "", type: "", etat: "", service: "", numeroInventaire: "", bureau: "" });
       fetchItems();
     } catch (err) {
-      alert(cur.erreurPrefix + getErrorMessage(err));
+      notify(cur.erreurPrefix + getErrorMessage(err));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(cur.supprimerEquipement)) return;
+    if (!await confirmAction(cur.supprimerEquipement)) return;
     try {
       await api.delete(`/api/Equipment/${id}`, token);
       fetchItems();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const toggleCharge = async (id: number) => {
     try {
       await api.put(`/api/Equipment/${id}/toggle-charge`, undefined, token);
       fetchItems();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const { getServiceLabel } = useServiceLabels(token, langue);

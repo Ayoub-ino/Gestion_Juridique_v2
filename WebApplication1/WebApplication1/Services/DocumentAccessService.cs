@@ -38,14 +38,6 @@ namespace WebApplication1.Services
         }
 
         /// <summary>
-        /// Grant Viewer access to a service.
-        /// </summary>
-        public async Task GrantViewerAsync(int documentId, string serviceCode, int? grantedByUserId = null)
-        {
-            await UpsertAccessAsync(documentId, serviceCode, DocumentAccessLevel.Viewer, grantedByUserId);
-        }
-
-        /// <summary>
         /// Revoke all access for a service on a document.
         /// </summary>
         public async Task RevokeAccessAsync(int documentId, string serviceCode)
@@ -93,27 +85,6 @@ namespace WebApplication1.Services
             if (string.IsNullOrEmpty(serviceCode)) return false;
 
             return await HasAccessAsync(documentId, serviceCode, requiredLevel);
-        }
-
-        /// <summary>
-        /// Get the access level for a user's service on a document.
-        /// Returns null if no access record exists.
-        /// </summary>
-        public async Task<DocumentAccessLevel?> GetUserAccessLevelAsync(int documentId, int userId)
-        {
-            var user = await _context.Utilisateurs.FindAsync(userId);
-            if (user == null) return null;
-
-            // Admin-like roles have implicit Owner access
-            if (IsAdminLike(user)) return DocumentAccessLevel.Owner;
-
-            var serviceCode = NormalizeServiceCode(user.Service ?? "");
-            if (string.IsNullOrEmpty(serviceCode)) return null;
-
-            var access = await _context.DocumentAccesses
-                .FirstOrDefaultAsync(da => da.DocumentId == documentId && da.ServiceCode == serviceCode);
-
-            return access?.AccessLevel;
         }
 
         /// <summary>
@@ -338,30 +309,6 @@ namespace WebApplication1.Services
         // ── CUSTODY CHECK (Active Custody Constraint) ──
 
         /// <summary>
-        /// Check if a user is the current custodian of a document.
-        /// The custodian is the service that currently holds the document (ServiceActuel).
-        /// Admin/Greffier/Directeur roles bypass custody checks (they manage the system).
-        /// </summary>
-        public async Task<bool> IsUserCustodianAsync(int documentId, int userId)
-        {
-            var user = await _context.Utilisateurs.FindAsync(userId);
-            if (user == null) return false;
-
-            // Admin-like roles bypass custody (system managers)
-            if (IsAdminLike(user)) return true;
-
-            var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
-            if (string.IsNullOrEmpty(userServiceCode)) return false;
-
-            // Find the document across all document types
-            var doc = await FindDocumentAsync(documentId);
-            if (doc == null) return false;
-
-            var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(doc);
-            return userServiceCode == custodyServiceCode;
-        }
-
-        /// <summary>
         /// Check if a user is the current custodian of a document (sync).
         /// Used in controllers where the document entity is already loaded.
         /// Admin/Greffier/Directeur roles bypass custody checks.
@@ -390,24 +337,6 @@ namespace WebApplication1.Services
             var normalized = ServiceMapper.NormalizeServiceCode(serviceCode);
             var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(document);
             return normalized == custodyServiceCode;
-        }
-
-        /// <summary>
-        /// Helper: find a document across all document tables.
-        /// </summary>
-        private async Task<Document?> FindDocumentAsync(int documentId)
-        {
-            var doc = await _context.Documents.FindAsync(documentId);
-            if (doc != null) return doc;
-
-            doc = await _context.CourriersAdministratifs.FindAsync(documentId);
-            if (doc != null) return doc;
-
-            doc = await _context.DossiersJuridiques.FindAsync(documentId);
-            if (doc != null) return doc;
-
-            doc = await _context.CourriersSortants.FindAsync(documentId);
-            return doc;
         }
     }
 

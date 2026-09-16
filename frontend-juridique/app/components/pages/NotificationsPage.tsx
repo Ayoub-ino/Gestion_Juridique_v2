@@ -1,12 +1,14 @@
 "use client";
 
 import type { TranslationKeys } from "@/lib/translations";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { ExportFormat } from "@/lib/exportImport";
+import { getErrorMessage } from "@/lib/utils";
+import { notify } from "@/lib/feedback";
 import { api } from "@/lib/api/client";
 
 interface Props {
@@ -47,13 +49,29 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [commentaires, setCommentaires] = useState<Record<number, string>>({});
   const [retours, setRetours] = useState<Record<number, boolean>>({});
+  // Guards against a decision being applied twice for the same notification
+  // (rapid clicks / bulk action + individual click on the same row).
+  const [busyIds, setBusyIds] = useState<number[]>([]);
+  const inFlight = useRef<Set<number>>(new Set());
+
+  const beginAction = (id: number): boolean => {
+    if (inFlight.current.has(id)) return false;
+    inFlight.current.add(id);
+    setBusyIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    return true;
+  };
+
+  const endAction = (id: number) => {
+    inFlight.current.delete(id);
+    setBusyIds(prev => prev.filter(x => x !== id));
+  };
 
   const fetchNotifications = useCallback(async () => {
     if (!token) return;
     try {
       setNotifications(await api.get<NotificationData[]>("/api/Transactions/pending", token));
     } catch (err) {
-      console.error("Erreur fetch notifications:", err);
+      console.warn("Erreur fetch notifications:", getErrorMessage(err));
     }
   }, [token]);
 
@@ -75,37 +93,43 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
   };
 
   const handleAccept = async (id: number) => {
-    if (!canAccept) { alert(cur.permissionRefusee); return; }
+    if (!canAccept) { notify(cur.permissionRefusee); return; }
+    if (!beginAction(id)) return;
     try {
       await api.put(`/api/Transactions/${id}/accepter`, { commentaire: commentaires[id] || "" }, token);
-      alert(langue === "fr" ? "Transaction acceptée avec succès" : "تم قبول المعاملة بنجاح");
+      notify(langue === "fr" ? "Transaction acceptée avec succès" : "تم قبول المعاملة بنجاح");
       fetchNotifications();
     } catch (err) {
-      console.error("Accept error:", err);
+      console.warn("Accept error:", getErrorMessage(err));
       const msg = err instanceof Error ? err.message : "";
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors de l'acceptation: " : "خطأ أثناء القبول: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
+    } finally {
+      endAction(id);
     }
   };
 
   const handleRefuse = async (id: number) => {
-    if (!canRefuse) { alert(cur.permissionRefusee); return; }
+    if (!canRefuse) { notify(cur.permissionRefusee); return; }
     const motif = commentaires[id] || "";
     if (!motif) {
-      alert(langue === "fr" ? "Veuillez saisir un motif" : "يرجى إدخال سبب الرفض");
+      notify(langue === "fr" ? "Veuillez saisir un motif" : "يرجى إدخال سبب الرفض");
       return;
     }
+    if (!beginAction(id)) return;
     try {
       await api.put(`/api/Transactions/${id}/refuser`, { commentaire: motif, doitRevenir: !!retours[id] }, token);
-      alert(langue === "fr" ? "Transaction refusée" : "تم رفض المعاملة");
+      notify(langue === "fr" ? "Transaction refusée" : "تم رفض المعاملة");
       fetchNotifications();
     } catch (err) {
-      console.error("Refuse error:", err);
+      console.warn("Refuse error:", getErrorMessage(err));
       const msg = err instanceof Error ? err.message : "";
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors du refus: " : "خطأ أثناء الرفض: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
+    } finally {
+      endAction(id);
     }
   };
 
@@ -120,7 +144,7 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
     for (const id of selectedIds) {
       const motif = commentaires[id] || "";
       if (!motif) {
-        alert(langue === "fr" ? `Veuillez saisir un motif pour la notification ${id}` : `يرجى إدخال سبب الرفض للإشعار ${id}`);
+        notify(langue === "fr" ? `Veuillez saisir un motif pour la notification ${id}` : `يرجى إدخال سبب الرفض للإشعار ${id}`);
         return;
       }
     }
@@ -186,11 +210,14 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
             <span className="text-xs font-bold text-slate-600">{langue === "fr" ? "Tout sélectionner" : "تحديد الكل"}</span>
           </div>
 
-          {notifications.map(n => (
+          {notifications.map(n => {
+            const busy = busyIds.includes(n.id);
+            return (
             <div key={n.id} className={`bg-white border rounded-lg p-5 shadow-sm transition ${n.statut === "EnAttente" ? "border-amber-200" : "border-slate-200"}`}>
               <div className="flex items-start gap-3">
                 <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={() => toggleSelect(n.id)}
-                  className="w-4 h-4 text-blue-600 mt-1" />
+                  disabled={busy}
+                  className="w-4 h-4 text-blue-600 mt-1 disabled:opacity-50" />
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-bold text-sm text-slate-800">{n.documentSujet}</h4>
@@ -234,7 +261,8 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                          the receiver already decided, so accept/refuse must not be offered. */
                       <div className="flex gap-2 items-center">
                         <button type="button" onClick={() => handleAccept(n.id)}
-                          className="px-4 py-1.5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-300 transition">
+                          disabled={busy}
+                          className="px-4 py-1.5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
                           {langue === "fr" ? "Accusé de réception" : "تأكيد الاستلام"}
                         </button>
                       </div>
@@ -253,13 +281,15 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                         </label>
                         {canAccept && (
                         <button type="button" onClick={() => handleAccept(n.id)}
-                          className="px-4 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition">
+                          disabled={busy}
+                          className="px-4 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
                           {langue === "fr" ? "Accepter" : "قبول"}
                         </button>
                         )}
                         {canRefuse && (
                         <button type="button" onClick={() => handleRefuse(n.id)}
-                          className="px-4 py-1.5 rounded bg-red-500 text-white text-[11px] font-bold hover:bg-red-600 transition">
+                          disabled={busy}
+                          className="px-4 py-1.5 rounded bg-red-500 text-white text-[11px] font-bold hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed">
                           {langue === "fr" ? "Refuser" : "رفض"}
                         </button>
                         )}
@@ -270,7 +300,8 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

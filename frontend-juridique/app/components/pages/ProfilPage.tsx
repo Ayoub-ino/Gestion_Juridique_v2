@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Langue } from "@/app/types";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { api } from "@/lib/api/client";
+import { notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -32,7 +33,7 @@ export function ProfilPage({ langue, cur, token, user }: Props) {
     if (!user?.id) return;
     try {
       setSubstitutes(await api.get<SubstituteEntry[]>(`/api/Substitutes/history/${user.id}`, token));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   }, [user, token]);
 
   const fetchUsers = useCallback(async () => {
@@ -41,28 +42,28 @@ export function ProfilPage({ langue, cur, token, user }: Props) {
       // /api/Users endpoint requires gerer_utilisateurs and would 403 here).
       const data = await api.get<{ id: number; nom: string; service: string }[]>("/api/Users/actifs", token);
       setAllUsers(data.filter((u) => u.id !== user?.id));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   }, [user, token]);
 
   useEffect(() => { fetchSubstitutes(); fetchUsers(); }, [fetchSubstitutes, fetchUsers]);
 
   const handleSaveSubstitute = async () => {
     if (!selectedSubstitute) {
-      alert(langue === "fr" ? "Veuillez choisir un remplaçant" : "يرجى اختيار بديل");
+      notify(langue === "fr" ? "Veuillez choisir un remplaçant" : "يرجى اختيار بديل");
       return;
     }
     try {
       await api.post("/api/Substitutes", { userId: user.id, substituteUserId: selectedSubstitute }, token);
-      alert(langue === "fr" ? "Remplaçant enregistré" : "تم حفظ البديل");
+      notify(langue === "fr" ? "Remplaçant enregistré" : "تم حفظ البديل");
       fetchSubstitutes();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const handleCancelSubstitute = async (id: number) => {
     try {
       await api.delete(`/api/Substitutes/${id}`, token);
       fetchSubstitutes();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const { getServiceLabel } = useServiceLabels(token, langue);

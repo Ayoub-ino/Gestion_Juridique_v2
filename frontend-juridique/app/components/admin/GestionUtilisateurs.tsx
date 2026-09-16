@@ -7,6 +7,7 @@ import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { api, ApiError } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -26,17 +27,18 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
   const [showArchived, setShowArchived] = useState(false);
   const [archivedUsers, setArchivedUsers] = useState<UserItem[]>([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
       setUsers(await api.get<UserItem[]>("/api/Users", token));
-    } catch (err) { console.error("Erreur fetch users:", err); }
+    } catch (err) { console.warn("Erreur fetch users:", err); }
   }, [token]);
 
   const fetchServices = useCallback(async () => {
     try {
       setRbacServices(await api.get<RbacService[]>("/api/rbac/services", token));
-    } catch (err) { console.error("Erreur fetch services:", err); }
+    } catch (err) { console.warn("Erreur fetch services:", err); }
   }, [token]);
 
   const fetchArchivedUsers = async () => {
@@ -45,7 +47,7 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
       const data = await api.get<(UserItem & { isActive?: boolean })[]>("/api/Users?includeInactive=true", token);
       setArchivedUsers(data.filter((u) => u.isActive === false));
     } catch (err) {
-      console.error("Erreur lors du chargement des utilisateurs archivés", err);
+      console.warn("Erreur lors du chargement des utilisateurs archivés", err);
     } finally {
       setLoadingArchived(false);
     }
@@ -77,51 +79,54 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
         await api.post("/api/Users", body, token);
       }
 
-      alert(editingId ? (langue === "fr" ? "Utilisateur modifié" : "تم تعديل المستخدم") : (langue === "fr" ? "Utilisateur créé" : "تم إنشاء المستخدم"));
+      notify(editingId ? (langue === "fr" ? "Utilisateur modifié" : "تم تعديل المستخدم") : (langue === "fr" ? "Utilisateur créé" : "تم إنشاء المستخدم"));
       setShowForm(false);
       setEditingId(null);
       setForm({ nom: "", login: "", password: "", serviceId: 0 });
       fetchUsers();
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        alert(langue === "fr" ? "Accès refusé. Votre session a peut-être expiré. Reconnectez-vous." : "تم رفض الوصول. ربما انتهت جلسته. أعد تسجيل الدخول.");
+        notify(langue === "fr" ? "Accès refusé. Votre session a peut-être expiré. Reconnectez-vous." : "تم رفض الوصول. ربما انتهت جلسته. أعد تسجيل الدخول.");
       } else {
-        alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+        notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
       }
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(langue === "fr" ? "Supprimer cet utilisateur ?" : "هل تريد حذف هذا المستخدم؟")) return;
+    if (!await confirmAction(langue === "fr" ? "Supprimer cet utilisateur ?" : "هل تريد حذف هذا المستخدم؟")) return;
     try {
       await api.delete(`/api/Users/${id}`, token);
       fetchUsers();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 
   const handleRestoreUser = async (id: number) => {
-    if (!confirm("Restaurer cet utilisateur ?")) return;
+    if (!await confirmAction("Restaurer cet utilisateur ?")) return;
     try {
       await api.post(`/api/Users/${id}/restore`, undefined, token);
-      alert("Utilisateur restauré avec succès");
+      notify("Utilisateur restauré avec succès");
       fetchArchivedUsers();
     } catch (err) {
-      console.error("Erreur lors de la restauration", err);
+      console.warn("Erreur lors de la restauration", err);
     }
   };
 
   const handlePermanentDeleteUser = async (id: number) => {
-    if (!confirm(langue === "fr"
+    if (!await confirmAction(langue === "fr"
       ? "Cette action est irréversible. Voulez-vous vraiment supprimer définitivement cet utilisateur ?"
       : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟")) return;
+    setDeletingId(id);
     try {
       await api.delete(`/api/Users/${id}/permanent`, token);
-      alert(langue === "fr" ? "Utilisateur supprimé définitivement" : "تم الحذف نهائياً");
-      fetchArchivedUsers();
+      // Remove from local state immediately instead of refetching to avoid batchedUpdates crash
+      setArchivedUsers(prev => prev.filter(u => u.id !== id));
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -268,9 +273,10 @@ export function GestionUtilisateurs({ langue, cur, token, onExport }: Props) {
                           </button>
                           <button
                             onClick={() => handlePermanentDeleteUser(u.id)}
-                            className="px-2 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 text-[10px] font-bold"
+                            disabled={deletingId === u.id}
+                            className={`px-2 py-1 rounded border text-[10px] font-bold ${deletingId === u.id ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed' : 'border-rose-200 bg-rose-50 text-rose-700'}`}
                           >
-                            {langue === "fr" ? "Supprimer définitivement" : "حذف نهائياً"}
+                            {deletingId === u.id ? (langue === "fr" ? "Suppression..." : "جاري الحذف...") : (langue === "fr" ? "Supprimer définitivement" : "حذف نهائياً")}
                           </button>
                         </div>
                       </td>

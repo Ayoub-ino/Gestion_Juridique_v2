@@ -4,6 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule, Langue } from "@/app/types";
 import { exportRows } from "@/lib/exportImport";
 import { normalizeStatus } from "@/lib/utils";
+import { confirmAction } from "@/lib/feedback";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { useAuth } from "@/context/AuthContext";
 
@@ -186,10 +187,11 @@ export function ArchivesView({
                           {hasPermission("supprimer") && onPermanentDelete && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (confirm(langue === "fr"
+                              onClick={async () => {
+                                const accepted = await confirmAction(langue === "fr"
                                   ? "Cette action est irréversible. Voulez-vous vraiment supprimer définitivement cet élément ?"
-                                  : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟")) {
+                                  : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟");
+                                if (accepted) {
                                   onPermanentDelete(doc.id);
                                 }
                               }}

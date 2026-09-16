@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Langue } from "@/app/types";
 import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface HistoricalService {
   id: number;
@@ -46,7 +47,7 @@ export function GestionServicesHistoriques({ langue, cur, token }: Props) {
     try {
       setServices(await api.get<HistoricalService[]>("/api/historical-services", token));
     } catch (err) {
-      console.error("Error fetching historical services:", err);
+      console.warn("Error fetching historical services:", err);
     }
     setLoading(false);
   }, [token]);
@@ -78,7 +79,7 @@ export function GestionServicesHistoriques({ langue, cur, token }: Props) {
       } else {
         await api.post("/api/historical-services", body, token);
       }
-      alert(editingId
+      notify(editingId
         ? cur.serviceHistoriqueModifie
         : cur.serviceHistoriqueCree);
       setShowForm(false);
@@ -86,19 +87,19 @@ export function GestionServicesHistoriques({ langue, cur, token }: Props) {
       setForm({ nom: "", code: "", description: "", parentId: "", sortOrder: 0, isActive: true });
       fetchServices();
     } catch (err) {
-      alert(getErrorMessage(err) || "Erreur");
+      notify(getErrorMessage(err) || "Erreur");
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!token) return;
-    if (!confirm(cur.confirmerSuppression)) return;
+    if (!await confirmAction(cur.confirmerSuppression)) return;
 
     try {
       await api.delete(`/api/historical-services/${id}`, token);
       fetchServices();
     } catch (err) {
-      alert(getErrorMessage(err) || "Erreur");
+      notify(getErrorMessage(err) || "Erreur");
     }
   };
 

@@ -6,7 +6,9 @@ import { CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { WORKFLOW_STEPS, getWorkflowProgress, getDelayDays } from "@/lib/constants";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { getDocServiceCode, normalizeServiceRef } from "@/lib/utils";
 import { api } from "@/lib/api/client";
+import { notify } from "@/lib/feedback";
 import Image from "next/image";
 import { API_BASE_URL } from "@/lib/config/env";
 
@@ -91,15 +93,20 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
   // Document-level edit access: only the current custodian service can edit.
   // Admin-like roles always have access (backend enforces this too).
-  // ServiceActuel may be a number (enum) or string — normalize both sides.
-  const docService = String(doc?.serviceActuel ?? docDetails?.ServiceActuel ?? "").toLowerCase();
-  const userService = String(user?.service ?? "").toLowerCase();
+  //
+  // IMPORTANT: `doc.serviceActuel` is the localized display label ("Bureau d'ordre"
+  // / "مكتب الضبط"), never a service code — comparing it with the user's service
+  // code hid the Modifier/Transférer buttons from every regular user. Custody is
+  // therefore decided on the document's service CODE (dynamic RBAC code first,
+  // then the legacy enum key, then the enum name from the detail payload).
+  const docService = getDocServiceCode(doc) || String(docDetails?.ServiceActuel ?? "");
+  const userService = String(user?.service ?? "");
   const isAdminLike = user?.role === "Admin" || user?.role === "Greffier" || user?.role === "Directeur" || user?.role === "Consultant";
   // Strict custody: user's service must match the document's current service
-  const isCustodian = isAdminLike || (userService !== "" && docService !== "" && (
-    userService === docService ||
-    userService.replace(/[^a-z0-9]/g, "") === docService.replace(/[^a-z0-9]/g, "")
-  ));
+  const isCustodian = isAdminLike || (
+    normalizeServiceRef(userService) !== "" &&
+    normalizeServiceRef(userService) === normalizeServiceRef(docService)
+  );
   const canEdit = canEditPermission && isCustodian;
 
   // Determine file type category for preview routing
@@ -200,7 +207,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
       window.document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } else {
-      alert(langue === "fr" ? "Erreur lors du téléchargement" : "خطأ أثناء التحميل");
+      notify(langue === "fr" ? "Erreur lors du téléchargement" : "خطأ أثناء التحميل");
     }
     setDownloading(false);
   };
@@ -250,7 +257,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
         AutoriteRetrait: data.AutoriteRetrait || "",
       });
     } catch (err) {
-      console.error("Erreur fetch doc:", err);
+      console.warn("Erreur fetch doc:", err);
     } finally {
       setLoadingDoc(false);
     }
@@ -284,7 +291,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
     try {
       setHistory(await api.get<HistoryEntry[]>(`/api/Transactions/history/${doc.id}`, token));
     } catch (err) {
-      console.error("Erreur fetch history:", err);
+      console.warn("Erreur fetch history:", err);
     } finally {
       setLoadingHistory(false);
     }
@@ -317,10 +324,10 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
       if (onSaved) onSaved();
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err) {
-      console.error("Erreur save:", err);
+      console.warn("Erreur save:", err);
       const msg = err instanceof Error ? err.message : "";
       setSuccessMsg("");
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors de la sauvegarde: " : "خطأ أثناء الحفظ: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
     } finally {
@@ -329,7 +336,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
   };
 
   const handleSaveNote = async () => {
-    if (!canAddNotes) { alert(cur.permissionRefusee); return; }
+    if (!canAddNotes) { notify(cur.permissionRefusee); return; }
     if (!doc || !token || !note.trim()) return;
     setSavingNote(true);
     try {
@@ -338,7 +345,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
       setSuccessMsg(cur.noteAjoutee);
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err) {
-      console.error("Erreur note:", err);
+      console.warn("Erreur note:", err);
     } finally {
       setSavingNote(false);
     }

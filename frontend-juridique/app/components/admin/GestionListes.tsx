@@ -7,6 +7,7 @@ import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -48,7 +49,7 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
   const fetchItems = useCallback(async () => {
     try {
       setItems(await api.get<ListItemData[]>(`/api/ListItems?listName=${activeCategory}`, token));
-    } catch (err) { console.error("Erreur fetch list items:", err); }
+    } catch (err) { console.warn("Erreur fetch list items:", err); }
   }, [activeCategory, token]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -67,29 +68,29 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
         await api.post("/api/ListItems", body, token);
       }
 
-      alert(editingId ? (langue === "fr" ? "Élément modifié" : "تم تعديل العنصر") : (langue === "fr" ? "Élément créé" : "تم إنشاء العنصر"));
+      notify(editingId ? (langue === "fr" ? "Élément modifié" : "تم تعديل العنصر") : (langue === "fr" ? "Élément créé" : "تم إنشاء العنصر"));
       setShowForm(false);
       setEditingId(null);
       setForm({ code: "", valueFr: "", valueAr: "", displayOrder: 1, isActive: true });
       fetchItems();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(langue === "fr" ? "Supprimer cet élément ?" : "هل تريد حذف هذا العنصر؟")) return;
+    if (!await confirmAction(langue === "fr" ? "Supprimer cet élément ?" : "هل تريد حذف هذا العنصر؟")) return;
     try {
       await api.delete(`/api/ListItems/${id}`, token);
       fetchItems();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const toggleActive = async (item: ListItemData) => {
     try {
       await api.put(`/api/ListItems/${item.id}`, { ...item, isActive: !item.isActive }, token);
       fetchItems();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const currentCategory = LIST_CATEGORIES.find(c => c.key === activeCategory);

@@ -90,22 +90,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }, [user, permissions, adminOverrides]);
 
-  // Fetch admin overrides from API
+  // Fetch admin overrides from API.
+  // The endpoint serializes camelCase (`permissionKey`, `enabled`) — reading
+  // `Key`/`Enabled` silently produced an empty override map, so disabling a
+  // permission for the admin account never took effect in the UI.
   const fetchAdminOverrides = useCallback(async () => {
     try {
-      const data = await api.get<{ permissions: { Key: string; Enabled: boolean }[] }>(
-        "/api/rbac/permissions/admin",
-        token
-      );
+      const data = await api.get<{
+        permissions?: { permissionKey?: string; key?: string; enabled?: boolean }[];
+      }>("/api/rbac/permissions/admin", token);
       const overridesMap: Record<string, boolean> = {};
-      data.permissions.forEach((perm) => {
-        if (!perm.Enabled) {
-          overridesMap[perm.Key] = false;
+      for (const perm of data.permissions ?? []) {
+        const key = perm.permissionKey ?? perm.key;
+        if (key && perm.enabled === false) {
+          overridesMap[key] = false;
         }
-      });
+      }
       setAdminOverrides(overridesMap);
     } catch (error) {
-      console.error('Error fetching admin overrides:', error);
+      // Non-admins get a 403 here — expected, and only logged for diagnosis.
+      console.warn('Admin overrides unavailable:', error instanceof Error ? error.message : error);
     }
   }, [token]);
 
@@ -122,6 +126,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const data = await api.get<{ user: User }>("/api/auth/me", token);
       setUser(data.user);
+      // Keep the cached copy in sync so the next page load starts from fresh data.
+      try {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      } catch {
+        // Ignore storage failures (private mode, quota, ...)
+      }
       if (data.user.role === "Admin") {
         await fetchAdminOverrides();
       }
@@ -129,6 +139,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Ignore transient failures — the next focus/refresh will retry.
     }
   }, [token, fetchAdminOverrides]);
+
+  // Refresh permissions on every page load. The cached localStorage copy is only
+  // a first paint: without this, a permission granted or revoked in the admin
+  // panel kept showing the old state after a reload until the user re-logged in.
+  useEffect(() => {
+    if (token) refreshUser();
+  }, [token, refreshUser]);
 
   // Refresh when the window regains focus, throttled to once a minute.
   const lastRefreshRef = React.useRef(0);

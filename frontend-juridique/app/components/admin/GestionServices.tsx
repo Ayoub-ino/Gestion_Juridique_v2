@@ -7,6 +7,7 @@ import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -29,7 +30,7 @@ export function GestionServices({ langue, cur, token, onExport }: Props) {
     try {
       // Only fetch active services by default
       setServices(await api.get<RbacService[]>("/api/rbac/services", token));
-    } catch (err) { console.error("Erreur fetch services:", err); }
+    } catch (err) { console.warn("Erreur fetch services:", err); }
   }, [token]);
 
   const fetchArchivedServices = async () => {
@@ -38,7 +39,7 @@ export function GestionServices({ langue, cur, token, onExport }: Props) {
       const data = await api.get<(RbacService & { isActive?: boolean })[]>("/api/rbac/services?includeInactive=true", token);
       setArchivedServices(data.filter((s) => s.isActive === false));
     } catch (err) {
-      console.error("Erreur lors du chargement des services archivés", err);
+      console.warn("Erreur lors du chargement des services archivés", err);
     } finally {
       setLoadingArchived(false);
     }
@@ -62,46 +63,46 @@ export function GestionServices({ langue, cur, token, onExport }: Props) {
         await api.post("/api/rbac/services", form, token);
       }
 
-      alert(editingId ? (langue === "fr" ? "Service modifié" : "تم تعديل المصلحة") : (langue === "fr" ? "Service créé" : "تم إنشاء المصلحة"));
+      notify(editingId ? (langue === "fr" ? "Service modifié" : "تم تعديل المصلحة") : (langue === "fr" ? "Service créé" : "تم إنشاء المصلحة"));
       setShowForm(false);
       setEditingId(null);
       setForm({ nom: "", code: "", description: "" });
       fetchServices();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(langue === "fr" ? "Archiver ce service ?" : "هل تريد أرشفة هذه المصلحة؟")) return;
+    if (!await confirmAction(langue === "fr" ? "Archiver ce service ?" : "هل تريد أرشفة هذه المصلحة؟")) return;
     try {
       await api.delete(`/api/rbac/services/${id}`, token);
       fetchServices();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 
   const handleRestore = async (id: number) => {
-    if (!confirm(langue === "fr" ? "Restaurer ce service ?" : "هل تريد استعادة هذه المصلحة؟")) return;
+    if (!await confirmAction(langue === "fr" ? "Restaurer ce service ?" : "هل تريد استعادة هذه المصلحة؟")) return;
     try {
       await api.post(`/api/rbac/services/${id}/restore`, undefined, token);
-      alert(langue === "fr" ? "Service restauré" : "تمت استعادة المصلحة");
+      notify(langue === "fr" ? "Service restauré" : "تمت استعادة المصلحة");
       fetchArchivedServices();
       fetchServices();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 
   const handlePermanentDelete = async (id: number) => {
-    if (!confirm(langue === "fr" ? "Supprimer définitivement ce service ? Cette action est irréversible." : "هل تريد الحذف نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+    if (!await confirmAction(langue === "fr" ? "Supprimer définitivement ce service ? Cette action est irréversible." : "هل تريد الحذف نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
     try {
       await api.delete(`/api/rbac/services/${id}/permanent`, token);
-      alert(langue === "fr" ? "Service supprimé définitivement" : "تم الحذف نهائياً");
+      notify(langue === "fr" ? "Service supprimé définitivement" : "تم الحذف نهائياً");
       fetchArchivedServices();
     } catch (err) {
-      alert(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
+      notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
   };
 

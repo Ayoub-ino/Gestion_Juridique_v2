@@ -57,22 +57,5 @@ namespace WebApplication1.Services
 
             return null;
         }
-
-        /// <summary>
-        /// True when the value looks like a historical (record-only) service.
-        /// </summary>
-        public async Task<bool> IsHistoricalServiceAsync(string? raw)
-        {
-            var normalized = ServiceMapper.NormalizeServiceCode(raw);
-            if (string.IsNullOrEmpty(normalized)) return false;
-
-            var historical = await _context.HistoricalServices
-                .Select(s => new { s.Code, s.Nom })
-                .ToListAsync();
-
-            return historical.Any(s =>
-                ServiceMapper.NormalizeServiceCode(s.Code) == normalized ||
-                ServiceMapper.NormalizeServiceCode(s.Nom) == normalized);
-        }
     }
 }

@@ -6,6 +6,7 @@ import { Langue, CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { api } from "@/lib/api/client";
+import { confirmAction, notify } from "@/lib/feedback";
 import type { components } from "@/lib/types/api.generated";
 
 interface WorkspaceDoc {
@@ -147,38 +148,38 @@ export function WorkspaceModal({ docId, onClose, token, langue, cur, onTransfer 
       setEditMode(false);
       setEditFields({});
       setModifications(await api.get(`/api/Workspace/document/${doc.id}/modifications`, token));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
     setSaving(false);
   };
 
   const handleAddNote = async () => {
-    if (!canAddNotes) { alert(cur.permissionRefusee); return; }
+    if (!canAddNotes) { notify(cur.permissionRefusee); return; }
     if (!doc || !token || !newNote.trim()) return;
     try {
       const note = await api.post<Note>(`/api/Workspace/document/${doc.id}/notes`, { contenu: newNote }, token);
       setNotes([note, ...notes]);
       setNewNote("");
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const handleUpdateNote = async (noteId: number) => {
-    if (!canAddNotes) { alert(cur.permissionRefusee); return; }
+    if (!canAddNotes) { notify(cur.permissionRefusee); return; }
     if (!token || !editingNoteText.trim()) return;
     try {
       const updated = await api.put<Note>(`/api/Workspace/notes/${noteId}`, { contenu: editingNoteText }, token);
       setNotes(notes.map((n) => (n.id === noteId ? updated : n)));
       setEditingNoteId(null);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const handleDeleteNote = async (noteId: number) => {
-    if (!canAddNotes) { alert(cur.permissionRefusee); return; }
+    if (!canAddNotes) { notify(cur.permissionRefusee); return; }
     if (!token) return;
-    if (!window.confirm(langue === "fr" ? "Supprimer cette note ?" : "هل تريد حذف هذه الملاحظة؟")) return;
+    if (!await confirmAction(langue === "fr" ? "Supprimer cette note ?" : "هل تريد حذف هذه الملاحظة؟")) return;
     try {
       await api.delete(`/api/Workspace/notes/${noteId}`, token);
       setNotes(notes.filter((n) => n.id !== noteId));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.warn(err); }
   };
 
   const startEdit = () => {

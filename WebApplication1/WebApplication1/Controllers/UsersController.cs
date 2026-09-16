@@ -223,11 +223,14 @@ namespace WebApplication1.Controllers
             if (user.Login == "admin")
                 return BadRequest(new { error = "Impossible de supprimer l'utilisateur administrateur" });
 
-            // Check if user has any pending transactions
-            var hasTransactions = await _context.Transactions
-                .AnyAsync(t => t.UtilisateurId == id.ToString());
-            if (hasTransactions)
-                return BadRequest(new { error = "Cet utilisateur a des transactions en cours. Désactivez-le plutôt." });
+            // Null out any transaction references to this user so the FK doesn't block deletion
+            var transactions = await _context.Transactions
+                .Where(t => t.UtilisateurId == id.ToString())
+                .ToListAsync();
+            foreach (var tx in transactions)
+            {
+                tx.UtilisateurId = null;
+            }
 
             _context.Utilisateurs.Remove(user);
             await _context.SaveChangesAsync();

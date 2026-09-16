@@ -86,7 +86,7 @@ async function exportExcel(rows: ExportRow[], headers: string[], filename: strin
     const name = filename.endsWith(".xlsx") ? filename : filename + ".xlsx";
     downloadBuffer(wbout, name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   } catch (err) {
-    console.error("Excel export error:", err);
+    console.warn("Excel export error:", err);
     throw err;
   }
 }
@@ -133,7 +133,7 @@ function exportWord(rows: ExportRow[], headers: string[], filename: string, labe
     const blob = new Blob(["\ufeff" + html], { type: "application/msword;charset=utf-8" });
     downloadBlob(blob, filename.endsWith(".doc") ? filename : filename + ".doc");
   } catch (err) {
-    console.error("Word export error:", err);
+    console.warn("Word export error:", err);
     throw err;
   }
 }
@@ -171,7 +171,7 @@ export async function downloadExcelTemplate(langue: "fr" | "ar" = "fr") {
   downloadBuffer(wbout, name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 
-export function parseCSV(text: string): ExportRow[] {
+function parseCSV(text: string): ExportRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
 
@@ -217,7 +217,7 @@ function parseCSVLine(line: string, sep: string): string[] {
   return result;
 }
 
-export interface ImportResult {
+interface ImportResult {
   columns: string[];
   data: ExportRow[];
 }

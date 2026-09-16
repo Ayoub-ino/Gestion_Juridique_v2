@@ -1,12 +1,14 @@
 "use client";
 
 import type { TranslationKeys } from "@/lib/translations";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { exportRows, ExportFormat } from "@/lib/exportImport";
+import { getErrorMessage } from "@/lib/utils";
+import { confirmAction, notify } from "@/lib/feedback";
 import { api } from "@/lib/api/client";
 
 interface Props {
@@ -40,6 +42,24 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
   const [commentaires, setCommentaires] = useState<Record<number, string>>({});
   const [retours, setRetours] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(false);
+  // Transactions with a decision currently in flight. A second request for the
+  // same row is refused before it is sent: the backend answers the duplicate
+  // with 4xx (the transaction is already decided), which used to surface as a
+  // stream of errors when a user clicked an action a few times.
+  const [busyIds, setBusyIds] = useState<number[]>([]);
+  const inFlight = useRef<Set<number>>(new Set());
+
+  const beginAction = (id: number): boolean => {
+    if (inFlight.current.has(id)) return false;
+    inFlight.current.add(id);
+    setBusyIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    return true;
+  };
+
+  const endAction = (id: number) => {
+    inFlight.current.delete(id);
+    setBusyIds(prev => prev.filter(x => x !== id));
+  };
 
   const fetchTransactions = useCallback(async () => {
     if (!token) return;
@@ -47,7 +67,7 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
     try {
       setTransactions(await api.get<TransactionData[]>("/api/Transactions/all", token));
     } catch (err) {
-      console.error("Erreur fetch transactions:", err);
+      console.warn("Erreur fetch transactions:", getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -74,63 +94,72 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
   const { getServiceLabel } = useServiceLabels(token, langue);
 
   const handleAccept = async (id: number) => {
-    if (!canAccept) { alert(cur.permissionRefusee); return; }
+    if (!canAccept) { notify(cur.permissionRefusee); return; }
     if (!token) return;
+    if (!beginAction(id)) return;
     try {
       await api.put(`/api/Transactions/${id}/accepter`, { commentaire: commentaires[id] || "" }, token);
-      alert(langue === "fr" ? "Transaction acceptée avec succès" : "تم قبول المعاملة بنجاح");
+      notify(langue === "fr" ? "Transaction acceptée avec succès" : "تم قبول المعاملة بنجاح");
       fetchTransactions();
       onAccepted?.();
     } catch (err) {
-      console.error("Accept error:", err);
+      console.warn("Accept error:", getErrorMessage(err));
       const msg = err instanceof Error ? err.message : "";
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors de l'acceptation: " : "خطأ أثناء القبول: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
+    } finally {
+      endAction(id);
     }
   };
 
   const handleRefuse = async (id: number) => {
-    if (!canRefuse) { alert(cur.permissionRefusee); return; }
+    if (!canRefuse) { notify(cur.permissionRefusee); return; }
     if (!token) return;
     const motif = commentaires[id] || "";
     if (!motif) {
-      alert(langue === "fr" ? "Veuillez saisir un motif de refus" : "يرجى إدخال سبب الرفض");
+      notify(langue === "fr" ? "Veuillez saisir un motif de refus" : "يرجى إدخال سبب الرفض");
       return;
     }
+    if (!beginAction(id)) return;
     try {
       await api.put(`/api/Transactions/${id}/refuser`, { commentaire: motif, doitRevenir: !!retours[id] }, token);
-      alert(langue === "fr" ? "Transaction refusée" : "تم رفض المعاملة");
+      notify(langue === "fr" ? "Transaction refusée" : "تم رفض المعاملة");
       fetchTransactions();
       onAccepted?.();
     } catch (err) {
-      console.error("Refuse error:", err);
+      console.warn("Refuse error:", getErrorMessage(err));
       const msg = err instanceof Error ? err.message : "";
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors du refus: " : "خطأ أثناء الرفض: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
+    } finally {
+      endAction(id);
     }
   };
 
   const handleAnnuler = async (id: number) => {
     if (!token) return;
-    const confirmed = confirm(
+    const confirmed = await confirmAction(
       langue === "fr"
         ? "Annuler cette transition ? Le dossier retournera au service précédent."
         : "إلغاء هذه المعاملة؟ سيعود الملف للمصلحة السابقة."
     );
     if (!confirmed) return;
+    if (!beginAction(id)) return;
     try {
       await api.put(`/api/Transactions/${id}/annuler-transition`, {}, token);
-      alert(langue === "fr" ? "Transaction annulée avec succès" : "تم إلغاء المعاملة بنجاح");
+      notify(langue === "fr" ? "Transaction annulée avec succès" : "تم إلغاء المعاملة بنجاح");
       fetchTransactions();
       onAccepted?.();
     } catch (err) {
-      console.error("Annuler error:", err);
+      console.warn("Annuler error:", getErrorMessage(err));
       const msg = err instanceof Error ? err.message : "";
-      alert(
+      notify(
         (langue === "fr" ? "Erreur lors de l'annulation: " : "خطأ أثناء الإلغاء: ") + (msg || (langue === "fr" ? "Veuillez réessayer." : "يرجى المحاولة مرة أخرى."))
       );
+    } finally {
+      endAction(id);
     }
   };
 
@@ -228,6 +257,7 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                 {transactions.map((t) => {
                   const isSender = t.role === "sender";
                   const isReceiver = t.role === "receiver";
+                  const busy = busyIds.includes(t.id);
                   return (
                   <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="p-3 font-bold">{t.documentSujet}</td>
@@ -266,7 +296,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                               <button
                                 type="button"
                                 onClick={() => handleAccept(t.id)}
-                                className="px-2.5 py-1.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold hover:bg-slate-300 transition whitespace-nowrap self-start"
+                                disabled={busy}
+                                className="px-2.5 py-1.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold hover:bg-slate-300 transition whitespace-nowrap self-start disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {langue === "fr" ? "Accusé de réception" : "تأكيد الاستلام"}
                               </button>
@@ -300,7 +331,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                             <button
                               type="button"
                               onClick={() => handleAccept(t.id)}
-                              className="px-2.5 py-1.5 rounded bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-700 transition whitespace-nowrap"
+                              disabled={busy}
+                              className="px-2.5 py-1.5 rounded bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-700 transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {langue === "fr" ? "Accepter" : "قبول"}
                             </button>
@@ -309,7 +341,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                             <button
                               type="button"
                               onClick={() => handleRefuse(t.id)}
-                              className="px-2.5 py-1.5 rounded bg-red-500 text-white text-[10px] font-bold hover:bg-red-600 transition whitespace-nowrap"
+                              disabled={busy}
+                              className="px-2.5 py-1.5 rounded bg-red-500 text-white text-[10px] font-bold hover:bg-red-600 transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {langue === "fr" ? "Refuser" : "رفض"}
                             </button>
@@ -319,7 +352,8 @@ export function TransactionsPage({ langue, cur, token, onAccepted }: Props) {
                             <button
                               type="button"
                               onClick={() => handleAnnuler(t.id)}
-                              className="px-2.5 py-1.5 rounded bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 transition whitespace-nowrap"
+                              disabled={busy}
+                              className="px-2.5 py-1.5 rounded bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {langue === "fr" ? "Annuler l'envoi" : "إلغاء الإرسال"}
                             </button>

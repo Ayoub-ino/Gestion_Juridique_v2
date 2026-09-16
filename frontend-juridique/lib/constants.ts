@@ -132,7 +132,7 @@ export function getRoleLabel(role: string, langue: Langue): string {
  * into "Seances Procedures" so a raw service code is never shown to the user.
  * Values that are already words ("User", "Archive") are left untouched.
  */
-export function humanizeCode(value: string): string {
+function humanizeCode(value: string): string {
   if (!value) return value;
   const spaced = value
     .replace(/[_-]+/g, " ")
@@ -176,29 +176,6 @@ export function getDelayDays(dateStr: string): number {
   if (isNaN(d.getTime())) return 0;
   const now = new Date();
   return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-export const PARENT_CHILDREN: Record<string, string[]> = {
-  JalsatWaIjra2at: ["Ijra2Baht", "MofawidMalaki", "Khibra", "MustacharMoqarir"],
-  TaslimNusakh: ["Tabligh", "TasfiyatSawa2ir", "Archive"],
-};
-
-export function getChildrenOf(parent: string): string[] {
-  return PARENT_CHILDREN[parent] || [];
-}
-
-export function isParentService(value: string): boolean {
-  return value in PARENT_CHILDREN;
-}
-
-export function expandWithChildren(services: string[]): string[] {
-  const expanded = new Set<string>();
-  for (const s of services) {
-    expanded.add(s);
-    const children = getChildrenOf(s);
-    for (const c of children) expanded.add(c);
-  }
-  return Array.from(expanded);
 }
 
 export const USER_SERVICE_TO_ENUM: Record<string, string> = {

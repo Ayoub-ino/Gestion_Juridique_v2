@@ -175,7 +175,7 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
 
       setListeCourriers(allDocs);
     } catch (err) {
-      console.error("❌ Erreur fetch:", err);
+      console.warn("❌ Erreur fetch:", err);
       // On ne lance pas d'erreur, on laisse un tableau vide
       setError(getErrorMessage(err) || "Erreur de chargement");
       setListeCourriers([]);

@@ -8,6 +8,7 @@ import { useRef } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceOptions } from "@/app/hooks/useServiceOptions";
+import { notify } from "@/lib/feedback";
 
 interface JuridiqueFormProps {
   // Nouveaux champs
@@ -150,7 +151,7 @@ export function JuridiqueForm({
     try {
       const browserWindow = window as typeof window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
       if (!browserWindow.showDirectoryPicker) {
-        alert(langue === "fr"
+        notify(langue === "fr"
           ? "Votre navigateur ne supporte pas la sélection de dossier."
           : "المتصفح لا يدعم اختيار المجلد.");
         return;
@@ -698,7 +699,7 @@ export function JuridiqueForm({
                     type="button"
                     onClick={() => {
                       if (!numeroDossierAppel) {
-                        alert(langue === "fr" ? "Veuillez attribuer un numéro de dossier" : "يرجى تحديد رقم الملف");
+                        notify(langue === "fr" ? "Veuillez attribuer un numéro de dossier" : "يرجى تحديد رقم الملف");
                         return;
                       }
                       setEtapeService(2);
@@ -758,7 +759,7 @@ export function JuridiqueForm({
                       type="button"
                       onClick={() => {
                         if (!numCourAppel) {
-                          alert(langue === "fr" ? "Veuillez attribuer le numéro de Cour d'Appel" : "يرجى تحديد رقم محكمة الاستئناف");
+                          notify(langue === "fr" ? "Veuillez attribuer le numéro de Cour d'Appel" : "يرجى تحديد رقم محكمة الاستئناف");
                           return;
                         }
                         setEtapeService(3);
@@ -816,7 +817,7 @@ export function JuridiqueForm({
                       type="button"
                       onClick={() => {
                         if (!typeException) {
-                          alert(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
+                          notify(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
                           return;
                         }
                         setEtapeService(4);
@@ -1190,10 +1191,10 @@ export function JuridiqueForm({
               type="button"
               onClick={() => {
                 if (!typeException) {
-                  alert(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
+                  notify(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
                   return;
                 }
-                alert(langue === "fr" ? "Dossier enregistré en Kitaba Khasa" : "تم تسجيل الملف في الكتابة الخاصة");
+                notify(langue === "fr" ? "Dossier enregistré en Kitaba Khasa" : "تم تسجيل الملف في الكتابة الخاصة");
               }}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-xs transition"
             >

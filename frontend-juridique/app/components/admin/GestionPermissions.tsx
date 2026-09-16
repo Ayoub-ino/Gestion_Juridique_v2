@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Langue, RbacService, ServicePermission } from "@/app/types";
 import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
+import { notify } from "@/lib/feedback";
 
 interface Props {
   langue: Langue;
@@ -46,7 +47,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
     try {
       setMatrix(await api.get<MatrixData>("/api/rbac/permissions/matrix", token));
     } catch (err) {
-      console.error("Error fetching matrix:", err);
+      console.warn("Error fetching matrix:", err);
     }
     setLoading(false);
   }, [token]);
@@ -56,7 +57,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
     try {
       setServices(await api.get<RbacService[]>("/api/rbac/services", token));
     } catch (err) {
-      console.error("Error fetching services:", err);
+      console.warn("Error fetching services:", err);
     }
   }, [token]);
 
@@ -66,7 +67,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
       const data = await api.get<{ permissions: AdminPerm[] }>("/api/rbac/permissions/admin", token);
       setAdminPermissions(data.permissions || []);
     } catch (err) {
-      console.error("Error fetching admin permissions:", err);
+      console.warn("Error fetching admin permissions:", err);
     }
   }, [token]);
 
@@ -77,7 +78,7 @@ export function GestionPermissions({ langue, cur, token }: Props) {
       const data = await api.get<{ permissions: ServicePermission[] }>(`/api/rbac/permissions/service/${serviceId}`, token);
       setServicePerms(data.permissions);
     } catch (err) {
-      console.error("Error fetching service permissions:", err);
+      console.warn("Error fetching service permissions:", err);
     }
     setLoading(false);
   }, [token]);
@@ -115,12 +116,12 @@ export function GestionPermissions({ langue, cur, token }: Props) {
         { permissions: servicePerms.map(p => ({ permissionKey: p.key, enabled: p.enabled })) },
         token
       );
-      alert(langue === "fr" ? "Permissions sauvegardées" : "تم حفظ الصلاحيات");
+      notify(langue === "fr" ? "Permissions sauvegardées" : "تم حفظ الصلاحيات");
       setView("matrix");
       setSelectedServiceId(null);
       fetchMatrix();
     } catch (err) {
-      alert(getErrorMessage(err) || "Erreur");
+      notify(getErrorMessage(err) || "Erreur");
     }
     setSaving(false);
   };
@@ -134,14 +135,14 @@ export function GestionPermissions({ langue, cur, token }: Props) {
         { permissions: adminEditPerms.map(p => ({ permissionKey: p.key, enabled: p.enabled })) },
         token
       );
-      alert(langue === "fr" ? "Permissions administrateur sauvegardées" : "تم حفظ صلاحيات المدير");
+      notify(langue === "fr" ? "Permissions administrateur sauvegardées" : "تم حفظ صلاحيات المدير");
       setView("matrix");
       setIsEditingAdmin(false);
       setSelectedServiceId(null);
       fetchMatrix();
       fetchAdminPermissions();
     } catch (err) {
-      alert(getErrorMessage(err) || "Erreur");
+      notify(getErrorMessage(err) || "Erreur");
     }
     setSaving(false);
   };

@@ -4,6 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api/client";
+import { confirmAction, notify } from "@/lib/feedback";
 
 interface Retrait {
   id: number;
@@ -57,10 +58,10 @@ export function ArchiveRetraitPage({
   }, [fetchRetraits]);
 
   const handleSave = async () => {
-    if (!canRetrait) { alert(langue === "fr" ? "Action non autorisée" : "إجراء غير مصرح به"); return; }
+    if (!canRetrait) { notify(langue === "fr" ? "Action non autorisée" : "إجراء غير مصرح به"); return; }
     if (!selectedDoc || !token) return;
     if (!motifRetrait.trim()) {
-      alert(langue === "fr" ? "Le motif du retrait est obligatoire" : "سبب الإخراج مطلوب");
+      notify(langue === "fr" ? "Le motif du retrait est obligatoire" : "سبب الإخراج مطلوب");
       return;
     }
     setLoading(true);
@@ -79,14 +80,14 @@ export function ArchiveRetraitPage({
         },
         token
       );
-      alert(langue === "fr" ? "Retrait enregistré" : "تم تسجيل الإخراج");
+      notify(langue === "fr" ? "Retrait enregistré" : "تم تسجيل الإخراج");
       setMotifRetrait("");
       setNotes("");
       setDateRetour("");
       setDateRetrait(new Date().toISOString().split("T")[0]);
       fetchRetraits();
     } catch {
-      alert(langue === "fr" ? "Erreur serveur" : "خطأ في الخادم");
+      notify(langue === "fr" ? "Erreur serveur" : "خطأ في الخادم");
     }
     setLoading(false);
   };
@@ -94,13 +95,13 @@ export function ArchiveRetraitPage({
   const handleAnnuler = async (id: number) => {
     if (!token) return;
     const msg = langue === "fr" ? "Annuler ce retrait ?" : "هل تريد إلغاء هذا الإخراج ?";
-    if (!confirm(msg)) return;
+    if (!await confirmAction(msg)) return;
     try {
       await api.patch(`/api/Retrait/${id}/annuler`, undefined, token);
-      alert(langue === "fr" ? "Retrait annulé" : "تم الإلغاء");
+      notify(langue === "fr" ? "Retrait annulé" : "تم الإلغاء");
       fetchRetraits();
     } catch {
-      alert(langue === "fr" ? "Erreur lors de l'annulation du retrait" : "خطأ في إلغاء الإخراج");
+      notify(langue === "fr" ? "Erreur lors de l'annulation du retrait" : "خطأ في إلغاء الإخراج");
     }
   };
 
@@ -108,10 +109,10 @@ export function ArchiveRetraitPage({
     if (!token) return;
     try {
       await api.patch(`/api/Retrait/${id}/retourner`, undefined, token);
-      alert(langue === "fr" ? "Document retourné" : "تم إرجاع الوثيقة");
+      notify(langue === "fr" ? "Document retourné" : "تم إرجاع الوثيقة");
       fetchRetraits();
     } catch {
-      alert(langue === "fr" ? "Erreur lors du retour du document" : "خطأ في إرجاع الوثيقة");
+      notify(langue === "fr" ? "Erreur lors du retour du document" : "خطأ في إرجاع الوثيقة");
     }
   };
 

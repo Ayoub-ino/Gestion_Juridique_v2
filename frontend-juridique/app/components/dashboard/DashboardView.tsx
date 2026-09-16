@@ -10,6 +10,7 @@ import { GeneralTable } from "@/app/components/tables/GeneralTable";
 import { SortantTable } from "@/app/components/tables/SortantTable";     
 import { WORKFLOW_STEPS } from "@/lib/constants";
 import { ExportFormat } from "@/lib/exportImport";
+import { notify } from "@/lib/feedback";
 
 interface DashboardViewProps {
   searchTerm: string;
@@ -168,7 +169,7 @@ export function DashboardView({
         selectedDoc={workflowDoc}
         allDocs={allDocs}
         onStepClick={(stepLabel, index) => {
-          alert(`${cur.stage1} ${index + 1}: ${stepLabel}`);
+          notify(`${cur.stage1} ${index + 1}: ${stepLabel}`);
         }}
         onSelectDoc={onViewDoc}
         cur={cur}

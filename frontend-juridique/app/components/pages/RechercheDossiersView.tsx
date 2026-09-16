@@ -2,7 +2,7 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule, Langue } from "@/app/types";
-import { normalizeStatus } from "@/lib/utils";
+import { getDocServiceCode, isDocInService, normalizeStatus } from "@/lib/utils";
 import { exportRows } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 
@@ -66,7 +66,8 @@ export function RechercheDossiersView({
       );
     }
     if (searchFilterService) {
-      results = results.filter((doc) => doc.serviceActuel === searchFilterService);
+      // `doc.serviceActuel` is the display label — compare on service codes.
+      results = results.filter((doc) => isDocInService(doc, searchFilterService));
     }
     if (searchFilterType) {
       results = results.filter((doc) => doc.type === searchFilterType);
@@ -115,7 +116,7 @@ export function RechercheDossiersView({
         <div className="flex flex-wrap gap-2 mt-3">
           <select value={searchFilterService} onChange={(e) => setSearchFilterService(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none">
             <option value="">{cur.tousLesServices}</option>
-            {[...new Set(visibleCourriers.map(d => d.serviceActuel))].sort().map(svc => (
+            {[...new Set(visibleCourriers.map((d) => getDocServiceCode(d) || d.serviceActuel))].sort().map(svc => (
               <option key={svc} value={svc}>{getServiceLabel(svc, langue)}</option>
             ))}
           </select>

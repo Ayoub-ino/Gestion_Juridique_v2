@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LangueSwitcher } from '@/app/components/common/LangueSwitcher';
+import { FeedbackHost } from '@/app/components/common/FeedbackHost';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <LangueSwitcher />
+            <FeedbackHost />
             {children}
           </AuthProvider>
         </ThemeProvider>

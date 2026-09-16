@@ -26,14 +26,18 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 
 - **Document Management**: Create, edit, transfer, and archive administrative and juridical correspondence
 - **Multi-Service Routing**: Transfer documents between tribunal services with single or multi-user assignment
+- **Service-Based Custody**: Only the service currently holding a folder can edit, modify, or transfer it
+- **Dynamic Service Catalog**: Services are resolved from the live database — no hardcoded labels
 - **RBAC Permission System**: 18 dynamic permissions controlling both API access and UI visibility
-- **Admin Override Layer**: Admin user has 20 disabled-by-default permissions to prevent routine operations
-- **Historical Services**: Record-only entities for audit trails — transfers auto-accept since no users log in
+- **Admin Override Layer**: Admin user has disabled-by-default permissions to prevent routine operations
+- **Historical Services**: Record-only entities for audit trails — transfers add to history without moving custody
 - **Service Soft-Delete**: Archive/restore services without data loss; permanent delete with safety guards
-- **Bilingual Interface**: Full French/Arabic support with RTL layout
-- **Import/Export**: Excel and Word document import/export
+- **Bilingual Interface**: Full French/Arabic support with RTL layout and proper Arabic terminology
+- **Transaction Lifecycle**: Full sender → receiver workflow with accept, refuse, cancel, and notification sync
+- **Import/Export**: Excel and Word document import/export with self-seeding E2E tests
 - **Dashboard & Analytics**: Real-time document statistics and workflow visualization
 - **Dark/Light Theme**: Toggle between themes with persistent preference
+- **In-App Feedback**: Toast notifications and confirmation dialogs replacing native browser alerts
 
 ---
 
@@ -62,45 +66,90 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 ## 📁 Project Structure
 
 ```
-projet-gestion-juridique-main/
+Gestion_Juridique-main/
 ├── WebApplication1/                    # Backend (.NET)
 │   ├── WebApplication1/
-│   │   ├── Controllers/                # API controllers (12 endpoints)
-│   │   ├── Models/                     # EF Core entity models
+│   │   ├── Controllers/                # API controllers
+│   │   │   ├── AuthController.cs       # Login, logout, /me
+│   │   │   ├── DocumentsController.cs  # CRUD + archive + permanent delete
+│   │   │   ├── TransferController.cs   # Folder transfer between services
+│   │   │   ├── TransactionsController.cs  # Accept/refuse/cancel transfers
+│   │   │   ├── CourrierAdminController.cs
+│   │   │   ├── CourrierJuridiqueController.cs
+│   │   │   ├── CourrierSortantController.cs
+│   │   │   ├── UsersController.cs
+│   │   │   ├── RbacPermissionsController.cs
+│   │   │   ├── RbacServicesController.cs
+│   │   │   ├── WorkspaceController.cs  # Document access control
+│   │   │   └── ... (12 controllers total)
+│   │   ├── Models/                     # EF Core entity models + enums
+│   │   │   ├── Document.cs
+│   │   │   ├── CourrierAdministratif.cs
+│   │   │   ├── DossierJuridique.cs
+│   │   │   ├── CourrierSortant.cs
+│   │   │   ├── Transaction.cs
+│   │   │   ├── Utilisateur.cs
+│   │   │   ├── Service.cs
+│   │   │   ├── ServicePermission.cs
+│   │   │   ├── DocumentAccess.cs
+│   │   │   ├── ServiceTribunal.cs      # Legacy enum (mapped to RBAC codes)
+│   │   │   ├── StatutDossier.cs
+│   │   │   ├── StatutTransaction.cs
+│   │   │   └── ... (18 models total)
 │   │   ├── Services/                   # Business logic services
+│   │   │   ├── DocumentAccessService.cs    # ACL + custody checks
+│   │   │   ├── TransactionService.cs       # Transfer lifecycle
+│   │   │   ├── PermissionService.cs        # Dynamic RBAC
+│   │   │   ├── PermissionValidationService.cs
+│   │   │   ├── ServiceCatalog.cs           # Live service resolution
+│   │   │   ├── SeederService.cs            # DB seed on startup
+│   │   │   └── WorkspaceService.cs
 │   │   ├── Security/                   # RequirePermission attribute
 │   │   ├── Middleware/                 # Auth & permission middleware
+│   │   ├── Helpers/                    # ServiceMapper, utility helpers
+│   │   ├── Data/                       # AppDbContext
 │   │   ├── Migrations/                 # EF Core database migrations
-│   │   ├── Core/Enums/                 # ServiceTribunal, StatutDossier, etc.
-│   │   ├── DTO/                        # Data Transfer Objects
-│   │   ├── Helpers/                    # Utility helpers
-│   │   ├── data/                       # DbContext (AppDbContext)
 │   │   └── Program.cs                  # Application entry point
-│   └── WebApplication1.Tests/          # xUnit unit tests (85 tests)
+│   └── WebApplication1.Tests/          # xUnit unit tests (105 tests)
 │
 ├── frontend-juridique/                 # Frontend (Next.js)
 │   ├── app/
 │   │   ├── page.tsx                    # Main SPA entry point
 │   │   ├── layout.tsx                  # Root layout with providers
 │   │   ├── components/
-│   │   │   ├── admin/                  # Admin panels (GestionUtilisateurs, GestionServices, etc.)
-│   │   │   ├── modals/                 # Transfer, Workspace, Detail modals
-│   │   │   ├── pages/                  # LoginPage, NotificationsPage, etc.
-│   │   │   ├── tables/                 # GeneralTable, SortantTable
+│   │   │   ├── admin/                  # GestionUtilisateurs, GestionServices,
+│   │   │   │                           # GestionPermissions, GestionEquipements,
+│   │   │   │                           # GestionListes, GestionServicesHistoriques
+│   │   │   ├── modals/                 # TransferModal, WorkspaceModal, DetailModal
+│   │   │   ├── pages/                  # LoginPage, NotificationsPage, TransactionsPage,
+│   │   │   │                           # MesEntitesView, ArchivesView, ProfilPage
+│   │   │   ├── tables/                 # GeneralTable
 │   │   │   ├── layout/                 # Sidebar, Header
-│   │   │   ├── dashboard/              # DashboardView
-│   │   │   └── common/                 # ExportButtons, shared components
-│   │   ├── hooks/                      # useDocuments, useListItems
+│   │   │   ├── dashboard/              # DashboardView, WorkflowSteps, StatsCircles
+│   │   │   ├── forms/                  # AdminForm, JuridiqueForm, SortantForm
+│   │   │   └── common/                 # FeedbackHost, LangueSwitcher, ExportButtons
+│   │   ├── hooks/                      # useDocuments, useListItems, useServiceLabels,
+│   │   │                               # useServiceOptions
 │   │   └── types/                      # TypeScript type definitions
 │   ├── context/                        # AuthContext, ThemeContext
 │   ├── lib/
 │   │   ├── translations.ts             # FR/AR bilingual translations
-│   │   ├── constants.ts                # Service groups, enums
-│   │   ├── exportImport.ts             # Excel/Word export logic
+│   │   ├── constants.ts                # Service groups, safeGetServiceLabel()
+│   │   ├── exportImport.ts             # Excel/Word export (dynamic imports)
+│   │   ├── feedback.ts                 # Toast + confirm dialog (replaces alert/confirm)
 │   │   ├── api/                        # HTTP client wrapper
-│   │   └── utils.ts                    # Utility functions
+│   │   ├── types/                      # api.generated.ts (OpenAPI types)
+│   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   └── e2e/                        # E2E test specs (59 tests)
+│   │   ├── e2e/                        # E2E test specs (77 tests across 7 specs)
+│   │   │   ├── app.cy.ts               # Core app flows (35 tests)
+│   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
+│   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer UI (6 tests)
+│   │   │   ├── repeated-actions.cy.ts  # Regression: repeated clicks (3 tests)
+│   │   │   ├── export.cy.ts            # Excel/Word export (3 tests)
+│   │   │   ├── admin-boundaries.cy.ts  # Admin role isolation (2 tests)
+│   │   │   └── permission-persistence.cy.ts  # Permission reload (1 test)
+│   │   └── support/                    # dbCleanup.ts, commands.ts
 │   └── public/                         # Static assets
 │
 ├── scripts/
@@ -108,8 +157,9 @@ projet-gestion-juridique-main/
 │   ├── generate-permission-matrix.sh   # Auto-generate permission docs
 │   └── grant-permissions-existing-db.sql
 │
-├── dbinitialisation/                   # Database seed scripts
-└── PERMISSION_MATRIX.md                # Auto-generated permission reference
+├── CHANGELOG_AGENTS.md                 # Agent session log
+├── PERMISSION_MATRIX.md                # Auto-generated permission reference
+└── README.md
 ```
 
 ---
@@ -200,13 +250,21 @@ Open **http://localhost:3000** in your browser.
 ### Run all tests
 
 ```bash
-# Backend unit tests (85 tests)
-cd WebApplication1
-dotnet test WebApplication1.Tests/WebApplication1.Tests.csproj
+# Backend unit tests (105 tests)
+cd WebApplication1/WebApplication1.Tests
+dotnet test
 
-# Frontend E2E tests (59 tests)
+# Frontend E2E tests (77 tests across 7 specs)
 cd frontend-juridique
-npx cypress run
+CYPRESS_API_URL=http://localhost:5200 npx cypress run
+
+# Frontend type check
+cd frontend-juridique
+npx tsc --noEmit
+
+# Frontend lint
+cd frontend-juridique
+npx eslint .
 
 # Permission audit (46 checks)
 bash scripts/permission-audit.sh
@@ -216,10 +274,16 @@ bash scripts/permission-audit.sh
 
 | Test Suite | Count | Command |
 |---|---|---|
-| Backend unit tests | 103 | `dotnet test` |
+| Backend unit tests | 105 | `dotnet test` |
 | Cypress E2E — app.cy.ts | 35 | `npx cypress run --spec cypress/e2e/app.cy.ts` |
-| Cypress E2E — permission-toggle | 27 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
+| Cypress E2E — permission-toggle.cy.ts | 27 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
+| Cypress E2E — dynamic-service-transfer.cy.ts | 6 | `npx cypress run --spec cypress/e2e/dynamic-service-transfer.cy.ts` |
+| Cypress E2E — export.cy.ts | 3 | `npx cypress run --spec cypress/e2e/export.cy.ts` |
+| Cypress E2E — repeated-actions.cy.ts | 3 | `npx cypress run --spec cypress/e2e/repeated-actions.cy.ts` |
+| Cypress E2E — admin-boundaries.cy.ts | 2 | `npx cypress run --spec cypress/e2e/admin-boundaries.cy.ts` |
+| Cypress E2E — permission-persistence.cy.ts | 1 | `npx cypress run --spec cypress/e2e/permission-persistence.cy.ts` |
 | Permission audit | 46 | `bash scripts/permission-audit.sh` |
+| **Total** | **182** | |
 
 ---
 
@@ -311,9 +375,14 @@ After seeding the database, these users are available:
 |---|---|---|---|---|
 | `admin` | `admin123` | Admin | — | System administrator (limited permissions by default) |
 | `bureauordre` | `bureauordre123` | User | Bureau d'ordre | Main document management |
-| `fathmilafat` | `fathmilafat123` | User | Fathm Alafat | Juridical case tracking |
-| `secretarait` | `secretarait123` | User | Secrétariat | Secretary functions |
+| `fathmilafat` | `fathmilafat123` | User | Ouverture des dossiers | Juridical case tracking |
+| `secretarait` | `secretarait123` | User | Secrétariat général | Secretary functions |
+| `seances` | `seances123` | User | Séances & Procédures | Hearing management |
+| `khibra` | `khibra123` | User | Expertise judiciaire | Judicial expertise |
+| `taslimnosakh` | `taslim123` | User | Délivrance des copies | Copy delivery |
+| `tasfiya` | `tasfiya123` | User | Règlement des dépens | Cost settlement |
 | `archive` | `archive123` | User | Archive | Document archival |
+| `atabligh` | `atabligh123` | User | Notification | Notification service |
 
 ---
 
@@ -323,4 +392,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 103 unit tests, 62 E2E tests, 46 audit checks ✅
+> Last verified: September 2026 — 105 unit tests, 77 E2E tests, 46 audit checks ✅
+> All 182 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

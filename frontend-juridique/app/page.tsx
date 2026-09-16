@@ -40,6 +40,7 @@ import { useDocuments } from "@/app/hooks/useDocuments";
 import { exportRows, importFromFile, downloadExcelTemplate, ExportFormat, ExportRow } from "@/lib/exportImport";
 import { useListItems } from "@/app/hooks/useListItems";
 import { api, ApiError } from "@/lib/api/client";
+import { confirmAction, notify } from "@/lib/feedback";
 import { Langue, VueActive, CourrierSimule, LocalRetrait } from "@/app/types";
 
 // API payload shapes for the shell's local lists (mirror backend projections).
@@ -185,7 +186,7 @@ export default function Home() {
         setPendingNotifications(0);
         return;
       }
-      console.error("Fetch pending error:", err);
+      console.warn("Fetch pending error:", err);
     }
     try {
       const statsData = await api.get<typeof transactionStats>("/api/Transactions/stats", token);
@@ -195,7 +196,7 @@ export default function Home() {
         setTransactionStats({ total: 0, acceptes: 0, refuses: 0, enAttente: 0, pourcentage: 0 });
         return;
       }
-      console.error("Fetch stats error:", err);
+      console.warn("Fetch stats error:", err);
     }
   }, [token]);
 
@@ -530,7 +531,7 @@ export default function Home() {
     if (!token) return;
     try {
       setCorbeilleDocs(await api.get("/api/Documents/corbeille", token));
-    } catch (err) { console.error("Fetch corbeille error:", err); alert(cur.erreurChargement); }
+    } catch (err) { console.warn("Fetch corbeille error:", err); notify(cur.erreurChargement); }
   };
 
   const restoreDocument = async (id: number) => {
@@ -539,9 +540,9 @@ export default function Home() {
       await api.patch(`/api/Documents/${id}/restaurer`, undefined, token);
       await fetchCorbeille();
       await refetch();
-      alert(cur.documentRestauré);
+      notify(cur.documentRestauré);
     } catch (e) {
-      alert(`${cur.erreurRestauration}: ${getErrorMessage(e)}`);
+      notify(`${cur.erreurRestauration}: ${getErrorMessage(e)}`);
     }
   };
 
@@ -550,9 +551,9 @@ export default function Home() {
     try {
       await api.delete(`/api/Documents/${id}/permanent`, token);
       await fetchCorbeille();
-      alert(langue === "fr" ? "Document supprimé définitivement" : "تم الحذف نهائياً");
+      notify(langue === "fr" ? "Document supprimé définitivement" : "تم الحذف نهائياً");
     } catch (e) {
-      alert(getErrorMessage(e));
+      notify(getErrorMessage(e));
     }
   };
 
@@ -560,7 +561,7 @@ export default function Home() {
     try {
       const w = window as typeof window & { showDirectoryPicker?: (opts?: { mode: string }) => Promise<FileSystemDirectoryHandle> };
       if (typeof w.showDirectoryPicker !== "function") {
-        alert(cur.navigateurNonSupport);
+        notify(cur.navigateurNonSupport);
         return;
       }
       const dirHandle = await w.showDirectoryPicker({ mode: "read" });
@@ -607,7 +608,7 @@ export default function Home() {
                 const text = await file.text();
                 files.push({ name: file.name, content: text, path: entryPath });
               }
-            } catch (fileErr) { console.error("File read error:", entry.name, fileErr); }
+            } catch (fileErr) { console.warn("File read error:", entry.name, fileErr); }
           } else if (entry.kind === "directory") {
             await readDir(entry as FileSystemDirectoryHandle, entryPath);
           }
@@ -617,11 +618,11 @@ export default function Home() {
       await readDir(dirHandle, "");
       setLocalFiles(files);
       setSearchLocalFiles(true);
-      alert(cur.fichiersTrouves(files.length));
+      notify(cur.fichiersTrouves(files.length));
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === "AbortError";
       if (!isAbort) {
-        alert(cur.erreurAccesFichiers);
+        notify(cur.erreurAccesFichiers);
       }
     }
   };
@@ -706,7 +707,7 @@ export default function Home() {
       if (!url) return;
       const data = await api.get<unknown[]>(url, token);
       if (!Array.isArray(data) || data.length === 0) {
-        alert(cur.aucuneDonneeExport);
+        notify(cur.aucuneDonneeExport);
         return;
       }
       const rows = (data as Record<string, unknown>[]).map((item) => {
@@ -720,7 +721,7 @@ export default function Home() {
       });
       exportRows(rows, type, format, String((cur as Record<string, unknown>)[type] || "") || type);
     } catch {
-      alert(cur.erreurExport);
+      notify(cur.erreurExport);
     }
   };
 
@@ -729,7 +730,7 @@ export default function Home() {
     try {
       const data = await api.get<unknown[]>("/api/Transactions", token);
       if (!Array.isArray(data) || data.length === 0) {
-        alert(cur.aucuneDonneeExport);
+        notify(cur.aucuneDonneeExport);
         return;
       }
       const rows = (data as Record<string, unknown>[]).map((t) => ({
@@ -742,7 +743,7 @@ export default function Home() {
       }));
       exportRows(rows, "notifications", format, cur.notifications);
     } catch {
-      alert(cur.erreurExport);
+      notify(cur.erreurExport);
     }
   };
 
@@ -761,7 +762,7 @@ export default function Home() {
       const result = await importFromFile(file);
       const data = result.data;
       if (data.length === 0) {
-        alert(cur.aucuneDonneeFichier);
+        notify(cur.aucuneDonneeFichier);
         return;
       }
       // Always show mapping modal for Excel files
@@ -772,7 +773,7 @@ export default function Home() {
       setImportFile(file);
       setShowMappingModal(true);
     } catch (err) {
-      alert(getErrorMessage(err) || cur.erreurImport);
+      notify(getErrorMessage(err) || cur.erreurImport);
     }
   };
 
@@ -783,7 +784,7 @@ export default function Home() {
       const result = await importFromFile(file);
       const data = result.data;
       if (data.length === 0) {
-        alert(cur.aucuneDonneeFichier);
+        notify(cur.aucuneDonneeFichier);
         e.target.value = "";
         return;
       }
@@ -795,7 +796,7 @@ export default function Home() {
       setImportFile(file);
       setShowMappingModal(true);
     } catch (err) {
-      alert(getErrorMessage(err) || cur.erreurImport);
+      notify(getErrorMessage(err) || cur.erreurImport);
     }
     e.target.value = "";
   };
@@ -828,11 +829,11 @@ export default function Home() {
         token
       );
 
-      alert(result.message || (langue === "fr"
+      notify(result.message || (langue === "fr"
         ? `Import terminé: ${result.success} succès, ${result.errors} erreurs`
         : `تم الاستيراد: ${result.success} نجاح, ${result.errors} أخطاء`));
     } catch (err) {
-      alert(getErrorMessage(err) || "Erreur lors de l'import / خطأ أثناء الاستيراد");
+      notify(getErrorMessage(err) || "Erreur lors de l'import / خطأ أثناء الاستيراد");
     }
 
     setShowMappingModal(false);
@@ -854,14 +855,14 @@ export default function Home() {
       const numeroOrdreFinal = reference.trim();
 
       if (!numeroOrdreFinal) {
-        alert(cur.entrerReference);
+        notify(cur.entrerReference);
         setIsSubmitting(false);
         return;
       }
 
       if (vueActive === "entrant-admin") {
         if (!modeTraitement) {
-          alert(cur.choisirModeTraitement);
+          notify(cur.choisirModeTraitement);
           setIsSubmitting(false);
           return;
         }
@@ -927,7 +928,7 @@ export default function Home() {
           tribunalDestination: tribunalDestinationSortant
         };
       } else {
-        alert(cur.enregistrementSimule);
+        notify(cur.enregistrementSimule);
         await refetch();
         resetForm();
         setIsSubmitting(false);
@@ -951,8 +952,8 @@ export default function Home() {
         try {
           await api.send(`/api/FileUpload/${docId}`, "POST", fd, token);
         } catch (uploadErr) {
-          console.error("Upload error:", uploadErr);
-          alert(cur.erreurBackend);
+          console.warn("Upload error:", uploadErr);
+          notify(cur.erreurBackend);
         }
       }
 
@@ -960,7 +961,7 @@ export default function Home() {
       await new Promise(r => setTimeout(r, 500));
       await refetch();
 
-      alert(data.message || cur.enregistreSuccesPoint);
+      notify(data.message || cur.enregistreSuccesPoint);
       await refetch();
       resetForm();
       setVueActive("dashboard");
@@ -975,7 +976,7 @@ export default function Home() {
         msg = cur.errServeur;
       }
       setErrorMessage(msg);
-      alert(cur.erreurPrefix + msg);
+      notify(cur.erreurPrefix + msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -1048,17 +1049,17 @@ export default function Home() {
   };
 
   const confirmTransfer = async (services?: string[]) => {
-    if (!canTransfer) { alert(cur.permissionRefusee); return; }
+    if (!canTransfer) { notify(cur.permissionRefusee); return; }
     const docsToProcess = (batchTransferDocs.length > 0 ? batchTransferDocs : (transferModalDoc ? [transferModalDoc] : [])).filter(doc => doc.transmissible !== "Non");
     if (docsToProcess.length === 0) return;
     const servicesToTransfer = services || selectedServices;
     if (servicesToTransfer.length === 0) {
-      alert(cur.choisirServiceDest);
+      notify(cur.choisirServiceDest);
       return;
     }
 
     if (!token) {
-      alert(cur.sessionExpiree);
+      notify(cur.sessionExpiree);
       return;
     }
 
@@ -1097,7 +1098,7 @@ export default function Home() {
           successCount++;
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
-            alert(cur.sessionExpiree);
+            notify(cur.sessionExpiree);
             logout();
             setTransferModalDoc(null);
             setBatchTransferDocs([]);
@@ -1108,7 +1109,7 @@ export default function Home() {
             return;
           }
           failCount++;
-          console.error(`Transfer ${doc.reference} to ${svc} error:`, err);
+          console.warn(`Transfer ${doc.reference} to ${svc} error:`, err);
           const errStatus = err instanceof ApiError ? err.status : 0;
           lastError = `(${svc}: ${errStatus || getErrorMessage(err) || "réseau"})`;
         }
@@ -1116,7 +1117,7 @@ export default function Home() {
     }
 
     if (successCount > 0) {
-      alert(langue === "fr"
+      notify(langue === "fr"
         ? `${successCount} transfert(s) réussi(s)${failCount > 0 ? ` (${failCount} échec(s) ${lastError})` : ""}`
         : `تم ${successCount} تحويل بنجاح${failCount > 0 ? ` (${failCount} فشل ${lastError})` : ""}`);
       await refetch();
@@ -1127,7 +1128,7 @@ export default function Home() {
         : lastError.includes("fetch")
           ? (langue === "fr" ? "\n\nBackend inaccessible. Vérifiez que le serveur tourne sur port 5200." : "\n\nالخادم غير متاح. تأكد من تشغيل الخادم على البورت 5200.")
           : "";
-      alert(cur.echecTransfert + lastError + hint);
+      notify(cur.echecTransfert + lastError + hint);
     }
 
     setTransferModalDoc(null);
@@ -1141,7 +1142,7 @@ export default function Home() {
   };
 
   const archiveSelection = async () => {
-    if (!canArchive) { alert(cur.permissionRefusee); return; }
+    if (!canArchive) { notify(cur.permissionRefusee); return; }
     const updates = selectedIds.reduce<Record<number, Partial<CourrierSimule>>>((acc, id) => {
       acc[id] = { serviceActuel: getServiceLabel("Archive", langue), statut: getStatusLabel("Archive", langue) };
       return acc;
@@ -1153,7 +1154,7 @@ export default function Home() {
         await refetch();
       } catch (err) {
         console.warn("Archivage local uniquement:", err);
-        alert(cur.erreurBackend);
+        notify(cur.erreurBackend);
       }
     }
     setSelectedIds([]);
@@ -1170,16 +1171,23 @@ export default function Home() {
       await refetch();
     } catch (err) {
       console.warn("Statut appliqué localement, backend inaccessible:", err);
-      alert(cur.erreurBackend);
+      notify(cur.erreurBackend);
     }
   };
 
+  // Guards the delete action against repeated clicks on the same document:
+  // a second request would be answered with a 4xx (already deleted) and used to
+  // surface as an error on top of the first, successful deletion.
+  const deletingDocIdsRef = useRef<Set<number>>(new Set());
+
   const handleDelete = async (doc: CourrierSimule) => {
-    if (!canDelete) { alert(cur.permissionRefusee); return; }
+    if (!canDelete) { notify(cur.permissionRefusee); return; }
+    if (deletingDocIdsRef.current.has(doc.id)) return;
     const confirmMsg = langue === "fr"
       ? "Voulez-vous vraiment supprimer ce document ?"
       : "هل تريد بالتأكيد حذف هذه الوثيقة ؟";
-    if (!confirm(confirmMsg)) return;
+    if (!await confirmAction(confirmMsg)) return;
+    deletingDocIdsRef.current.add(doc.id);
 
     const endpoint = doc.type === "entrant-juridique"
       ? `/api/CourrierJuridique/${doc.id}`
@@ -1188,23 +1196,25 @@ export default function Home() {
         : `/api/CourrierAdmin/${doc.id}`;
 
     if (!token) {
-      alert(cur.connecterSuppression);
+      notify(cur.connecterSuppression);
       return;
     }
 
     try {
       await api.delete(endpoint, token);
       setSelectedIds((current) => current.filter((id) => id !== doc.id));
-      alert(cur.documentSupprime);
+      notify(cur.documentSupprime);
       await refetch();
     } catch (err) {
-      console.error("Erreur suppression:", err);
-      alert(`${cur.erreurPrefix} ${getErrorMessage(err) || cur.erreurBackend}`);
+      console.warn("Erreur suppression:", getErrorMessage(err));
+      notify(`${cur.erreurPrefix} ${getErrorMessage(err) || cur.erreurBackend}`);
+    } finally {
+      deletingDocIdsRef.current.delete(doc.id);
     }
   };
 
   const registerRetrait = (row: { id: number; reference: string; objet: string }) => {
-    if (!canRetrait) { alert(cur.permissionRefusee); return; }
+    if (!canRetrait) { notify(cur.permissionRefusee); return; }
     setRetraitDoc({ id: row.id, reference: row.reference, objet: row.objet });
   };
 
@@ -1220,7 +1230,7 @@ export default function Home() {
   const batchTransferSelected = () => {
     const docs = filteredGeneral.filter((item) => selectedIds.includes(item.id) && item.transmissible !== "Non");
     if (docs.length === 0) {
-      alert(langue === "fr" ? "Aucun document transférable sélectionné" : "لا توجد وثائق قابلة للتحويل");
+      notify(langue === "fr" ? "Aucun document transférable sélectionné" : "لا توجد وثائق قابلة للتحويل");
       return;
     }
     if (docs.length === 1) {

@@ -46,17 +46,6 @@ export interface CourrierSimule {
   targetUserId?: number;
 }
 
-export interface LocalTransaction {
-  id: number;
-  document: string;
-  reference: string;
-  source: string;
-  destination: string;
-  statut: string;
-  message?: string;
-  doitRevenir?: boolean;
-}
-
 export interface LocalRetrait {
   id: number;
   reference: string;
@@ -64,21 +53,6 @@ export interface LocalRetrait {
   date: string;
   responsable: string;
   statut: string;
-}
-
-export interface ListPreviewRow {
-  code: string;
-  fr: string;
-  ar: string;
-  ordre: number;
-  actif: boolean;
-}
-
-export interface ServiceItem {
-  id: number;
-  nom: string;
-  description: string;
-  etage: string;
 }
 
 export interface RbacService {
@@ -135,18 +109,4 @@ export interface UserItem {
   serviceCode?: string;
   substituteUserId?: number;
   deletedAt?: string | null;
-}
-
-export interface NotificationItem {
-  id: number;
-  documentId: number;
-  documentType: string;
-  documentSujet: string;
-  sourceServiceId: string;
-  destinationServiceId: string;
-  message: string;
-  statut: string;
-  dateEnvoi: string;
-  doitRevenir: boolean;
-  sourceUserName?: string;
 }
