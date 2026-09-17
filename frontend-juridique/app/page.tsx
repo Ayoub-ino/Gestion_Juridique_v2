@@ -91,8 +91,6 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [dateArrivee, setDateArrivee] = useState("");
   const [dateMessage, setDateMessage] = useState("");
-  const [numeroInterne, setNumeroInterne] = useState("");
-  const [anneeNumerotation, setAnneeNumerotation] = useState("");
   const [transmissible, setTransmissible] = useState("Oui");
   const [etat, setEtat] = useState("");
   const [notes, setNotes] = useState("");
@@ -120,27 +118,21 @@ export default function Home() {
   const [sourceDocLie, setSourceDocLie] = useState("");
   const [parentDossier, setParentDossier] = useState("");
   const [juridiqueDate, setJuridiqueDate] = useState("");
-  const [numeroBureauOrdre, setNumeroBureauOrdre] = useState("");
-  const [autoYearSuffix, setAutoYearSuffix] = useState("");
   const [juridiqueEtat, setJuridiqueEtat] = useState("");
-  const [juridiqueService, setJuridiqueService] = useState("");
+  const [linkedDocumentType, setLinkedDocumentType] = useState("");
   const [typeDossier, setTypeDossier] = useState("");
   const [numeroPremiereInstance, setNumeroPremiereInstance] = useState("");
   const [juridiqueNotes, setJuridiqueNotes] = useState("");
   const [juridiqueFichier, setJuridiqueFichier] = useState<File | null>(null);
 
-  const [serviceSortant, setServiceSortant] = useState("");
-  const [numeroBureauOrdreSortant, setNumeroBureauOrdreSortant] = useState("");
   const [notesSortant, setNotesSortant] = useState("");
   const [fichierSortant, setFichierSortant] = useState<File | null>(null);
-  const [tribunalOrigineSortant, setTribunalOrigineSortant] = useState("");
-  const [tribunalDestinationSortant, setTribunalDestinationSortant] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [searchFilterService, setSearchFilterService] = useState("");
   const [searchFilterType, setSearchFilterType] = useState("");
   const [searchFilterDateDebut, setSearchFilterDateDebut] = useState("");
-  const [searchFilterDateFin, setSearchFilterDateFin] = useState("");
+
   const [selectedDocument, setSelectedDocument] = useState<CourrierSimule | null>(null);
   const [workflowDocId, setWorkflowDocId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -230,7 +222,6 @@ export default function Home() {
   const canCreateEntrantAdmin = hasPermission("creer_courrier_admin");
   const canCreateEntrantJuridique = hasPermission("creer_courrier_juridique");
   const canCreateSortantNormal = hasPermission("creer_modifier");
-  const canCreateSortantDemande = hasPermission("creer_modifier");
   const canOpenDossiers = hasPermission("ouvrir_dossier");
   const canTransfer = hasPermission("transferer");
   const canViewArchives = hasPermission("archives_view");
@@ -245,15 +236,22 @@ export default function Home() {
   const canSeeEntrantAdmin = canCreateEntrantAdmin;
   const canSeeEntrantJuridique = canCreateEntrantJuridique;
   const canSeeSortantNormal = true; // tous les services voient les sortants
-  const canSeeSortantDemande = true; // tous les services voient les sortants
-  const isFormView = ["entrant-admin", "entrant-juridique", "sortant-normal", "sortant-demande"].includes(vueActive);
+  const isFormView = ["entrant-admin", "entrant-juridique", "sortant-normal"].includes(vueActive);
+  // The three mailing modules are consolidated under one "Gérer les courriers"
+  // master tab. `vueActive` keeps the underlying type so the existing
+  // permission matrix and per-type payloads stay authoritative.
+  const isCourrierView = ["entrant-admin", "entrant-juridique", "sortant-normal"].includes(vueActive);
+  const courrierSubTabs = [
+    { view: "sortant-normal" as const, label: cur.ongletSortant, can: canSeeSortantNormal },
+    { view: "entrant-juridique" as const, label: cur.ongletJuridique, can: canSeeEntrantJuridique },
+    { view: "entrant-admin" as const, label: cur.ongletAdministratif, can: canSeeEntrantAdmin },
+  ].filter((t) => t.can);
   // Only render the create-form when the user may create that type of courrier
   // (backend enforces the same via [RequirePermission]).
   const canUseForm =
     (vueActive === "entrant-admin" && canCreateEntrantAdmin) ||
     (vueActive === "entrant-juridique" && canCreateEntrantJuridique) ||
-    (vueActive === "sortant-normal" && canCreateSortantNormal) ||
-    (vueActive === "sortant-demande" && canCreateSortantDemande);
+    (vueActive === "sortant-normal" && canCreateSortantNormal)
 
   // Route-level protection: redirect to dashboard if user navigates to a hidden view
   const isAdminLike = role === "Admin" || role === "Greffier" || role === "Directeur" || role === "Consultant";
@@ -290,8 +288,8 @@ export default function Home() {
   const displayedCourriers = listeCourriers.map((doc) => ({ ...doc, ...(docOverrides[doc.id] || {}) }));
   const visibleCourriers = displayedCourriers.filter((doc) => !hiddenDocKeys.includes(getDocKey(doc)) && !hiddenDocKeys.includes(String(doc.id)));
 
-  const generalDocs = visibleCourriers.filter((doc) => doc.type !== "sortant-normal" && doc.type !== "sortant-demande");
-  const sortantDocs = visibleCourriers.filter((doc) => doc.type === "sortant-normal" || doc.type === "sortant-demande");
+  const generalDocs = visibleCourriers.filter((doc) => doc.type !== "sortant-normal");
+  const sortantDocs = visibleCourriers.filter((doc) => doc.type === "sortant-normal");
 
   const filteredGeneral = generalDocs.filter((doc: CourrierSimule) => {
     if (!searchTerm) return true;
@@ -326,7 +324,7 @@ export default function Home() {
   });
 
   const filteredSortantNormal = filteredSortant.filter((doc) => doc.type === "sortant-normal");
-  const filteredSortantDemande = filteredSortant.filter((doc) => doc.type === "sortant-demande");
+
 
   const totalDocs = visibleCourriers.length || 1;
   const mapToGroup = (s: string): string => {
@@ -853,8 +851,11 @@ export default function Home() {
       let body: Record<string, unknown> = {};
 
       const numeroOrdreFinal = reference.trim();
+      // The Sortant sub-tab carries no "Numéro interne" field (per the reference
+      // layout) — the backend assigns its reference automatically.
+      const needsReference = vueActive === "entrant-admin" || vueActive === "entrant-juridique";
 
-      if (!numeroOrdreFinal) {
+      if (needsReference && !numeroOrdreFinal) {
         notify(cur.entrerReference);
         setIsSubmitting(false);
         return;
@@ -867,21 +868,21 @@ export default function Home() {
           return;
         }
         endpoint = "/api/CourrierAdmin";
+        // `N° de bureau` (creator user id + year) and `Expéditeur` (derived from
+        // Source) are assigned server-side, so they are no longer part of the
+        // creation payload.
         body = {
-          numeroOrdre: numeroOrdreFinal,
-          expediteur: tiers,
-          objet: objet,
-          dateReception: new Date().toISOString(),
-          typeCircuit: "standard",
           numeroReference: numeroOrdreFinal,
+          objet: objet,
+          source: source,
+          // Send null (not "") for empty dates so the backend DateTime? binder accepts them
+          dateArrivee: dateArrivee || null,
+          dateReception: dateArrivee || new Date().toISOString(),
+          dateMessage: dateMessage || null,
+          typeCircuit: "standard",
           modeTraitement: modeTraitement,
           serviceDestinataire: modeTraitement === "unique" ? serviceDestinataire : null,
           servicesDiffusion: modeTraitement === "diffusion" ? servicesDiffusion : null,
-          source: source,
-          dateArrivee: dateArrivee,
-          dateMessage: dateMessage,
-          numeroInterne: numeroInterne,
-          anneeNumerotation: anneeNumerotation,
           transmissible: transmissible === "Oui",
           etat: etat,
           notes: notes,
@@ -901,7 +902,11 @@ export default function Home() {
           autoriteRetrait: (circuitJuridique === "maktab_dabt" && etapeTaslim === "archive") ? autoriteRetrait : null,
           etapeService: etapeService,
           numeroDossierAppel: numeroDossierAppel,
-          numeroBureauOrdre: numeroBureauOrdre || numeroOrdreFinal,
+          dossierLie: docLie === "Oui",
+          parentReference: docLie === "Oui" ? parentDossier || null : null,
+          numeroPremiereInstance: numeroPremiereInstance || null,
+          typeDossier: typeDossier || null,
+          linkedDocumentType: docLie === "Oui" ? linkedDocumentType || null : null,
           demandeur: tiers || "",
           etatGlobal: etat || "En cours",
           etapeJalsatActuelle: etapeJalsat || "ijra2_baht",
@@ -910,22 +915,19 @@ export default function Home() {
           conseillerRapporteur: conseillerRapporteur,
           dateAudience: dateAudience,
         };
-      } else if (vueActive === "sortant-normal" || vueActive === "sortant-demande") {
+      } else if (vueActive === "sortant-normal") {
         endpoint = "/api/CourrierSortant";
         body = {
           destinataire: tiers,
-          reference: numeroOrdreFinal,
+          // Omitted when blank: the backend assigns a unique reference.
+          reference: numeroOrdreFinal || null,
           objet: objet,
-          typeSortant: vueActive === "sortant-normal" ? "normal" : "demande",
+          typeSortant: "normal",
           dateEnvoi: dateEnvoi || new Date().toISOString(),
           numeroEnvoi: numeroOrdreFinal,
           statut: "Brouillon",
-          service: serviceSortant,
-          numeroBureauOrdre: numeroBureauOrdreSortant,
           notes: notesSortant,
-          fichier: fichierSortant ? fichierSortant.name : null,
-          tribunalOrigine: tribunalOrigineSortant,
-          tribunalDestination: tribunalDestinationSortant
+          fichier: fichierSortant ? fichierSortant.name : null
         };
       } else {
         notify(cur.enregistrementSimule);
@@ -991,8 +993,6 @@ export default function Home() {
     setSource("");
     setDateArrivee("");
     setDateMessage("");
-    setNumeroInterne("");
-    setAnneeNumerotation("");
     setTransmissible("Oui");
     setEtat("");
     setNotes("");
@@ -1019,20 +1019,14 @@ export default function Home() {
     setSourceDocLie("");
     setParentDossier("");
     setJuridiqueDate("");
-    setNumeroBureauOrdre("");
-    setAutoYearSuffix("");
     setJuridiqueEtat("");
-    setJuridiqueService("");
+    setLinkedDocumentType("");
     setTypeDossier("");
     setNumeroPremiereInstance("");
     setJuridiqueNotes("");
     setJuridiqueFichier(null);
-    setServiceSortant("");
-    setNumeroBureauOrdreSortant("");
     setNotesSortant("");
     setFichierSortant(null);
-    setTribunalOrigineSortant("");
-    setTribunalDestinationSortant("");
   };
 
   const toggleSelected = (id: number) => {
@@ -1191,7 +1185,7 @@ export default function Home() {
 
     const endpoint = doc.type === "entrant-juridique"
       ? `/api/CourrierJuridique/${doc.id}`
-      : doc.type === "sortant-normal" || doc.type === "sortant-demande"
+      : doc.type === "sortant-normal"
         ? `/api/CourrierSortant/${doc.id}`
         : `/api/CourrierAdmin/${doc.id}`;
 
@@ -1262,7 +1256,6 @@ export default function Home() {
         canSeeEntrantAdmin={canSeeEntrantAdmin}
         canSeeEntrantJuridique={canSeeEntrantJuridique}
         canSeeSortantNormal={canSeeSortantNormal}
-        canSeeSortantDemande={canSeeSortantDemande}
         canManageUsers={canManageUsers}
         canSeeAdminSection={canSeeAdminSection}
         canSeeServicesAdmin={canSeeServicesAdmin}
@@ -1288,10 +1281,7 @@ export default function Home() {
               {vueActive === "archives" && cur.archivesJuridiques}
               {vueActive === "admin-listes" && cur.gestionListes}
               {vueActive === "recherche-dossiers" && cur.rechercheDossiers}
-              {vueActive === "entrant-admin" && cur.admin}
-              {vueActive === "entrant-juridique" && cur.juridique}
-              {vueActive === "sortant-normal" && cur.normalMenu}
-                {vueActive === "sortant-demande" && cur.demandeMenu}
+              {isCourrierView && cur.gererCourriers}
                 {vueActive === "admin-utilisateurs" && cur.utilisateurs}
                 {vueActive === "admin-services" && cur.services}
                 {vueActive === "admin-permissions" && cur.permissions}
@@ -1307,6 +1297,27 @@ export default function Home() {
         </header>
 
         <div className="p-8 flex-1 overflow-y-auto w-full mx-auto space-y-8">
+          {isCourrierView && courrierSubTabs.length > 0 && (
+            <div className="flex gap-3 flex-wrap" role="tablist" aria-label={cur.gererCourriers}>
+              {courrierSubTabs.map((tab) => (
+                <button
+                  key={tab.view}
+                  type="button"
+                  role="tab"
+                  aria-selected={vueActive === tab.view}
+                  onClick={() => setVueActive(tab.view)}
+                  className={`px-10 py-3 rounded-lg text-xs font-bold border transition ${
+                    vueActive === tab.view
+                      ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                      : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
           {vueActive === "dashboard" && (
             <DashboardView
@@ -1441,8 +1452,7 @@ export default function Home() {
               setSearchFilterType={setSearchFilterType}
               searchFilterDateDebut={searchFilterDateDebut}
               setSearchFilterDateDebut={setSearchFilterDateDebut}
-              searchFilterDateFin={searchFilterDateFin}
-              setSearchFilterDateFin={setSearchFilterDateFin}
+
               searchLocalFiles={searchLocalFiles}
               setSearchLocalFiles={setSearchLocalFiles}
               localFiles={localFiles}
@@ -1461,78 +1471,15 @@ export default function Home() {
                   {vueActive === "entrant-admin" && cur.admin}
                   {vueActive === "entrant-juridique" && cur.juridique}
                   {vueActive === "sortant-normal" && cur.normal}
-                  {vueActive === "sortant-demande" && cur.demande}
                 </span>
               </div>
 
               <form onSubmit={handleFormSubmit} className="p-8 space-y-6">
-                {vueActive !== "entrant-admin" && (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label htmlFor="courrier-tiers" className="block text-xs font-bold text-slate-700 mb-2">
-                          {vueActive.startsWith("entrant") ? cur.provenance :
-                           (vueActive === "sortant-normal" || vueActive === "sortant-demande") ? cur.destinataireExterne :
-                           cur.destination} <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          id="courrier-tiers"
-                          type="text"
-                          value={tiers}
-                          onChange={(e) => setTiers(e.target.value)}
-                          className="w-full border border-slate-300 p-3 rounded-lg text-xs outline-none focus:border-blue-500 bg-slate-50/50"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="courrier-reference" className="block text-xs font-bold text-slate-700 mb-2">{cur.tblRef} <span className="text-red-500">*</span></label>
-                        <input
-                          id="courrier-reference"
-                          type="text"
-                          value={reference}
-                          onChange={(e) => setReference(e.target.value)}
-                          placeholder={cur.recherche_exemple}
-                          className="w-full border border-slate-300 p-3 rounded-lg text-xs outline-none focus:border-blue-500 bg-slate-50/50"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="courrier-objet" className="block text-xs font-bold text-slate-700 mb-2">{cur.tblTitre} <span className="text-red-500">*</span></label>
-                      <textarea
-                        id="courrier-objet"
-                        rows={3}
-                        value={objet}
-                        onChange={(e) => setObjet(e.target.value)}
-                        placeholder={langue === "ar" ? "اكتب هنا الموضوع..." : "Saisissez l'objet..."}
-                        className="w-full border border-slate-300 p-3 rounded-lg text-xs outline-none focus:border-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="courrier-service" className="block text-xs font-bold text-slate-700 mb-2">                          {cur.serviceOrigine}
-                      </label>
-                      <input
-                        id="courrier-service"
-                        type="text"
-                        value={userService}
-                        disabled
-                        className="w-full border border-slate-300 p-3 rounded-lg text-xs outline-none bg-slate-100 text-slate-500"
-                      />
-                    </div>
-                  </>
-                )}
-
                 {vueActive === "entrant-admin" && canSeeEntrantAdmin && (
                   <AdminForm
-                    expediteur={tiers} setExpediteur={setTiers}
                     source={source} setSource={setSource}
                     dateArrivee={dateArrivee} setDateArrivee={setDateArrivee}
                     dateMessage={dateMessage} setDateMessage={setDateMessage}
-                    numeroInterne={numeroInterne} setNumeroInterne={setNumeroInterne}
-                    anneeNumerotation={anneeNumerotation} setAnneeNumerotation={setAnneeNumerotation}
                     transmissible={transmissible} setTransmissible={setTransmissible}
                     etat={etat} setEtat={setEtat}
                     notes={notes} setNotes={setNotes}
@@ -1545,7 +1492,6 @@ export default function Home() {
                     etatOptions={etatOptions}
                     reference={reference} setReference={setReference}
                     objet={objet} setObjet={setObjet}
-                    serviceOrigine={userService} setServiceOrigine={() => {}} canEditService={isAdmin || isGreffier}
                   />
                 )}
 
@@ -1556,10 +1502,8 @@ export default function Home() {
                     sourceDocLie={sourceDocLie} setSourceDocLie={setSourceDocLie}
                     parentDossier={parentDossier} setParentDossier={setParentDossier}
                     juridiqueDate={juridiqueDate} setJuridiqueDate={setJuridiqueDate}
-                    numeroBureauOrdre={numeroBureauOrdre} setNumeroBureauOrdre={setNumeroBureauOrdre}
-                    autoYearSuffix={autoYearSuffix} setAutoYearSuffix={setAutoYearSuffix}
                     juridiqueEtat={juridiqueEtat} setJuridiqueEtat={setJuridiqueEtat}
-                    juridiqueService={juridiqueService} setJuridiqueService={setJuridiqueService}
+                    linkedDocumentType={linkedDocumentType} setLinkedDocumentType={setLinkedDocumentType}
                     typeDossier={typeDossier} setTypeDossier={setTypeDossier}
                     numeroPremiereInstance={numeroPremiereInstance} setNumeroPremiereInstance={setNumeroPremiereInstance}
                     juridiqueNotes={juridiqueNotes} setJuridiqueNotes={setJuridiqueNotes}
@@ -1577,7 +1521,10 @@ export default function Home() {
                     dateAudience={dateAudience} setDateAudience={setDateAudience}
                     statutSousService={statutSousService} setStatutSousService={setStatutSousService}
                     commentaireSousService={commentaireSousService} setCommentaireSousService={setCommentaireSousService}
-                    reference={reference} tiers={tiers} objet={objet}
+                    reference={reference} setReference={setReference}
+                    tiers={tiers} setTiers={setTiers}
+                    objet={objet} setObjet={setObjet}
+                    sourceOptions={sourceOptions}
                     isJalsatService={isJalsatService}
                     isTaslimService={isTaslimService}
                     langue={langue} cur={cur}
@@ -1585,26 +1532,21 @@ export default function Home() {
                   />
                 )}
 
-                {(vueActive === "sortant-normal" || vueActive === "sortant-demande") && (
+                {vueActive === "sortant-normal" && (
                    <SortantForm
+                    destinataire={tiers}
+                    setDestinataire={setTiers}
+                    objet={objet}
+                    setObjet={setObjet}
                     dateEnvoi={dateEnvoi}
                     setDateEnvoi={setDateEnvoi}
-                    typeCourrier={vueActive === "sortant-normal" ? cur.normal : cur.demande}
-                    vueActive={vueActive}
+                    typeCourrier={cur.normal}
                     cur={cur}
-                    service={serviceSortant}
-                    setService={setServiceSortant}
-                    numeroBureauOrdre={numeroBureauOrdreSortant}
-                    setNumeroBureauOrdre={setNumeroBureauOrdreSortant}
                     notes={notesSortant}
                     setNotes={setNotesSortant}
                     fichier={fichierSortant}
                     setFichier={setFichierSortant}
                     langue={langue}
-                    tribunalOrigine={tribunalOrigineSortant}
-                    setTribunalOrigine={setTribunalOrigineSortant}
-                    tribunalDestination={tribunalDestinationSortant}
-                    setTribunalDestination={setTribunalDestinationSortant}
                   />
                 )}
 
@@ -1621,10 +1563,10 @@ export default function Home() {
             </div>
           )}
 
-          {(vueActive === "sortant-normal" || vueActive === "sortant-demande") && (
+          {vueActive === "sortant-normal" && (
             <Suspense fallback={<div className="flex items-center justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>}>
               <SortantTable
-                documents={vueActive === "sortant-normal" ? filteredSortantNormal : filteredSortantDemande}
+                documents={filteredSortantNormal}
                 filtreStatut={filtreStatutSortant}
                 setFiltreStatut={setFiltreStatutSortant}
                 onView={(doc) => { setSelectedDocument(doc); setShowModal(true); }}

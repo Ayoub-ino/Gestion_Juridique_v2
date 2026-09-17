@@ -2,7 +2,9 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule, Langue } from "@/app/types";
-import { getDocServiceCode, isDocInService, normalizeStatus } from "@/lib/utils";
+import { isDocInService, normalizeStatus } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 import { exportRows } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 
@@ -18,8 +20,7 @@ interface Props {
   setSearchFilterType: (s: string) => void;
   searchFilterDateDebut: string;
   setSearchFilterDateDebut: (s: string) => void;
-  searchFilterDateFin: string;
-  setSearchFilterDateFin: (s: string) => void;
+
   searchLocalFiles: boolean;
   setSearchLocalFiles: (b: boolean) => void;
   localFiles: { name: string; content: string; path: string }[];
@@ -42,8 +43,7 @@ export function RechercheDossiersView({
   setSearchFilterType,
   searchFilterDateDebut,
   setSearchFilterDateDebut,
-  searchFilterDateFin,
-  setSearchFilterDateFin,
+
   searchLocalFiles,
   setSearchLocalFiles,
   localFiles,
@@ -53,6 +53,10 @@ export function RechercheDossiersView({
   getServiceLabel,
   onViewDoc,
 }: Props) {
+  const { token } = useAuth();
+  const { groups: serviceGroups } = useServiceOptions(token, langue);
+  const allServices = serviceGroups.flatMap(g => g.children);
+
   const s = searchTerm.toLowerCase().trim();
   const searchResults = (() => {
     let results = visibleCourriers;
@@ -75,12 +79,10 @@ export function RechercheDossiersView({
     if (searchFilterDateDebut) {
       results = results.filter((doc) => doc.date >= searchFilterDateDebut);
     }
-    if (searchFilterDateFin) {
-      results = results.filter((doc) => doc.date <= searchFilterDateFin);
-    }
+
     return results;
   })();
-  const hasSearched = s.length > 0 || searchFilterService.length > 0 || searchFilterType.length > 0 || searchFilterDateDebut.length > 0 || searchFilterDateFin.length > 0;
+  const hasSearched = s.length > 0 || searchFilterService.length > 0 || searchFilterType.length > 0 || searchFilterDateDebut.length > 0;
 
   return (
     <div className="space-y-5">
@@ -116,25 +118,47 @@ export function RechercheDossiersView({
         <div className="flex flex-wrap gap-2 mt-3">
           <select value={searchFilterService} onChange={(e) => setSearchFilterService(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none">
             <option value="">{cur.tousLesServices}</option>
-            {[...new Set(visibleCourriers.map((d) => getDocServiceCode(d) || d.serviceActuel))].sort().map(svc => (
-              <option key={svc} value={svc}>{getServiceLabel(svc, langue)}</option>
+            {allServices.map(svc => (
+              <option key={svc.value} value={svc.value}>{svc.label}</option>
             ))}
           </select>
           <select value={searchFilterType} onChange={(e) => setSearchFilterType(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none">
             <option value="">{cur.tousLesTypes}</option>
             <option value="entrant-admin">{cur.admin}</option>
             <option value="entrant-juridique">{cur.juridique}</option>
-            <option value="sortant-normal">{cur.normal}</option>
-            <option value="sortant-demande">{cur.demande}</option>
+            <option value="sortant-normal">{cur.sortants}</option>
           </select>
-          <input type="date" value={searchFilterDateDebut} onChange={(e) => setSearchFilterDateDebut(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none" title={cur.dateDebut} />
-          <input type="date" value={searchFilterDateFin} onChange={(e) => setSearchFilterDateFin(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none" title={cur.dateFin} />
-          {(searchFilterService || searchFilterType || searchFilterDateDebut || searchFilterDateFin) && (
-            <button type="button" onClick={() => { setSearchFilterService(""); setSearchFilterType(""); setSearchFilterDateDebut(""); setSearchFilterDateFin(""); }} className="px-3 py-2 text-[11px] font-bold text-red-600 hover:text-red-800 underline">
+          <input type="date" value={searchFilterDateDebut} onChange={(e) => setSearchFilterDateDebut(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none" title={cur.dateArrivee} />
+          {(searchFilterService || searchFilterType || searchFilterDateDebut) && (
+            <button type="button" onClick={() => { setSearchFilterService(""); setSearchFilterType(""); setSearchFilterDateDebut(""); }} className="px-3 py-2 text-[11px] font-bold text-red-600 hover:text-red-800 underline">
               {cur.effacerFiltres}
             </button>
           )}
         </div>
+        {/* Active filter indicators */}
+        {(searchFilterService || searchFilterType || searchFilterDateDebut) && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {searchFilterService && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold border border-blue-200">
+                {cur.tblDest}: {getServiceLabel(searchFilterService, langue)}
+                <button onClick={() => setSearchFilterService("")} className="ml-1 text-blue-500 hover:text-blue-800 font-bold">×</button>
+              </span>
+            )}
+            {searchFilterType && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                {cur.tblType}: {searchFilterType === "entrant-admin" ? cur.admin : searchFilterType === "entrant-juridique" ? cur.juridique : cur.sortants}
+                <button onClick={() => setSearchFilterType("")} className="ml-1 text-emerald-500 hover:text-emerald-800 font-bold">×</button>
+              </span>
+            )}
+            {searchFilterDateDebut && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold border border-amber-200">
+                {cur.dateDebut}: {searchFilterDateDebut}
+                <button onClick={() => setSearchFilterDateDebut("")} className="ml-1 text-amber-500 hover:text-amber-800 font-bold">×</button>
+              </span>
+            )}
+
+          </div>
+        )}
         {searchLocalFiles && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-bold">

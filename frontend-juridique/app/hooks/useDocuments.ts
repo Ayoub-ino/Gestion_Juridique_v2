@@ -139,7 +139,7 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
             id: c.id,
             reference: c.numeroEnvoi || c.reference || cur.na,
             objet: c.objet || c.sujet || cur.sansObjet,
-            type: (c.typeSortant === "demande" ? "sortant-demande" : "sortant-normal") as VueActive,
+            type: "sortant-normal" as VueActive,
             date: new Date(c.dernierTransfert || c.dateCreation || "").toLocaleDateString(),
             dateRaw: c.dernierTransfert || c.dateCreation || "",
             source: cur.serviceEmetteur,

@@ -71,6 +71,17 @@ namespace WebApplication1.Controllers
             if (!_accessService.IsUserCustodian(document, userId))
                 return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce document. Seul le service en charge peut le transférer." });
 
+            // ── TRANSMISSIBILITY CHECK ──
+            // A courrier flagged "Non" may leave the originating service only once;
+            // every subsequent transfer is refused.
+            if (document is CourrierAdministratif nonTransmissible && !nonTransmissible.Transmissible)
+            {
+                var dejaTransfere = await _context.Transactions
+                    .AnyAsync(t => t.DocumentId == document.Id);
+                if (dejaTransfere)
+                    return StatusCode(403, new { error = "Ce courrier n'est pas transmissible : il ne peut plus être transféré après sa première transmission." });
+            }
+
             var serviceOrigine = document.ServiceActuel;
 
             // RBAC code of the service that currently holds the document.

@@ -105,9 +105,34 @@ namespace WebApplication1.Controllers
                 ? creatorCode
                 : DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
 
-            // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
+            // ── Document lié ("dossier lié") ──
+            // A linked document is attached to an already-created folder and
+            // therefore SHARES its identification number. This is the only case
+            // where two dossiers may carry the same NumeroReference; in every
+            // other case the reference stays globally unique.
             var numeroRef = dto.Reference ?? "";
-            if (!string.IsNullOrWhiteSpace(numeroRef))
+            int? dossierParentId = null;
+
+            if (dto.DossierLie != true && string.IsNullOrWhiteSpace(numeroRef))
+                return BadRequest(new { error = "Le numéro de référence est requis" });
+
+            if (dto.DossierLie == true)
+            {
+                if (string.IsNullOrWhiteSpace(dto.ParentReference))
+                    return BadRequest(new { error = "Un dossier parent est requis pour un document lié" });
+
+                var parent = await _context.DossiersJuridiques
+                    .Where(d => d.NumeroReference == dto.ParentReference && !d.EstSupprime)
+                    .OrderBy(d => d.Id)
+                    .FirstOrDefaultAsync();
+                if (parent == null)
+                    return BadRequest(new { error = $"Dossier parent '{dto.ParentReference}' introuvable" });
+
+                dossierParentId = parent.Id;
+                // Share the parent's identification number.
+                numeroRef = parent.NumeroReference;
+            }
+            else if (!string.IsNullOrWhiteSpace(numeroRef))
             {
                 var refExists = await _context.Documents
                     .AnyAsync(d => d.NumeroReference == numeroRef);
@@ -117,11 +142,16 @@ namespace WebApplication1.Controllers
 
             var juridique = new DossierJuridique
             {
-                NumeroReference = dto.Reference ?? "",
+                NumeroReference = numeroRef,
                 Sujet = dto.Objet ?? "",
                 Objet = dto.Objet ?? "",
-                NumeroBureauOrdre = dto.NumeroBureauOrdre ?? "",
+                // N° de bureau — creator user id + year (system-assigned)
+                NumeroBureauOrdre = $"{userId}/{DateTime.Now.Year}",
                 NumeroDossierJuridique = dto.NumeroDossierAppel,
+                NumeroPremiereInstance = dto.NumeroPremiereInstance,
+                DossierParentId = dossierParentId,
+                TypeDossier = dto.TypeDossier,
+                LinkedDocumentType = dto.DossierLie ? dto.LinkedDocumentType : null,
                 TypeCircuit = dto.TypeCircuit,
                 MotifException = dto.MotifException,
                 Demandeur = dto.Demandeur ?? "",
@@ -207,6 +237,9 @@ namespace WebApplication1.Controllers
             juridique.JalsatTransaction = dto.JalsatTransaction ?? juridique.JalsatTransaction;
             juridique.TaslimTransaction = dto.TaslimTransaction ?? juridique.TaslimTransaction;
             juridique.AutoriteRetrait = dto.AutoriteRetrait ?? juridique.AutoriteRetrait;
+            juridique.NumeroPremiereInstance = dto.NumeroPremiereInstance ?? juridique.NumeroPremiereInstance;
+            juridique.TypeDossier = dto.TypeDossier ?? juridique.TypeDossier;
+            juridique.LinkedDocumentType = dto.LinkedDocumentType ?? juridique.LinkedDocumentType;
 
             await _context.SaveChangesAsync();
             return Ok(new { message = "Dossier juridique mis à jour" });
@@ -237,7 +270,10 @@ namespace WebApplication1.Controllers
 
     public class CreateDossierJuridiqueDto
     {
-        [Required]
+        /// <summary>
+        /// Identification number of the dossier. Validated manually so a linked
+        /// document (DossierLie) may inherit it from its parent instead.
+        /// </summary>
         public string? Reference { get; set; }
         [Required]
         public string? Objet { get; set; }
@@ -258,5 +294,24 @@ namespace WebApplication1.Controllers
         public string? NumCourAppel { get; set; }
         public string? ConseillerRapporteur { get; set; }
         public string? DateAudience { get; set; }
+
+        /// <summary>Numéro de première instance du dossier.</summary>
+        public string? NumeroPremiereInstance { get; set; }
+
+        /// <summary>Type de dossier ("Type" in the business model).</summary>
+        public string? TypeDossier { get; set; }
+
+        /// <summary>Type of the linked document (only when DossierLie is true).</summary>
+        public string? LinkedDocumentType { get; set; }
+
+        /// <summary>
+        /// True when this entry is a "document lié" attached to an existing
+        /// folder. It then reuses <see cref="ParentReference"/> as its own
+        /// NumeroReference instead of requiring a unique one.
+        /// </summary>
+        public bool DossierLie { get; set; }
+
+        /// <summary>NumeroReference of the parent folder (required when DossierLie).</summary>
+        public string? ParentReference { get; set; }
     }
 }

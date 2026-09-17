@@ -198,9 +198,12 @@ describe("Application E2E Tests", () => {
     });
 
     it("should show admin document form", () => {
+      // The three mailing modules now live under one "Gérer les courriers" tab.
       cy.get("aside").within(() => {
-        cy.contains(/Courrier Administratif|مراسلات إدارية واردة/).click();
+        cy.contains(/Gérer les courriers|تدبير المراسلات/).click();
       });
+      cy.wait(300);
+      cy.get('[role="tablist"]').contains(/Administratif|إدارية/).click();
       cy.wait(300);
       // Check form is visible
       cy.get("form").should("exist");
@@ -217,16 +220,20 @@ describe("Application E2E Tests", () => {
       cy.get('button[type="submit"]').click();
       cy.wait(500);
       cy.get("aside").within(() => {
-        cy.contains(/Dossier Juridique|ملف قضائي وارد/).click();
+        cy.contains(/Gérer les courriers|تدبير المراسلات/).click();
       });
+      cy.wait(300);
+      cy.get('[role="tablist"]').contains(/Judiciaire|قضائية/).click();
       cy.wait(300);
       cy.get("form").should("exist");
     });
 
     it("should show outgoing mail form", () => {
       cy.get("aside").within(() => {
-        cy.contains(/Courrier Sortant Normal|مراسلات صادرة عادية/).click();
+        cy.contains(/Gérer les courriers|تدبير المراسلات/).click();
       });
+      cy.wait(300);
+      cy.get('[role="tablist"]').contains(/Sortant|صادرة/).click();
       cy.wait(300);
       cy.get("form").should("exist");
     });

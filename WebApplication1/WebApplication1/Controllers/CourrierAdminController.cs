@@ -97,33 +97,51 @@ namespace WebApplication1.Controllers
                 if (dto == null)
                     return BadRequest(new { error = "Données invalides" });
 
+                var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (!ServiceMapper.TryParseUserId(userIdStr, out var creatorUserId))
+                    return Unauthorized();
+
+                // ── System-assigned N° de bureau: creator user id + year ──
+                // Enables several distinct users inside the same service.
+                var numeroBureauOrdre = $"{creatorUserId}/{DateTime.Now.Year}";
+
+                // "Numéro interne" = the unique identification number of the folder.
+                // `NumeroOrdre` is accepted as a legacy alias for older payloads.
+                var numeroRef = !string.IsNullOrWhiteSpace(dto.NumeroReference)
+                    ? dto.NumeroReference
+                    : dto.NumeroOrdre;
+                if (string.IsNullOrWhiteSpace(numeroRef))
+                    return BadRequest(new { error = "Le numéro de référence est requis" });
+
                 // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
-                var numeroRef = dto.NumeroReference ?? dto.NumeroOrdre;
-                if (!string.IsNullOrWhiteSpace(numeroRef))
-                {
-                    var refExists = await _context.Documents
-                        .AnyAsync(d => d.NumeroReference == numeroRef);
-                    if (refExists)
-                        return Conflict(new { error = "Ce numéro de référence existe déjà" });
-                }
+                var refExists = await _context.Documents
+                    .AnyAsync(d => d.NumeroReference == numeroRef);
+                if (refExists)
+                    return Conflict(new { error = "Ce numéro de référence existe déjà" });
 
                 // ===== 1. CRÉATION DU COURRIER =====
                 var courrier = new CourrierAdministratif
                 {
-                    NumeroOrdre = dto.NumeroOrdre,
-                    Expediteur = dto.Expediteur,
+                    NumeroOrdre = numeroBureauOrdre,
+                    // Provenance is no longer captured: the Source dropdown is the
+                    // originating entity of the courrier.
+                    Expediteur = dto.Expediteur ?? dto.Source ?? string.Empty,
                     Objet = dto.Objet,
-                    DateReception = dto.DateReception ?? DateTime.Now,
+                    DateReception = dto.DateArrivee ?? dto.DateReception ?? DateTime.Now,
                     TypeCircuit = dto.TypeCircuit ?? "standard",
                     FilePath = dto.FilePath,
-                    NumeroReference = dto.NumeroReference ?? dto.NumeroOrdre,
+                    NumeroReference = numeroRef,
                     Sujet = dto.Objet,
                     DateCreation = DateTime.Now,
                     ServiceActuel = ServiceTribunal.BureauOrdre,
                     ServiceActuelCode = "bureauordre",
                     StatutActuel = StatutDossier.Nouveau,
-                    NumeroBureauOrdre = dto.NumeroOrdre,
-                    Transmissible = dto.Transmissible
+                    NumeroBureauOrdre = numeroBureauOrdre,
+                    Transmissible = dto.Transmissible,
+                    Source = dto.Source,
+                    DateMessage = dto.DateMessage,
+                    Etat = dto.Etat,
+                    Notes = dto.Notes
                 };
 
                 _context.CourriersAdministratifs.Add(courrier);
@@ -215,8 +233,6 @@ namespace WebApplication1.Controllers
                 await _context.SaveChangesAsync();
 
                 // ── Auto-grant Owner access to creator's service ──
-                var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (ServiceMapper.TryParseUserId(userIdStr, out var creatorUserId))
                 {
                     var creatorUser = await _context.Utilisateurs.FindAsync(creatorUserId);
                     var creatorServiceCode = ServiceMapper.NormalizeServiceCode(creatorUser?.Service) is { Length: > 0 } code
@@ -253,8 +269,8 @@ namespace WebApplication1.Controllers
 
             // Mise à jour des champs
             // Vérifier l'unicité du numéro de référence (exclure le document courant)
-            var numeroRef = dto.NumeroReference ?? dto.NumeroOrdre;
-            if (!string.IsNullOrWhiteSpace(numeroRef))
+            var numeroRef = dto.NumeroReference;
+            if (!string.IsNullOrWhiteSpace(numeroRef) && numeroRef != courrier.NumeroReference)
             {
                 var refExists = await _context.Documents
                     .AnyAsync(d => d.NumeroReference == numeroRef && d.Id != id);
@@ -262,15 +278,18 @@ namespace WebApplication1.Controllers
                     return Conflict(new { error = "Ce numéro de référence existe déjà" });
             }
 
-            courrier.NumeroOrdre = dto.NumeroOrdre;
-            courrier.Expediteur = dto.Expediteur;
+            courrier.Expediteur = dto.Expediteur ?? dto.Source ?? courrier.Expediteur;
             courrier.Objet = dto.Objet;
-            courrier.DateReception = dto.DateReception ?? courrier.DateReception;
+            courrier.DateReception = dto.DateArrivee ?? dto.DateReception ?? courrier.DateReception;
             courrier.TypeCircuit = dto.TypeCircuit ?? courrier.TypeCircuit;
             courrier.FilePath = dto.FilePath ?? courrier.FilePath;
             courrier.NumeroReference = dto.NumeroReference ?? courrier.NumeroReference;
             courrier.Sujet = dto.Objet;
             courrier.Transmissible = dto.Transmissible;
+            courrier.Source = dto.Source ?? courrier.Source;
+            courrier.DateMessage = dto.DateMessage ?? courrier.DateMessage;
+            courrier.Etat = dto.Etat ?? courrier.Etat;
+            courrier.Notes = dto.Notes ?? courrier.Notes;
 
             await _context.SaveChangesAsync();
 
@@ -353,19 +372,33 @@ namespace WebApplication1.Controllers
     }
     public class CourrierAdminDto
     {
-        [Required]
-        public string NumeroOrdre { get; set; } = string.Empty;
-        [Required]
-        public string Expediteur { get; set; } = string.Empty;
+        // "Numéro interne" — the unique identification number of the folder.
+        // Validated manually so the legacy `NumeroOrdre` alias below still works.
+        public string? NumeroReference { get; set; }
+        /// <summary>Legacy alias for <see cref="NumeroReference"/> — pre-"Gérer les courriers" payloads.</summary>
+        public string? NumeroOrdre { get; set; }
         [Required]
         public string Objet { get; set; } = string.Empty;
+
+        // ── Assigned by the system on creation ──
+        /// <summary>N° de bureau — creator user id + year. Ignored if supplied.</summary>
+        public string? NumeroBureauOrdre { get; set; }
+        /// <summary>Kept for backward compatibility; derived from <see cref="Source"/>.</summary>
+        public string? Expediteur { get; set; }
+
+        // ── Shared common fields ──
+        public string? Source { get; set; }
+        public DateTime? DateArrivee { get; set; }
+        public DateTime? DateMessage { get; set; }
+        public string? Etat { get; set; }
+        public string? Notes { get; set; }
+
         public DateTime? DateReception { get; set; }
         public string? TypeCircuit { get; set; }
         public string? FilePath { get; set; }
-        public string? NumeroReference { get; set; }
         public bool Transmissible { get; set; } = true;
 
-        // ===== NOUVEAUX CHAMPS POUR LES MODES =====
+        // ===== MODES DE TRAITEMENT =====
         public string? ModeTraitement { get; set; } // "archivage", "unique", "diffusion"
         public string? ServiceDestinataire { get; set; } // Pour "unique" (ex: "OuvertureDossier")
         public List<string>? ServicesDiffusion { get; set; } // Pour "diffusion" (ex: ["Service1", "Service2"])

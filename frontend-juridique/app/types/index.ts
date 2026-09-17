@@ -13,7 +13,6 @@ export type VueActive =
   | "entrant-admin"
   | "entrant-juridique"
   | "sortant-normal"
-  | "sortant-demande"
   | "admin-utilisateurs"
   | "admin-services"
   | "admin-services-historiques"

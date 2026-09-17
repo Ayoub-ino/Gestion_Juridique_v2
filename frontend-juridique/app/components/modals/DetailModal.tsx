@@ -57,6 +57,15 @@ interface DocDetails {
   filePath?: string;
   NumeroBureauOrdre?: string;
   EstSupprime?: boolean;
+  Source?: string;
+  DateMessage?: string;
+  Etat?: string;
+  Notes?: string;
+  Transmissible?: boolean;
+  NumeroPremiereInstance?: string;
+  TypeDossier?: string;
+  LinkedDocumentType?: string;
+  DossierParentId?: number;
   TypeSortant?: string;
   DestinataireExterne?: string;
   TribunalOrigine?: string;
@@ -481,20 +490,40 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
               {/* Editable Fields */}
               <div className="grid grid-cols-2 gap-3">
-                {renderField(cur.tblRef, "NumeroOrdre", docDetails?.NumeroOrdre || doc.reference)}
+                {renderField(cur.numeroBureau, "NumeroBureauOrdre", docDetails?.NumeroBureauOrdre)}
+                {renderField(cur.numeroInterne, "NumeroReference", docDetails?.NumeroReference || doc.reference)}
                 <div>
                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{cur.tblType}</p>
                   <p className="text-sm dark:text-slate-200">{doc.type === "entrant-admin" ? cur.admin : doc.type === "entrant-juridique" ? cur.juridique : cur.sortants}</p>
                 </div>
                 {renderField(cur.tblDate, "DateCreation", docDetails?.DateCreation || doc.date)}
+                {docDetails?.Source && renderField(cur.tblSource, "Source", docDetails.Source)}
                 {renderField(cur.tblSource, "Expediteur", docDetails?.Expediteur || doc.source)}
                 {renderField(cur.tblTitre, "Objet", docDetails?.Objet || doc.objet)}
                 {renderField(cur.serviceActuel, "ServiceActuel", typeof docDetails?.ServiceActuel === "string" ? docDetails.ServiceActuel : doc.serviceActuel)}
-                {docDetails?.type === "entrant-juridique" && renderField(                   cur.demandeur,
-                  "Demandeur",
-                  docDetails?.Demandeur
+                {docDetails?.Etat && renderField(cur.etat, "Etat", docDetails.Etat)}
+                {docDetails?.Transmissible !== undefined && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{cur.transmissible}</p>
+                    <p className="text-sm dark:text-slate-200">{docDetails.Transmissible ? cur.oui : cur.non}</p>
+                  </div>
                 )}
-                {docDetails?.type === "sortant-normal" || docDetails?.type === "sortant-demande" ? (
+                {docDetails?.type === "entrant-juridique" && (
+                  <>
+                    {docDetails?.Demandeur && renderField(cur.demandeur, "Demandeur", docDetails.Demandeur)}
+                    {docDetails?.NumeroDossierJuridique && renderField(cur.numeroDossierJuridique, "NumeroDossierJuridique", docDetails.NumeroDossierJuridique)}
+                    {docDetails?.NumeroPremiereInstance && renderField(cur.numeroPremiereInstance, "NumeroPremiereInstance", docDetails.NumeroPremiereInstance)}
+                    {docDetails?.TypeDossier && renderField(cur.typeDossier, "TypeDossier", docDetails.TypeDossier)}
+                    {docDetails?.LinkedDocumentType && renderField(cur.typeDocumentLie, "LinkedDocumentType", docDetails.LinkedDocumentType)}
+                    {docDetails?.DossierParentId && (
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{cur.parentDossier}</p>
+                        <p className="text-sm dark:text-slate-200">#{docDetails.DossierParentId}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+                {docDetails?.type === "sortant-normal" ? (
                   <>
                     {renderField(
                       cur.tribunalOrigine,

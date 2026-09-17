@@ -20,7 +20,6 @@ interface SidebarProps {
   canSeeEntrantAdmin: boolean;
   canSeeEntrantJuridique: boolean;
   canSeeSortantNormal: boolean;
-  canSeeSortantDemande: boolean;
   canManageUsers: boolean;
   canSeeAdminSection: boolean;
   canSeeServicesAdmin: boolean;
@@ -47,7 +46,6 @@ export function Sidebar({
   canSeeEntrantAdmin,
   canSeeEntrantJuridique,
   canSeeSortantNormal,
-  canSeeSortantDemande,
   canManageUsers,
   canSeeAdminSection,
   canSeeServicesAdmin,
@@ -61,6 +59,19 @@ export function Sidebar({
   pendingNotifications = 0
 }: SidebarProps) {
   const { theme, toggle: toggleTheme } = useTheme();
+
+  // ── "Gérer les courriers" master tab ──
+  // The three mailing views (Administratif / Juridique / Sortant) live under a
+  // single sidebar entry. The sub-tab bar inside the page switches between them,
+  // so `vueActive` still carries the underlying view for permission checks.
+  const COURRIER_VIEWS: VueActive[] = ["sortant-normal", "entrant-juridique", "entrant-admin"];
+  const isCourrierView = COURRIER_VIEWS.includes(vueActive);
+  const canSeeGererCourriers = canSeeEntrantAdmin || canSeeEntrantJuridique || canSeeSortantNormal;
+  const defaultCourrierView: VueActive = canSeeEntrantAdmin
+    ? "entrant-admin"
+    : canSeeEntrantJuridique
+      ? "entrant-juridique"
+      : "sortant-normal";
   const navButtonClass = (active: boolean) =>
     `w-full text-xs font-semibold p-3 rounded-lg flex items-center gap-3 transition ${
       active ? "bg-blue-600 text-white shadow-md" : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
@@ -96,26 +107,12 @@ export function Sidebar({
             <button onClick={() => setVueActive("mes-entites")} className={navButtonClass(vueActive === "mes-entites")}>
               {cur.mesDocuments}
             </button>
-            {canSeeEntrantAdmin && (
-              <button onClick={() => setVueActive("entrant-admin")} className={navButtonClass(vueActive === "entrant-admin")}>
-                {cur.admin}
+            {canSeeGererCourriers && (
+              <button onClick={() => setVueActive(defaultCourrierView)} className={navButtonClass(isCourrierView)}>
+                {cur.gererCourriers}
               </button>
             )}
-            {canSeeEntrantJuridique && (
-              <button onClick={() => setVueActive("entrant-juridique")} className={navButtonClass(vueActive === "entrant-juridique")}>
-                {cur.juridique}
-              </button>
-            )}
-            {canSeeSortantNormal && (
-              <button onClick={() => setVueActive("sortant-normal")} className={navButtonClass(vueActive === "sortant-normal")}>
-                {cur.normalMenu}
-              </button>
-            )}
-            {canSeeSortantDemande && (
-              <button onClick={() => setVueActive("sortant-demande")} className={navButtonClass(vueActive === "sortant-demande")}>
-                {cur.demandeMenu}
-              </button>
-            )}
+
             {canSearchDossiers && (
               <button onClick={() => setVueActive("recherche-dossiers")} className={navButtonClass(vueActive === "recherche-dossiers")}>
                 {cur.rechercheDossiers}

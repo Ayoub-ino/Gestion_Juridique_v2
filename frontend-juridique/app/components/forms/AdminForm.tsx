@@ -1,4 +1,12 @@
 // app/components/forms/AdminForm.tsx
+//
+// "Courrier Administratif" sub-tab of the consolidated "Gérer les courriers"
+// module. Field set follows the reference layout:
+//   Source · Date d'arrivée · Date du message · Numéro interne · N° Bureau d'ordre
+//   Transmissible · État · Service · Objet
+//   Document · Notes
+// `N° de bureau` (creator user id + year) and `Service` (creator's originating
+// service) are system-assigned and rendered read-only.
 
 "use client";
 
@@ -7,20 +15,15 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceOptions } from "@/app/hooks/useServiceOptions";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 
 interface AdminFormProps {
-  expediteur: string;
-  setExpediteur: (v: string) => void;
   source: string;
   setSource: (v: string) => void;
   dateArrivee: string;
   setDateArrivee: (v: string) => void;
   dateMessage: string;
   setDateMessage: (v: string) => void;
-  numeroInterne: string;
-  setNumeroInterne: (v: string) => void;
-  anneeNumerotation: string;
-  setAnneeNumerotation: (v: string) => void;
   transmissible: string;
   setTransmissible: (v: string) => void;
   etat: string;
@@ -39,29 +42,20 @@ interface AdminFormProps {
   cur: TranslationKeys;
   sourceOptions?: { value: string; label: string }[];
   etatOptions?: { value: string; label: string }[];
-  serviceOptions?: { value: string; label: string }[];
+  /** `Numéro interne` — the unique reference of the folder. */
   reference: string;
   setReference: (v: string) => void;
   objet: string;
   setObjet: (v: string) => void;
-  serviceOrigine: string;
-  setServiceOrigine: (v: string) => void;
-  canEditService: boolean;
 }
 
 export function AdminForm({
-  expediteur,
-  setExpediteur,
   source,
   setSource,
   dateArrivee,
   setDateArrivee,
   dateMessage,
   setDateMessage,
-  numeroInterne,
-  setNumeroInterne,
-  anneeNumerotation,
-  setAnneeNumerotation,
   transmissible,
   setTransmissible,
   etat,
@@ -83,17 +77,24 @@ export function AdminForm({
   reference,
   setReference,
   objet,
-  setObjet,
-  serviceOrigine,
-  setServiceOrigine,
-  canEditService
+  setObjet
 }: AdminFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { token } = useAuth();
+  const { user, token } = useAuth();
 
   // Destination services come from the live catalog: anything added in the
   // admin panel becomes selectable immediately.
   const { groups: serviceGroups } = useServiceOptions(token, langue);
+  const { getServiceLabel } = useServiceLabels(token, langue);
+
+  // ── System-assigned values ──
+  // N° de bureau = the id of the user creating the folder (a service can host
+  // several users). The year is appended by the backend and shown as a hint.
+  const annee = new Date().getFullYear();
+  // Service d'origine = the creator's current service (dynamic label).
+  const serviceOrigineLabel = user?.service
+    ? getServiceLabel(user.service) || user.service
+    : "";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -101,96 +102,25 @@ export function AdminForm({
     }
   };
 
+  const fieldClass =
+    "w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white";
+  const labelClass = "block text-xs font-bold text-slate-700 mb-2";
+  const readonlyClass =
+    "w-full border border-slate-200 p-2.5 rounded-lg text-xs bg-slate-50 text-slate-600";
+
   return (
     <>
-      {/* ===== Référence & Objet ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ===== LIGNE 1 : Source · Dates · Numéro interne · N° bureau ===== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <div>
-          <label htmlFor="admin-ref" className="block text-xs font-bold text-slate-700 mb-2">
-            {cur.tblRef} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="admin-ref"
-            type="text"
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder={cur.recherche_exemple}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="admin-titre" className="block text-xs font-bold text-slate-700 mb-2">
-            {cur.tblTitre} <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="admin-titre"
-            rows={2}
-            value={objet}
-            onChange={(e) => setObjet(e.target.value)}
-            placeholder={cur.sujet_placeholder}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            required
-          />
-        </div>
-      </div>
-
-      {/* ===== Service ===== */}
-      <div>
-        <label htmlFor="admin-service-origine" className="block text-xs font-bold text-slate-700 mb-2">
-          {cur.serviceOrigine}
-        </label>
-        <input
-          id="admin-service-origine"
-          type="text"
-          value={serviceOrigine}
-          onChange={(e) => setServiceOrigine(e.target.value)}
-          disabled={!canEditService}
-          className={`w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 ${canEditService ? "bg-white" : "bg-slate-100 text-slate-500"}`}
-          required
-        />
-      </div>
-
-      {/* ===== LIGNE 1 : المرسل (Expéditeur) - TEXTE LIBRE ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="admin-provenance" className="block text-xs font-bold text-slate-700 mb-2">
-            {cur.provenance} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="admin-provenance"
-            type="text"
-            value={expediteur}
-            onChange={(e) => setExpediteur(e.target.value)}
-            placeholder={cur.provenance}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="admin-date-arrivee" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
-          <input
-            id="admin-date-arrivee"
-            type="date"
-            value={dateArrivee}
-            onChange={(e) => setDateArrivee(e.target.value)}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            required
-          />
-        </div>
-      </div>
-
-      {/* ===== LIGNE 2 : المصدر (Source) - DROPDOWN ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="admin-source" className="block text-xs font-bold text-slate-700 mb-2">
+          <label htmlFor="admin-source" className={labelClass}>
             {cur.tblSource} <span className="text-red-500">*</span>
           </label>
           <select
             id="admin-source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+            className={fieldClass}
             required
           >
             <option value="">-- {cur.choisirService} --</option>
@@ -204,80 +134,85 @@ export function AdminForm({
             ))}
           </select>
         </div>
+
         <div>
-          <label htmlFor="admin-date-message" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateMessage}</label>
+          <label htmlFor="admin-date-arrivee" className={labelClass}>
+            {cur.dateArrivee} <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="admin-date-arrivee"
+            type="date"
+            value={dateArrivee}
+            onChange={(e) => setDateArrivee(e.target.value)}
+            className={fieldClass}
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="admin-date-message" className={labelClass}>{cur.dateMessage}</label>
           <input
             id="admin-date-message"
             type="date"
             value={dateMessage}
             onChange={(e) => setDateMessage(e.target.value)}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+            className={fieldClass}
           />
         </div>
-      </div>
 
-      {/* ===== LIGNE 3 : Numéro interne & Année de numérotation ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="admin-numero-interne" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroInterne}</label>
+          <label htmlFor="admin-ref" className={labelClass}>{cur.numeroInterne} <span className="text-red-500">*</span></label>
           <input
-            id="admin-numero-interne"
+            id="admin-ref"
             type="text"
-            value={numeroInterne}
-            onChange={(e) => setNumeroInterne(e.target.value)}
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder={cur.recherche_exemple}
+            className={fieldClass}
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="admin-numero-bureau" className={labelClass}>{cur.numeroBureau}</label>
+          <input
+            id="admin-numero-bureau"
+            type="text"
+            value={user?.id ?? ""}
+            readOnly
+            aria-readonly="true"
             placeholder="15"
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+            className={readonlyClass}
           />
-        </div>
-        <div>
-          <label htmlFor="admin-annee" className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
-          <input
-            id="admin-annee"
-            type="text"
-            value={anneeNumerotation}
-            onChange={(e) => setAnneeNumerotation(e.target.value)}
-            placeholder="/ 2026"
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-          />
+          <p className="text-[10px] text-slate-400 mt-1 text-end">
+            {annee} / {cur.autoYearSuffix}
+          </p>
         </div>
       </div>
 
-      {/* ===== LIGNE 4 : Transmissible & État ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ===== LIGNE 2 : Transmissible · État · Service · Objet ===== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div>
-          <span className="block text-xs font-bold text-slate-700 mb-2">{cur.transmissible}</span>
-          <div className="flex gap-4 mt-1">
-            <label htmlFor="admin-transmissible-oui" className="flex items-center gap-2 text-xs font-medium">
-              <input
-                id="admin-transmissible-oui"
-                type="radio"
-                name="transmissible"
-                value="Oui"
-                checked={transmissible === "Oui"}
-                onChange={() => setTransmissible("Oui")}
-              />
-              {cur.oui}
-            </label>
-            <label htmlFor="admin-transmissible-non" className="flex items-center gap-2 text-xs font-medium">
-              <input
-                id="admin-transmissible-non"
-                type="radio"
-                name="transmissible"
-                value="Non"
-                checked={transmissible === "Non"}
-                onChange={() => setTransmissible("Non")}
-              />
-              {cur.non}
-            </label>
-          </div>
+          <span className={labelClass}>{cur.transmissible}</span>
+          <label htmlFor="admin-transmissible-oui" className="flex items-center gap-2 text-xs font-medium mt-1">
+            <input
+              id="admin-transmissible-oui"
+              type="checkbox"
+              checked={transmissible === "Oui"}
+              onChange={(e) => setTransmissible(e.target.checked ? "Oui" : "Non")}
+              className="w-4 h-4 text-blue-600"
+            />
+            {cur.oui}
+          </label>
         </div>
+
         <div>
-          <label htmlFor="admin-etat" className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
+          <label htmlFor="admin-etat" className={labelClass}>{cur.etat}</label>
           <select
             id="admin-etat"
             value={etat}
             onChange={(e) => setEtat(e.target.value)}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+            className={fieldClass}
           >
             <option value="">-- {cur.choisirEtat} --</option>
             {(etatOptions && etatOptions.length > 0 ? etatOptions : [
@@ -290,33 +225,72 @@ export function AdminForm({
             ))}
           </select>
         </div>
+
+        <div>
+          <label htmlFor="admin-service-origine" className={labelClass}>
+            {cur.service} <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="admin-service-origine"
+            type="text"
+            value={serviceOrigineLabel}
+            readOnly
+            aria-readonly="true"
+            className={readonlyClass}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="admin-objet" className={labelClass}>
+            {cur.tblTitre} <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="admin-objet"
+            type="text"
+            value={objet}
+            onChange={(e) => setObjet(e.target.value)}
+            placeholder={cur.sujet_placeholder}
+            className={fieldClass}
+            required
+          />
+        </div>
       </div>
 
-      {/* ===== LIGNE 5 : Fichier & Notes ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="admin-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
-          <input
-            id="admin-fichier"
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.doc,.docx,.xlsx,.xls,.csv"
-            onChange={handleFileChange}
-            className="w-full border border-slate-300 p-2 rounded-lg text-xs outline-none focus:border-blue-500 bg-white file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          />
-          {fichier && <p className="text-[10px] text-slate-500 mt-1">{fichier.name}</p>}
+      {/* ===== LIGNE 3 : Document (pleine largeur) ===== */}
+      <div>
+        <label htmlFor="admin-fichier" className={labelClass}>{cur.documentPdfWord}</label>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
+            title={fichier?.name}
+          >
+            {fichier ? fichier.name : cur.aucunFichier}
+          </div>
+          <label className="cursor-pointer whitespace-nowrap border border-slate-300 rounded-lg px-6 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition">
+            {cur.choisirFichier}
+            <input
+              id="admin-fichier"
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </label>
         </div>
-        <div>
-          <label htmlFor="admin-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
-          <textarea
-            id="admin-notes"
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={cur.commentaire}
-            className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-          />
-        </div>
+      </div>
+
+      {/* ===== LIGNE 4 : Notes (pleine largeur) ===== */}
+      <div>
+        <label htmlFor="admin-notes" className={labelClass}>{cur.notes}</label>
+        <textarea
+          id="admin-notes"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={cur.commentaire}
+          className={fieldClass}
+        />
       </div>
 
       {/* ===== MODE DE TRAITEMENT ===== */}
@@ -387,8 +361,8 @@ export function AdminForm({
                         </label>
                       ))}
                     </div>
-                    </div>
-                  ))}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

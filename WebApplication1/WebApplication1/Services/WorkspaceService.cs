@@ -35,6 +35,7 @@ namespace WebApplication1.Services
                     ca.Expediteur, ca.DateCreation, ca.DateReception,
                     ca.TypeCircuit, ca.ServiceActuel, ca.StatutActuel, ca.FilePath,
                     ca.NumeroBureauOrdre, ca.EstSupprime,
+                    ca.Source, ca.DateMessage, ca.Etat, ca.Notes, ca.Transmissible,
                     transactions = ca.Transactions.Select(t => new
                     {
                         t.Id, t.ServiceOrigine, t.ServiceDestination,
@@ -52,6 +53,8 @@ namespace WebApplication1.Services
                     dj.ServiceActuel, dj.StatutActuel,
                     dj.FilePath,
                     dj.EtapeJalsatActuelle, dj.EtatGlobal,
+                    dj.NumeroPremiereInstance, dj.TypeDossier,
+                    dj.LinkedDocumentType, dj.DossierParentId,
                     dj.Circuit, dj.EtapeService,
                     dj.JalsatTransaction, dj.TaslimTransaction,
                     dj.AutoriteRetrait, dj.NumeroBureauOrdre, dj.EstSupprime,
@@ -64,7 +67,7 @@ namespace WebApplication1.Services
                 },
                 CourrierSortant cs => new
                 {
-                    type = cs.TypeSortant == "demande" ? "sortant-demande" : "sortant-normal",
+                    type = "sortant-normal",
                     cs.Id, cs.NumeroReference, cs.NumeroEnvoi,
                     cs.Sujet, cs.Objet,
                     cs.DateCreation, cs.DateEnvoi,

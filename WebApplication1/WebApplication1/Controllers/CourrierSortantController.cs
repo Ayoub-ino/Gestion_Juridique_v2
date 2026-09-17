@@ -46,12 +46,25 @@ namespace WebApplication1.Controllers
                     ? code
                     : DocumentAccessService.ServiceTribunalToRbacCode(creatorServiceEnum);
 
-                // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
-                var numeroRef = dto.Reference ?? "REF-" + DateTime.Now.Ticks.ToString();
-                if (!string.IsNullOrWhiteSpace(dto.Reference))
+                // N° de bureau — creator user id + year (system-assigned)
+                var numeroBureauOrdre = $"{userId}/{DateTime.Now.Year}";
+
+                // Vérifier l'unicité du numéro de référence dans TOUS les types de documents.
+                // Outgoing mail carries no "Numéro interne" field, so when the client
+                // omits it we derive a unique one from the N° de bureau
+                // (e.g. "2/2026/3").
+                var numeroRef = dto.Reference;
+                if (string.IsNullOrWhiteSpace(numeroRef))
+                {
+                    var prefix = $"{numeroBureauOrdre}/";
+                    var existing = await _context.CourriersSortants
+                        .CountAsync(c => c.NumeroReference.StartsWith(prefix));
+                    numeroRef = $"{prefix}{existing + 1}";
+                }
+                else
                 {
                     var refExists = await _context.Documents
-                        .AnyAsync(d => d.NumeroReference == dto.Reference);
+                        .AnyAsync(d => d.NumeroReference == numeroRef);
                     if (refExists)
                         return Conflict(new { error = "Ce numéro de référence existe déjà" });
                 }
@@ -65,11 +78,12 @@ namespace WebApplication1.Controllers
                     ServiceActuel = creatorServiceEnum,
                     ServiceActuelCode = creatorServiceCode,
                     StatutActuel = StatutDossier.Nouveau,
-                    NumeroBureauOrdre = dto.Reference ?? "BO-" + DateTime.Now.Ticks.ToString(),
+                    // N° de bureau — creator user id + year (system-assigned)
+                    NumeroBureauOrdre = numeroBureauOrdre,
                     DestinataireExterne = dto.Destinataire,
                     TypeSortant = dto.TypeSortant ?? "normal",
                     DateEnvoi = dto.DateEnvoi ?? DateTime.Now,
-                    NumeroEnvoi = dto.NumeroEnvoi ?? dto.Reference ?? "",
+                    NumeroEnvoi = dto.NumeroEnvoi ?? numeroRef,
                     TribunalOrigine = dto.TribunalOrigine ?? "",
                     TribunalDestination = dto.TribunalDestination ?? ""
                 };

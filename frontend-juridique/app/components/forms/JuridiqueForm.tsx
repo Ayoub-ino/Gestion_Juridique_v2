@@ -4,10 +4,11 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { useServiceOptions } from "@/app/hooks/useServiceOptions";
+import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { api } from "@/lib/api/client";
 import { notify } from "@/lib/feedback";
 
 interface JuridiqueFormProps {
@@ -22,14 +23,10 @@ interface JuridiqueFormProps {
   setParentDossier: (v: string) => void;
   juridiqueDate: string;
   setJuridiqueDate: (v: string) => void;
-  numeroBureauOrdre: string;
-  setNumeroBureauOrdre: (v: string) => void;
-  autoYearSuffix: string;
-  setAutoYearSuffix: (v: string) => void;
   juridiqueEtat: string;
   setJuridiqueEtat: (v: string) => void;
-  juridiqueService: string;
-  setJuridiqueService: (v: string) => void;
+  linkedDocumentType: string;
+  setLinkedDocumentType: (v: string) => void;
   typeDossier: string;
   setTypeDossier: (v: string) => void;
   numeroPremiereInstance: string;
@@ -69,8 +66,12 @@ interface JuridiqueFormProps {
 
   // Références communes
   reference: string;
+  setReference: (v: string) => void;
   tiers: string;
+  setTiers: (v: string) => void;
   objet: string;
+  setObjet: (v: string) => void;
+  sourceOptions?: { value: string; label: string }[];
   isJalsatService: boolean;
   isTaslimService: boolean;
   langue: Langue;
@@ -90,14 +91,10 @@ export function JuridiqueForm({
   setParentDossier,
   juridiqueDate,
   setJuridiqueDate,
-  numeroBureauOrdre,
-  setNumeroBureauOrdre,
-  autoYearSuffix,
-  setAutoYearSuffix,
   juridiqueEtat,
   setJuridiqueEtat,
-  juridiqueService,
-  setJuridiqueService,
+  linkedDocumentType,
+  setLinkedDocumentType,
   typeDossier,
   setTypeDossier,
   numeroPremiereInstance,
@@ -134,8 +131,12 @@ export function JuridiqueForm({
   commentaireSousService,
   setCommentaireSousService,
   reference,
+  setReference,
   tiers,
+  setTiers,
   objet,
+  setObjet,
+  sourceOptions,
   isJalsatService,
   isTaslimService,
   langue,
@@ -143,25 +144,34 @@ export function JuridiqueForm({
   userRole
 }: JuridiqueFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { token } = useAuth();
-  const { groups: serviceGroups } = useServiceOptions(token, langue);
+  const { user, token } = useAuth();
+  const { getServiceLabel } = useServiceLabels(token, langue);
 
-  // Fonction pour sélectionner un dossier parent
-  const handleSelectParentFolder = async () => {
-    try {
-      const browserWindow = window as typeof window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
-      if (!browserWindow.showDirectoryPicker) {
-        notify(langue === "fr"
-          ? "Votre navigateur ne supporte pas la sélection de dossier."
-          : "المتصفح لا يدعم اختيار المجلد.");
-        return;
-      }
-      const handle = await browserWindow.showDirectoryPicker();
-      setParentDossier(handle.name || (langue === "fr" ? "Dossier sélectionné" : "مجلد مختار"));
-    } catch {
-      console.warn("Sélection annulée");
-    }
-  };
+  // ── System-assigned values ──
+  // N° de bureau = id of the creating user (a service can host several users).
+  const annee = new Date().getFullYear();
+  // Service d'origine = the creator's current service (dynamic label).
+  const serviceOrigineLabel = user?.service
+    ? getServiceLabel(user.service) || user.service
+    : "";
+
+  // Existing dossiers, used by "Choisir un dossier parent". A linked document
+  // is attached to an already-created folder and therefore shares its
+  // identification number (the only case where two dossiers may do so).
+  const [existingDossiers, setExistingDossiers] = useState<Array<{ id: number; numeroReference: string; objet: string }>>([]);
+  const [parentSearchTerm, setParentSearchTerm] = useState("");
+  const [showParentDropdown, setShowParentDropdown] = useState(false);
+
+  useEffect(() => {
+    if (!token || docLie !== "Oui") return;
+    let cancelled = false;
+    api.get<Array<{ id: number; numeroReference: string; objet: string }>>("/api/CourrierJuridique", token)
+      .then((rows) => {
+        if (!cancelled) setExistingDossiers(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { /* dropdown simply stays empty */ });
+    return () => { cancelled = true; };
+  }, [token, docLie]);
 
   // Options traduites
   const getSourceOptions = () => {
@@ -290,121 +300,207 @@ export function JuridiqueForm({
       <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
         <h3 className="font-bold text-sm text-slate-800">{cur.juridique}</h3>
 
-        {/* Document lié & Dossier principal */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="jur-doc-lie" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.docsReference}
-            </label>
-            <select
-              id="jur-doc-lie"
-              value={docLie}
-              onChange={(e) => setDocLie(e.target.value)}
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            >
-              <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
-              <option value="Oui">{cur.oui}</option>
-              <option value="Non">{cur.non}</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="jur-dossier-principal" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.dossierPrincipal}
-            </label>
-            <select
-              id="jur-dossier-principal"
-              value={dossierPrincipal}
-              onChange={(e) => setDossierPrincipal(e.target.value)}
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            >
-              <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
-              <option value="Oui">{cur.oui}</option>
-              <option value="Non">{cur.non}</option>
-            </select>
-          </div>
+        {/* Dossier principal / document lié */}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            aria-pressed={docLie === "Oui"}
+            onClick={() => { setDocLie("Oui"); setDossierPrincipal("Non"); }}
+            className={`px-6 py-2.5 rounded-lg text-xs font-bold border transition ${docLie === "Oui" ? "bg-blue-800 text-white border-blue-800" : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"}`}
+          >
+            {cur.documentLie}
+          </button>
+          <button
+            type="button"
+            aria-pressed={dossierPrincipal === "Oui"}
+            onClick={() => { setDocLie("Non"); setDossierPrincipal("Oui"); }}
+            className={`px-6 py-2.5 rounded-lg text-xs font-bold border transition ${dossierPrincipal === "Oui" ? "bg-blue-800 text-white border-blue-800" : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"}`}
+          >
+            {cur.dossierPrincipalTab}
+          </button>
         </div>
 
-        {/* Source du document lié & Dossier parent (avec bouton parcourir) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="jur-source-doc" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.source_service} <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="jur-source-doc"
-              value={sourceDocLie}
-              onChange={(e) => setSourceDocLie(e.target.value)}
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              required
-            >
-              <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
-              {getSourceOptions().map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="jur-parent-dossier" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.parentDossier}
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="jur-parent-dossier"
-                type="text"
-                value={parentDossier}
-                readOnly
-                placeholder={cur.aucune_doc_reference}
-                className="flex-1 border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              />
-              <button
-                type="button"
-                onClick={handleSelectParentFolder}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition whitespace-nowrap"
-              >
-                {cur.parcourir}
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* ===== LIGNE 1 ===== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          {docLie === "Oui" ? (
+            <>
+              <div>
+                <label htmlFor="jur-linked-type" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.typeDocumentLie}
+                </label>
+                <select
+                  id="jur-linked-type"
+                  value={linkedDocumentType}
+                  onChange={(e) => setLinkedDocumentType(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
+                  {getTypeDossierOptions().map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="jur-source-doc" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.sourceDocumentLie} <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="jur-source-doc"
+                  value={sourceDocLie}
+                  onChange={(e) => setSourceDocLie(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
+                  {getSourceOptions().map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="jur-parent-dossier" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.choisirDossierParent}
+                </label>
+                <div className="relative">
+                  <input
+                    id="jur-parent-dossier"
+                    type="text"
+                    value={parentDossier ? existingDossiers.find(d => d.numeroReference === parentDossier)?.numeroReference + " — " + existingDossiers.find(d => d.numeroReference === parentDossier)?.objet : parentSearchTerm}
+                    onChange={(e) => {
+                      setParentSearchTerm(e.target.value);
+                      setParentDossier("");
+                      setShowParentDropdown(true);
+                    }}
+                    onFocus={() => setShowParentDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowParentDropdown(false), 200)}
+                    placeholder={cur.choisirDossierParent}
+                    className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                  />
+                  {showParentDropdown && (
+                    <ul className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {existingDossiers
+                        .filter((d) => {
+                          const term = parentSearchTerm.toLowerCase();
+                          return (
+                            !term ||
+                            d.numeroReference.toLowerCase().includes(term) ||
+                            d.objet.toLowerCase().includes(term)
+                          );
+                        })
+                        .map((d) => (
+                          <li
+                            key={d.id}
+                            onMouseDown={() => {
+                              setParentDossier(d.numeroReference);
+                              setParentSearchTerm("");
+                              setShowParentDropdown(false);
+                            }}
+                            className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                          >
+                            <span className="font-bold text-slate-800">{d.numeroReference}</span>
+                            <span className="text-slate-500 ml-2">— {d.objet}</span>
+                          </li>
+                        ))}
+                      {existingDossiers.filter((d) => {
+                        const term = parentSearchTerm.toLowerCase();
+                        return !term || d.numeroReference.toLowerCase().includes(term) || d.objet.toLowerCase().includes(term);
+                      }).length === 0 && (
+                        <li className="px-3 py-2 text-xs text-slate-400 italic">{langue === "fr" ? "Aucun dossier trouvé" : "لم يتم العثور على ملف"}</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {langue === "fr"
+                    ? "Le document lié partage le numéro du dossier parent."
+                    : "الوثيقة المرتبطة تتقاسم رقم الملف الأصلي."}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="jur-objet" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.objetLabel} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="jur-objet"
+                  type="text"
+                  value={objet}
+                  onChange={(e) => setObjet(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="jur-tribunal" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.tribunalSource} <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="jur-tribunal"
+                  value={tiers}
+                  onChange={(e) => setTiers(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                  required
+                >
+                  <option value="">-- {cur.choisirService} --</option>
+                  {(sourceOptions && sourceOptions.length > 0 ? sourceOptions : getSourceOptions()).map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
-        {/* Date & N° Bureau d'ordre */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="jur-date-arrivee" className="block text-xs font-bold text-slate-700 mb-2">{cur.dateArrivee} <span className="text-red-500">*</span></label>
+            <label htmlFor="jur-date" className="block text-xs font-bold text-slate-700 mb-2">
+              {cur.tblDate} <span className="text-red-500">*</span>
+            </label>
             <input
-              id="jur-date-arrivee"
+              id="jur-date"
               type="date"
               value={juridiqueDate}
               onChange={(e) => setJuridiqueDate(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              required
             />
           </div>
+
+          {docLie !== "Oui" && (
+            <div>
+              <label htmlFor="jur-num-dossier" className="block text-xs font-bold text-slate-700 mb-2">
+                {cur.numeroDossierJuridique} <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="jur-num-dossier"
+                type="text"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="2026/15/3"
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                required
+              />
+            </div>
+          )}
+
           <div>
-            <label htmlFor="jur-bo" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureauOrdre}</label>
+            <label htmlFor="jur-bo" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureau}</label>
             <input
               id="jur-bo"
               type="text"
-              value={numeroBureauOrdre}
-              onChange={(e) => setNumeroBureauOrdre(e.target.value)}
+              value={user?.id ?? ""}
+              readOnly
+              aria-readonly="true"
               placeholder="15"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              className="w-full border border-slate-200 p-2.5 rounded-lg text-xs bg-slate-50 text-slate-600"
             />
+            <p className="text-[10px] text-slate-400 mt-1 text-end">
+              {annee} / {cur.autoYearSuffix}
+            </p>
           </div>
         </div>
 
-        {/* Année & État */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="jur-annee" className="block text-xs font-bold text-slate-700 mb-2">{cur.anneeNumerotation}</label>
-            <input
-              id="jur-annee"
-              type="text"
-              value={autoYearSuffix}
-              onChange={(e) => setAutoYearSuffix(e.target.value)}
-              placeholder="/ 2026"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            />
-          </div>
+        {/* ===== LIGNE 2 ===== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div>
             <label htmlFor="jur-etat" className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
             <select
@@ -419,84 +515,100 @@ export function JuridiqueForm({
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Service & Type de dossier */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="jur-service" className="block text-xs font-bold text-slate-700 mb-2">{cur.service} <span className="text-red-500">*</span></label>
-            <select
+            <label htmlFor="jur-service" className="block text-xs font-bold text-slate-700 mb-2">
+              {cur.service} <span className="text-red-500">*</span>
+            </label>
+            <input
               id="jur-service"
-              value={juridiqueService}
-              onChange={(e) => setJuridiqueService(e.target.value)}
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              required
-            >
-              <option value="">{cur.choisirService}</option>
-              {serviceGroups.map((group) => (
-                <optgroup key={group.key} label={group.label}>
-                  {group.children.map((svc) => (
-                    <option key={svc.value} value={svc.value}>
-                      {svc.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="jur-type" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.tblType}
-            </label>
-            <select
-              id="jur-type"
-              value={typeDossier}
-              onChange={(e) => setTypeDossier(e.target.value)}
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-            >
-              <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
-              {getTypeDossierOptions().map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* N° première instance & Fichier */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="jur-num-premiere" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.numeroPremiereInstance}
-            </label>
-            <input
-              id="jur-num-premiere"
               type="text"
-              value={numeroPremiereInstance}
-              onChange={(e) => setNumeroPremiereInstance(e.target.value)}
-              placeholder="2026/12"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              value={serviceOrigineLabel}
+              readOnly
+              aria-readonly="true"
+              className="w-full border border-slate-200 p-2.5 rounded-lg text-xs bg-slate-50 text-slate-600"
             />
           </div>
-          <div>
-            <label htmlFor="jur-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.fichier}</label>
-            <input
-              id="jur-fichier"
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.xlsx,.xls,.csv"
-              onChange={handleFileChange}
-              className="w-full border border-slate-300 p-2 rounded-lg text-xs outline-none focus:border-blue-500 bg-white file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-            {juridiqueFichier && <p className="text-[10px] text-slate-500 mt-1">{juridiqueFichier.name}</p>}
+
+          {docLie === "Oui" ? (
+            <div>
+              <label htmlFor="jur-objet-linked" className="block text-xs font-bold text-slate-700 mb-2">
+                {cur.objetLabel} <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="jur-objet-linked"
+                type="text"
+                value={objet}
+                onChange={(e) => setObjet(e.target.value)}
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                required
+              />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="jur-type" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.typeDossier}
+                </label>
+                <select
+                  id="jur-type"
+                  value={typeDossier}
+                  onChange={(e) => setTypeDossier(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="">{langue === "fr" ? "Choisir" : "اختر"}</option>
+                  {getTypeDossierOptions().map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="jur-num-premiere" className="block text-xs font-bold text-slate-700 mb-2">
+                  {cur.numeroPremiereInstance}
+                </label>
+                <input
+                  id="jur-num-premiere"
+                  type="text"
+                  value={numeroPremiereInstance}
+                  onChange={(e) => setNumeroPremiereInstance(e.target.value)}
+                  placeholder="2026/12"
+                  className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Document PDF / Word (pleine largeur) */}
+        <div>
+          <label htmlFor="jur-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.documentPdfWord}</label>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
+              title={juridiqueFichier?.name}
+            >
+              {juridiqueFichier ? juridiqueFichier.name : cur.aucunFichier}
+            </div>
+            <label className="cursor-pointer whitespace-nowrap border border-slate-300 rounded-lg px-6 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition">
+              {cur.choisirFichier}
+              <input
+                id="jur-fichier"
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Notes (pleine largeur) */}
         <div>
           <label htmlFor="jur-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
           <textarea
             id="jur-notes"
-            rows={2}
+            rows={3}
             value={juridiqueNotes}
             onChange={(e) => setJuridiqueNotes(e.target.value)}
             placeholder={cur.commentaire}
