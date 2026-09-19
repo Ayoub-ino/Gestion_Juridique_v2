@@ -49,7 +49,7 @@ export const SERVICE_GROUPS = [
       { value: "GestionPourvoisCassation", fr: "Pourvois en cassation", ar: "الطعن بالنقض" },
       { value: "RemiseCopieJugement", fr: "Remise copie jugement", ar: "تسليم نسخ الأحكام" },
       { value: "EfficaciteJudiciaire", fr: "Efficacité judiciaire", ar: "الكفاءة القضائية" },
-      { value: "Greffe", fr: "Greffe", ar: "القلم" },
+      { value: "Greffe", fr: "Greffe", ar: "كتاب الضبط" },
       { value: "Direction", fr: "Direction", ar: "المديرية" }
     ]
   }
@@ -81,7 +81,7 @@ export function getServiceLabel(value: string, langue: Langue): string {
 export function getRoleLabel(role: string, langue: Langue): string {
   const map: Record<string, { fr: string; ar: string }> = {
     "Admin": { fr: "Administrateur", ar: "مدير النظام" },
-    "Greffier": { fr: "Greffier", ar: "الكاتب القضائي" },
+    "Greffier": { fr: "Greffier", ar: "كاتب الضبط" },
     "Directeur": { fr: "Directeur", ar: "المدير العام" },
     "Consultant": { fr: "Consultant", ar: "مستشار" },
     "Enregistrement": { fr: "Enregistrement", ar: "التسجيل" },
@@ -119,7 +119,7 @@ export function getRoleLabel(role: string, langue: Langue): string {
     "Pourvois": { fr: "Pourvois en cassation", ar: "الطعن بالنقض" },
     "RemiseCopie": { fr: "Remise copie jugement", ar: "تسليم نسخ الأحكام" },
     "Stats": { fr: "Efficacité judiciaire", ar: "الكفاءة القضائية" },
-    "Greffe": { fr: "Greffe", ar: "القلم" },
+    "Greffe": { fr: "Greffe", ar: "كتاب الضبط" },
   };
   const found = map[role];
   if (found) return langue === "fr" ? found.fr : found.ar;

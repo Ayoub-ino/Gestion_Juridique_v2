@@ -17,6 +17,6 @@ namespace WebApplication1.Models
         public DateTime? DateMessage { get; set; }
         /// <summary>État du courrier tel que saisi dans le formulaire.</summary>
         public string? Etat { get; set; }
-        public string? Notes { get; set; }
+        // `Notes` vit sur la classe Document (partagée par tous les types de courrier).
     }
 }

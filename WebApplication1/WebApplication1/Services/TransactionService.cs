@@ -201,37 +201,21 @@ namespace WebApplication1.Services
             // Keep the original marker so the sender's notification stays identifiable
             if (!IsRefusalNotice(transaction)) transaction.Commentaire = commentaire;
 
-            // A refusal notice is only an acknowledgement by the original sender —
-            // it must never re-route the document.
+            // The folder stayed with the sender until this point (pending transfer).
+            // doitRevenir: the receiver processed it but it must go back to the sender.
             if (transaction.DoitRevenir && !IsRefusalNotice(transaction))
             {
-                transaction.Document.ServiceActuel = transaction.ServiceOrigine;
-                transaction.Document.ServiceActuelCode = originCode;
                 transaction.Document.StatutActuel = StatutDossier.EnInstance;
-
-                var retourTransaction = new Transaction
-                {
-                    DocumentId = transaction.DocumentId,
-                    ServiceOrigine = transaction.ServiceDestination,
-                    ServiceOrigineCode = destCode,
-                    ServiceDestination = transaction.ServiceOrigine,
-                    ServiceDestinationCode = originCode,
-                    DateTransaction = DateTime.Now,
-                    Remarques = "Document retourné automatiquement (doitRevenir)",
-                    UtilisateurId = userIdStr,
-                    Statut = StatutTransaction.EnAttente,
-                    DoitRevenir = false
-                };
-                _context.Transactions.Add(retourTransaction);
-
-                // Revoke receiver's access — document is returning to sender
-                await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
             }
             else
             {
+                // Normal acceptance: move the folder to the receiver's service.
                 transaction.Document.ServiceActuel = transaction.ServiceDestination;
                 transaction.Document.ServiceActuelCode = destCode;
                 transaction.Document.StatutActuel = StatutDossier.EnCours;
+
+                // Grant the receiver's service edit access (was withheld during the pending phase).
+                await _accessService.GrantEditorAsync(transaction.DocumentId, destCode, userId);
             }
 
             await _context.SaveChangesAsync();
@@ -265,36 +249,10 @@ namespace WebApplication1.Services
             transaction.Statut = StatutTransaction.Refuse;
             transaction.MotifRefus = commentaire;
 
-            if (transaction.DoitRevenir || doitRevenir)
-            {
-                transaction.DoitRevenir = true;
-                transaction.Document.ServiceActuel = transaction.ServiceOrigine;
-                transaction.Document.ServiceActuelCode = originCode;
-                transaction.Document.StatutActuel = StatutDossier.EnCours;
-
-                var retourTransaction = new Transaction
-                {
-                    DocumentId = transaction.DocumentId,
-                    ServiceOrigine = transaction.ServiceDestination,
-                    ServiceOrigineCode = destCode,
-                    ServiceDestination = transaction.ServiceOrigine,
-                    ServiceDestinationCode = originCode,
-                    DateTransaction = DateTime.Now,
-                    Remarques = $"Document retourné après refus (doitRevenir): {commentaire ?? ""}",
-                    UtilisateurId = userIdStr,
-                    Statut = StatutTransaction.EnAttente,
-                    DoitRevenir = false
-                };
-
-                _context.Transactions.Add(retourTransaction);
-
-                // Revoke receiver's access — document is returning to sender
-                await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
-            }
-
+            // The folder never moved from the sender (pending transfer), so no return is needed.
             // ── SENDER NOTIFICATION: create a notification for the sender's service ──
             // so the sender sees "Your transfer was refused" with the receiver's message
-            // in their Notifications tab. This transaction is directed TO the sender's service.
+            // in their Notifications tab.
             var senderNotificationTx = new Transaction
             {
                 DocumentId = transaction.DocumentId,
@@ -304,10 +262,9 @@ namespace WebApplication1.Services
                 ServiceDestinationCode = originCode,               // sender's code
                 DateTransaction = DateTime.Now,
                 Remarques = commentaire,
+                MotifRefus = commentaire,
                 UtilisateurId = userIdStr,
                 Statut = StatutTransaction.EnAttente,
-                // The document was already returned (if requested) by the refusal above;
-                // this row is a notice, not a transfer, so it must not carry DoitRevenir.
                 DoitRevenir = false,
                 Commentaire = "[REFUS]"
             };
@@ -363,15 +320,11 @@ namespace WebApplication1.Services
                 tx.Statut = StatutTransaction.Annule;
             }
 
-            // Restore the document to the original service
-            var document = transaction.Document;
-            document.ServiceActuel = transaction.ServiceOrigine;
-            document.ServiceActuelCode = originCode;
-            document.StatutActuel = transaction.StatutPrecedent ?? StatutDossier.EnCours;
-
+            // The folder stayed with the sender (pending transfer), so no restore is needed.
             await _context.SaveChangesAsync();
 
-            // Revoke DocumentAccess for the destination service (they can no longer modify)
+            // Revoke any access that may have been granted to the destination
+            // (no-op when access was never granted, but safe to keep for idempotency)
             var destCode = TransactionDestinationCode(transaction);
             await _accessService.RevokeAccessAsync(transaction.DocumentId, destCode);
 

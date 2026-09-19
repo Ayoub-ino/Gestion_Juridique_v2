@@ -116,7 +116,13 @@ describe("Permission persistence", () => {
     );
     cy.get(`#perm-${PERMISSION_KEY}`).click();
     cy.get(`#perm-${PERMISSION_KEY}`).should("have.prop", "checked", target);
+
+    // Wait for the save request to land before reading the database — asserting
+    // straight after the click can beat the in-flight PUT and read the previous
+    // value, which made this spec fail under load.
+    cy.intercept("PUT", `**/api/rbac/permissions/service/${serviceId}`).as("savePermission");
     cy.contains("button", /Sauvegarder|حفظ/).click();
+    cy.wait("@savePermission").its("response.statusCode").should("eq", 200);
 
     // The save must have reached the database
     cy.wrap(null)

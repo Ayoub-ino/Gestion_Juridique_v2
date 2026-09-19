@@ -85,7 +85,8 @@ namespace WebApplication1.Controllers
                     DateEnvoi = dto.DateEnvoi ?? DateTime.Now,
                     NumeroEnvoi = dto.NumeroEnvoi ?? numeroRef,
                     TribunalOrigine = dto.TribunalOrigine ?? "",
-                    TribunalDestination = dto.TribunalDestination ?? ""
+                    TribunalDestination = dto.TribunalDestination ?? "",
+                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes
                 };
 
                 _context.CourriersSortants.Add(sortant);
@@ -149,6 +150,7 @@ namespace WebApplication1.Controllers
                     c.DateEnvoi,
                     c.TribunalOrigine,
                     c.TribunalDestination,
+                    c.Notes,
                     c.FilePath,
                     DernierTransfert = c.Transactions
                         .OrderByDescending(t => t.DateTransaction)

@@ -112,7 +112,7 @@ export function SortantTable({
                     <td className="p-3 font-mono font-bold text-slate-600">{doc.reference}</td>
                     <td className="p-3">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700">
-                        {cur.normal}
+                        {cur.typeSortant}
                       </span>
                     </td>
                     <td className="p-3 text-slate-500">{doc.date}</td>

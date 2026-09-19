@@ -40,7 +40,6 @@ This C# service is called automatically on application startup and can also be t
 ### SQL Scripts
 
 - **`grant-permissions-existing-db.sql`** — Grants database permissions for an existing SQL Server database.
-- **`permission-audit.sh`** — Validates permission matrix across all users and endpoints (moved from `scripts/`).
 
 ## Startup Flow
 

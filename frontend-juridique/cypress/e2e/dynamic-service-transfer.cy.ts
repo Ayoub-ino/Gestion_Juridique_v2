@@ -213,8 +213,9 @@ describe("10. Dynamic Service Transfer & Refusal Notification", () => {
       });
   });
 
-  it("shows the folder only to its current custodian service", () => {
+  it("keeps folder with sender until receiver accepts", () => {
     let docId = 0;
+    let txId = 0;
 
     createCourrier()
       .then(({ id }) => {
@@ -228,24 +229,49 @@ describe("10. Dynamic Service Transfer & Refusal Notification", () => {
           serviceDestination: serviceCode,
         }),
       )
-      .then((res) => expect(res.status).to.eq(200))
-      // Receiver service sees it
-      .then(() => login(loginName, password))
-      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
       .then((res) => {
         expect(res.status).to.eq(200);
+        txId = res.body.transactionIds[0];
+      })
+      // Sender still sees it (folder stays with sender until accepted)
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
         const doc = (res.body as { id: number; serviceActuelCode?: string }[]).find(
           (c) => c.id === docId,
         );
-        expect(doc, "custodian service must see the folder").to.exist;
+        expect(doc, "sender must still hold custody before acceptance").to.exist;
+        expect(doc!.serviceActuelCode).to.eq("bureauordre");
+      })
+      // Receiver does NOT see the folder yet
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const ids = (res.body as { id: number }[]).map((c) => c.id);
+        expect(ids, "receiver must NOT see folder before acceptance").to.not.include(docId);
+      })
+      // Receiver accepts the transaction
+      .then(() => login(loginName, password))
+      .then((t) =>
+        authed(t, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {}),
+      )
+      .then((res) => expect(res.status).to.eq(200))
+      // NOW the receiver sees the folder
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const doc = (res.body as { id: number; serviceActuelCode?: string }[]).find(
+          (c) => c.id === docId,
+        );
+        expect(doc, "receiver must see folder after acceptance").to.exist;
         expect(doc!.serviceActuelCode).to.eq(serviceCode);
       })
-      // Sender service no longer sees it
+      // Sender no longer sees it after acceptance
       .then(() => login("bureauordre", "bureauordre123"))
       .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
       .then((res) => {
         const ids = (res.body as { id: number }[]).map((c) => c.id);
-        expect(ids, "sender must no longer hold custody").to.not.include(docId);
+        expect(ids, "sender must no longer hold custody after acceptance").to.not.include(docId);
       });
   });
 
@@ -261,7 +287,7 @@ describe("10. Dynamic Service Transfer & Refusal Notification", () => {
 
       cy.get("aside", { timeout: 15000 }).should("exist");
       cy.get("aside").within(() => {
-        cy.contains(/Mes entités|وثائقي|ملفاتي/).click();
+        cy.contains(/Mes dossiers|وثائقي|ملفاتي/).click();
       });
       cy.wait(800);
 

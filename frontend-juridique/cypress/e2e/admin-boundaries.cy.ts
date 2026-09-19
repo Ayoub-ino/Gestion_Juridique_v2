@@ -68,7 +68,7 @@ describe("Admin role boundaries", () => {
     loginAsAdmin();
 
     cy.get("aside").within(() => {
-      cy.contains(/Mes entités|ملفاتي/).click();
+      cy.contains(/Mes dossiers|ملفاتي/).click();
     });
     cy.wait(1000);
 

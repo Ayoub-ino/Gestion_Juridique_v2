@@ -203,6 +203,8 @@ export default function Home() {
   const { getOptions: getListOptions } = useListItems(token);
   const sourceOptions = getListOptions("sources_courrier", langue);
   const etatOptions = getListOptions("etats_document", langue);
+  // Dedicated list for "Tribunal / Source" — managed from « Listes dynamiques ».
+  const tribunalOptions = getListOptions("tribunaux", langue);
 
   const role = user?.role || "";
   const isAdmin = role === "Admin" || role === "admin";
@@ -377,7 +379,7 @@ export default function Home() {
     "ProcduresCommissaireRoyal": "إجراءات المفوض الملكي",
     "GestionPourvoisCassation": "الطعن بالنقض",
     "RemiseCopieJugement": "تسليم نسخ الأحكام",
-    "Greffe": "القلم",
+    "Greffe": "كتاب الضبط",
     "Direction": "المديرية",
     "Enregistrement": "التسجيل",
     "Consultant": "مستشار",
@@ -1177,10 +1179,9 @@ export default function Home() {
   const handleDelete = async (doc: CourrierSimule) => {
     if (!canDelete) { notify(cur.permissionRefusee); return; }
     if (deletingDocIdsRef.current.has(doc.id)) return;
-    const confirmMsg = langue === "fr"
-      ? "Voulez-vous vraiment supprimer ce document ?"
-      : "هل تريد بالتأكيد حذف هذه الوثيقة ؟";
-    if (!await confirmAction(confirmMsg)) return;
+    // Deleting is a SOFT delete: the folder is moved to the deleter's archive
+    // (corbeille) where it can be restored or permanently removed later.
+    if (!await confirmAction(cur.suppressionVersArchive)) return;
     deletingDocIdsRef.current.add(doc.id);
 
     const endpoint = doc.type === "entrant-juridique"
@@ -1197,8 +1198,10 @@ export default function Home() {
     try {
       await api.delete(endpoint, token);
       setSelectedIds((current) => current.filter((id) => id !== doc.id));
-      notify(cur.documentSupprime);
+      notify(cur.documentArchive);
       await refetch();
+      // Keep the archive in sync when it is currently open.
+      if (showCorbeille) await fetchCorbeille();
     } catch (err) {
       console.warn("Erreur suppression:", getErrorMessage(err));
       notify(`${cur.erreurPrefix} ${getErrorMessage(err) || cur.erreurBackend}`);
@@ -1470,7 +1473,7 @@ export default function Home() {
                 <span>
                   {vueActive === "entrant-admin" && cur.admin}
                   {vueActive === "entrant-juridique" && cur.juridique}
-                  {vueActive === "sortant-normal" && cur.normal}
+                  {vueActive === "sortant-normal" && cur.typeSortant}
                 </span>
               </div>
 
@@ -1524,7 +1527,7 @@ export default function Home() {
                     reference={reference} setReference={setReference}
                     tiers={tiers} setTiers={setTiers}
                     objet={objet} setObjet={setObjet}
-                    sourceOptions={sourceOptions}
+                    tribunalOptions={tribunalOptions}
                     isJalsatService={isJalsatService}
                     isTaslimService={isTaslimService}
                     langue={langue} cur={cur}
@@ -1540,7 +1543,6 @@ export default function Home() {
                     setObjet={setObjet}
                     dateEnvoi={dateEnvoi}
                     setDateEnvoi={setDateEnvoi}
-                    typeCourrier={cur.normal}
                     cur={cur}
                     notes={notesSortant}
                     setNotes={setNotesSortant}

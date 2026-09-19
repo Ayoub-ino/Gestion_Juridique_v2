@@ -193,7 +193,9 @@ namespace WebApplication1.Services
                     var serviceDefaults = new Dictionary<string, List<string>>
                     {
                         // Creer, Modifier, Transférer + courriers admin + suppression + notes
-                        ["bureauordre"] = new() { "creer_modifier", "creer_courrier_admin", "supprimer", "transferer", "consulter", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
+                        // "voir_corbeille" + "restaurer" + "archives_view" let whoever deletes a
+                        // folder find it again in their own archive before any permanent delete.
+                        ["bureauordre"] = new() { "creer_modifier", "creer_courrier_admin", "supprimer", "voir_corbeille", "restaurer", "archives_view", "transferer", "consulter", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
                         // Creer, Modifier, Transférer + dossiers juridiques + mouvements + notes
                         ["fathmilafat"] = new() { "creer_modifier", "creer_courrier_juridique", "transferer", "transferer_juridique", "consulter", "ouvrir_dossier", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
                         // Modifier, Transférer (no creation)
@@ -370,6 +372,35 @@ namespace WebApplication1.Services
                     Console.WriteLine($"Créé utilisateur de secours pour {svc.Code}: {login}");
                 }
                 _context.SaveChanges();
+
+                // --- 7. Seed the "tribunaux" list (used by "Tribunal / Source") ---
+                // Insert-if-missing only: the list stays editable from
+                // « Listes dynamiques », and this must never overwrite the
+                // administrator's entries. Running this as its own list keeps it
+                // independent from "sources_courrier".
+                _context.ChangeTracker.Clear();
+                if (!_context.ListItems.Any(li => li.ListName == "tribunaux"))
+                {
+                    var tribunaux = new List<ListItem>
+                    {
+                        new ListItem { ListName = "tribunaux", Code = "caa_fes", ValueFr = "Cour d'appel administrative de Fès", ValueAr = "محكمة الاستئناف الإدارية بفاس", DisplayOrder = 10 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_rabat", ValueFr = "Cour d'appel administrative de Rabat", ValueAr = "محكمة الاستئناف الإدارية بالرباط", DisplayOrder = 20 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_casablanca", ValueFr = "Cour d'appel administrative de Casablanca", ValueAr = "محكمة الاستئناف الإدارية بالدار البيضاء", DisplayOrder = 30 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_marrakech", ValueFr = "Cour d'appel administrative de Marrakech", ValueAr = "محكمة الاستئناف الإدارية بمراكش", DisplayOrder = 40 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_tanger", ValueFr = "Cour d'appel administrative de Tanger", ValueAr = "محكمة الاستئناف الإدارية بطنجة", DisplayOrder = 50 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_agadir", ValueFr = "Cour d'appel administrative d'Agadir", ValueAr = "محكمة الاستئناف الإدارية بأكادير", DisplayOrder = 60 },
+                        new ListItem { ListName = "tribunaux", Code = "caa_oujda", ValueFr = "Cour d'appel administrative d'Oujda", ValueAr = "محكمة الاستئناف الإدارية بوجدة", DisplayOrder = 70 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_fes", ValueFr = "Tribunal administratif de Fès", ValueAr = "المحكمة الإدارية بفاس", DisplayOrder = 80 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_meknes", ValueFr = "Tribunal administratif de Meknès", ValueAr = "المحكمة الإدارية بمكناس", DisplayOrder = 90 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_taza", ValueFr = "Tribunal administratif de Taza", ValueAr = "المحكمة الإدارية بتازة", DisplayOrder = 100 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_rabat", ValueFr = "Tribunal administratif de Rabat", ValueAr = "المحكمة الإدارية بالرباط", DisplayOrder = 110 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_casablanca", ValueFr = "Tribunal administratif de Casablanca", ValueAr = "المحكمة الإدارية بالدار البيضاء", DisplayOrder = 120 },
+                        new ListItem { ListName = "tribunaux", Code = "ta_marrakech", ValueFr = "Tribunal administratif de Marrakech", ValueAr = "المحكمة الإدارية بمراكش", DisplayOrder = 130 }
+                    };
+                    _context.ListItems.AddRange(tribunaux);
+                    _context.SaveChanges();
+                    Console.WriteLine($"Tribunaux créés ({tribunaux.Count}).");
+                }
         }
     }
 }

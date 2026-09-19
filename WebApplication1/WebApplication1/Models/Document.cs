@@ -28,6 +28,14 @@ namespace WebApplication1.Models
         public string NumeroBureauOrdre { get; set; } = string.Empty;
         public string Objet { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Notes libres saisies au formulaire.
+        /// Déclaré sur la classe de base : en TPH, deux types frères ne peuvent
+        /// pas déclarer la même propriété, et toutes les catégories de courrier
+        /// doivent partager une seule colonne « Notes ».
+        /// </summary>
+        public string? Notes { get; set; }
+
         // Suppression logique
         public bool EstSupprime { get; set; } = false;
 

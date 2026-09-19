@@ -80,7 +80,7 @@ namespace WebApplication1.Tests
         }
 
         [Fact]
-        public async Task AccepterAsync_WithDoitRevenir_CreatesReturnTransaction()
+        public async Task AccepterAsync_WithDoitRevenir_KeepsFolderWithSender()
         {
             var ctx = CreateContext();
             var me = CreateUser("BureauOrdre");
@@ -107,8 +107,10 @@ namespace WebApplication1.Tests
 
             Assert.True(result.Success);
             Assert.Equal(StatutTransaction.Accepte, (await ctx.Transactions.FindAsync(tx.Id))!.Statut);
+            // Folder stays with sender — no return transaction created
+            Assert.Equal(ServiceTribunal.BureauOrdre, (await ctx.Documents.FindAsync(doc.Id))!.ServiceActuel);
             Assert.Equal(StatutDossier.EnInstance, (await ctx.Documents.FindAsync(doc.Id))!.StatutActuel);
-            Assert.Equal(2, await ctx.Transactions.CountAsync()); // original + auto return
+            Assert.Equal(1, await ctx.Transactions.CountAsync()); // only the original transaction
         }
 
         [Fact]
@@ -142,7 +144,7 @@ namespace WebApplication1.Tests
         }
 
         [Fact]
-        public async Task AnnulerTransitionAsync_RestoresDocumentAndAnnullsChain()
+        public async Task AnnulerTransitionAsync_FolderStaysWithSender()
         {
             var ctx = CreateContext();
             var admin = CreateUser("BureauOrdre", "Admin");
@@ -150,12 +152,12 @@ namespace WebApplication1.Tests
             await ctx.SaveChangesAsync();
 
             var doc = CreateDoc();
-            doc.ServiceActuel = ServiceTribunal.JalsatWaIjra2at;
+            // Folder stays with sender (BureauOrdre) during pending transfer
+            doc.ServiceActuel = ServiceTribunal.BureauOrdre;
             doc.StatutActuel = StatutDossier.EnCours;
             ctx.Documents.Add(doc);
             await ctx.SaveChangesAsync();
 
-            // Admin can cancel EnAttente transactions (not accepted ones — that would corrupt state)
             var pending = new Transaction
             {
                 DocumentId = doc.Id,
@@ -174,8 +176,8 @@ namespace WebApplication1.Tests
 
             Assert.True(result.Success);
             Assert.Equal(StatutTransaction.Annule, (await ctx.Transactions.FindAsync(pending.Id))!.Statut);
+            // Folder never moved — stays with sender
             Assert.Equal(ServiceTribunal.BureauOrdre, (await ctx.Documents.FindAsync(doc.Id))!.ServiceActuel);
-            Assert.Equal(StatutDossier.Nouveau, (await ctx.Documents.FindAsync(doc.Id))!.StatutActuel);
         }
 
         [Fact]

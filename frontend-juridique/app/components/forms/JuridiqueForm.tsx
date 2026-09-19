@@ -71,7 +71,8 @@ interface JuridiqueFormProps {
   setTiers: (v: string) => void;
   objet: string;
   setObjet: (v: string) => void;
-  sourceOptions?: { value: string; label: string }[];
+  /** Options of the dedicated "tribunaux" list (falls back to a built-in list). */
+  tribunalOptions?: { value: string; label: string }[];
   isJalsatService: boolean;
   isTaslimService: boolean;
   langue: Langue;
@@ -136,7 +137,7 @@ export function JuridiqueForm({
   setTiers,
   objet,
   setObjet,
-  sourceOptions,
+  tribunalOptions,
   isJalsatService,
   isTaslimService,
   langue,
@@ -174,6 +175,26 @@ export function JuridiqueForm({
   }, [token, docLie]);
 
   // Options traduites
+  // "Tribunal / Source" draws on its own "tribunaux" list rather than reusing
+  // the Source list, so the two can be curated independently from
+  // « Listes dynamiques ». The built-in list below is only a fallback for a
+  // database whose tribunal list has not been filled in yet.
+  const getTribunalOptions = () => {
+    const builtIn = [
+      { value: "caa_fes", fr: "Cour d'appel administrative de Fès", ar: "محكمة الاستئناف الإدارية بفاس" },
+      { value: "caa_rabat", fr: "Cour d'appel administrative de Rabat", ar: "محكمة الاستئناف الإدارية بالرباط" },
+      { value: "caa_casablanca", fr: "Cour d'appel administrative de Casablanca", ar: "محكمة الاستئناف الإدارية بالدار البيضاء" },
+      { value: "caa_marrakech", fr: "Cour d'appel administrative de Marrakech", ar: "محكمة الاستئناف الإدارية بمراكش" },
+      { value: "caa_tanger", fr: "Cour d'appel administrative de Tanger", ar: "محكمة الاستئناف الإدارية بطنجة" },
+      { value: "caa_agadir", fr: "Cour d'appel administrative d'Agadir", ar: "محكمة الاستئناف الإدارية بأكادير" },
+      { value: "caa_oujda", fr: "Cour d'appel administrative d'Oujda", ar: "محكمة الاستئناف الإدارية بوجدة" },
+      { value: "ta_fes", fr: "Tribunal administratif de Fès", ar: "المحكمة الإدارية بفاس" },
+      { value: "ta_meknes", fr: "Tribunal administratif de Meknès", ar: "المحكمة الإدارية بمكناس" },
+      { value: "ta_taza", fr: "Tribunal administratif de Taza", ar: "المحكمة الإدارية بتازة" }
+    ];
+    return builtIn.map((t) => ({ value: t.value, label: langue === "fr" ? t.fr : t.ar }));
+  };
+
   const getSourceOptions = () => {
     if (langue === "fr") {
       return [
@@ -443,7 +464,7 @@ export function JuridiqueForm({
                   required
                 >
                   <option value="">-- {cur.choisirService} --</option>
-                  {(sourceOptions && sourceOptions.length > 0 ? sourceOptions : getSourceOptions()).map((opt) => (
+                  {(tribunalOptions && tribunalOptions.length > 0 ? tribunalOptions : getTribunalOptions()).map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>

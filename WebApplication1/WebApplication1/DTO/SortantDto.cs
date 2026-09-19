@@ -18,5 +18,6 @@ namespace WebApplication1.DTO
         public string? NumeroEnvoi { get; set; }      // Optionnel
         public string? TribunalOrigine { get; set; }   // Tribunal d'origine
         public string? TribunalDestination { get; set; } // Tribunal de destination
+        public string? Notes { get; set; }            // Notes libres
     }
 }

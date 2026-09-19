@@ -22,6 +22,8 @@ FROM (VALUES
     ('creer_courrier_admin',      N'Créer courrier administratif', N'إنشاء رسالة إدارية', 'documents',  1),
     ('creer_courrier_juridique',  N'Créer dossier juridique',      N'إنشاء ملف قضائي',    'documents',  1),
     ('supprimer',                 N'Supprimer',                    N'حذف',                 'documents',  0),
+    ('voir_corbeille',            N'Voir corbeille',               N'عرض سلة المحذوفات',   'documents',  1),
+    ('restaurer',                 N'Restaurer',                    N'استعادة',             'documents',  1),
     ('transferer_juridique',      N'Transférer juridique',         N'تحويل قضائي',        'juridique',  1),
     ('ajouter_notes',             N'Ajouter notes',                N'إضافة ملاحظات',      'autres',     1)
 ) v([Key], LabelFr, LabelAr, Category, DefaultEnabled)
@@ -31,11 +33,13 @@ WHERE NOT EXISTS (SELECT 1 FROM Permissions p WHERE p.[Key] = v.[Key]);
 -- 2. Accorder les permissions par service (idempotent)
 -- ----------------------------------------------------------------------------
 
--- bureauordre : + creer_courrier_admin, supprimer, ajouter_notes
+-- bureauordre : + creer_courrier_admin, supprimer, ajouter_notes,
+--                voir_corbeille, restaurer (so a deleted folder lands in
+--                the deleter's own archive before any permanent delete)
 INSERT INTO ServicePermissions (ServiceId, PermissionKey, Enabled)
 SELECT s.Id, v.[Key], 1
 FROM RbacServices s
-CROSS APPLY (VALUES ('creer_courrier_admin'), ('supprimer'), ('ajouter_notes')) v([Key])
+CROSS APPLY (VALUES ('creer_courrier_admin'), ('supprimer'), ('ajouter_notes'), ('voir_corbeille'), ('restaurer')) v([Key])
 WHERE s.Code = 'bureauordre'
   AND NOT EXISTS (SELECT 1 FROM ServicePermissions sp WHERE sp.ServiceId = s.Id AND sp.PermissionKey = v.[Key]);
 
@@ -103,7 +107,7 @@ UPDATE sp SET sp.Enabled = 1
 FROM ServicePermissions sp
 INNER JOIN RbacServices s ON s.Id = sp.ServiceId
 WHERE (
-       (s.Code = 'bureauordre'            AND sp.PermissionKey IN ('creer_courrier_admin','supprimer','ajouter_notes'))
+       (s.Code = 'bureauordre'            AND sp.PermissionKey IN ('creer_courrier_admin','supprimer','ajouter_notes','voir_corbeille','restaurer'))
     OR (s.Code = 'fathmilafat'            AND sp.PermissionKey IN ('creer_courrier_juridique','transferer_juridique','ajouter_notes'))
     OR (s.Code = 'seances&procedures'     AND sp.PermissionKey IN ('transferer_juridique','ajouter_notes'))
     OR (s.Code = 'khibra'                 AND sp.PermissionKey = 'transferer_juridique')

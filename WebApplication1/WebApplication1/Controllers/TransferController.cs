@@ -179,26 +179,18 @@ namespace WebApplication1.Controllers
                 }
             }
 
-            // For historical services, keep document custody as-is since the document is
-            // not actually routed to a live service.
-            if (!isHistorical)
-            {
-                document.ServiceActuel = serviceDestination;
-                document.ServiceActuelCode = destCode;
-            }
+            // ── PENDING TRANSFER: the folder STAYS with the sender until accepted ──
+            // Historical services are record-only (no accounts, no login, no actions).
+            // The transaction is auto-accepted as a historical note, but the folder
+            // stays exactly where it is — no move, no access grant.
             document.StatutActuel = StatutDossier.EnInstance;
 
             await _context.SaveChangesAsync();
 
-            // ── Auto-grant document access ──
-            // The sending service keeps Editor access; every destination service gets Editor.
+            // The sending service keeps Editor access.
             await _accessService.GrantEditorAsync(document.Id, sourceCode, userId);
 
-            if (!isHistorical)
-            {
-                foreach (var targetCode in destinationCodes)
-                    await _accessService.GrantEditorAsync(document.Id, targetCode, userId);
-            }
+            // Historical services receive no access (they have no accounts to use it).
 
             return Ok(new
             {

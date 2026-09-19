@@ -36,3 +36,7 @@ Desktop.ini
 
 # AI/tooling artifacts (internal only, not for repo)
 
+# Uploaded documents — runtime data, never committed.
+# The API recreates the folder on first upload (FileUploadController).
+WebApplication1/WebApplication1/wwwroot/uploads/
+

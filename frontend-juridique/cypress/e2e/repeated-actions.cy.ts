@@ -209,10 +209,28 @@ describe("Repeated transfer actions", () => {
         .filter((_, el) => /^(Supprimer|حذف)$/.test((el.textContent || "").trim()));
 
     for (let i = 0; i < 6; i++) {
-      deleteButtonInFirstRow().first().click({ force: true });
-      // Deleting asks for confirmation through the in-app dialog now
-      cy.get('[data-testid="confirm-accept"]', { timeout: 20000 }).click();
-      cy.wait(700);
+      // Read the reference of the row we are about to delete (the row checkbox
+      // carries it as its aria-label) and wait for that row to leave the table
+      // afterwards. Deleting is a soft delete followed by a refetch; asserting
+      // on the observable result makes the loop deterministic instead of racing
+      // an in-flight request with a fixed sleep.
+      cy.get("tbody tr", { timeout: 20000 })
+        .should("have.length.at.least", 1)
+        .first()
+        .find("td")
+        .eq(1) // objet column — unique per fixture, unlike the shared N° de bureau
+        .invoke("text")
+        .then((objet) => {
+          const label = String(objet ?? "").trim();
+          deleteButtonInFirstRow().first().click({ force: true });
+          // Deleting asks for confirmation through the in-app dialog now
+          cy.get('[data-testid="confirm-accept"]', { timeout: 20000 }).click();
+          if (label) {
+            cy.contains("tbody tr", label, { timeout: 20000 }).should("not.exist");
+          } else {
+            cy.wait(700);
+          }
+        });
     }
 
     cy.wrap(null).then(() => {

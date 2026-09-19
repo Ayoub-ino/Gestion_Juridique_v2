@@ -4,7 +4,7 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useEffect, useState, useCallback } from "react";
 import { CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
-import { WORKFLOW_STEPS, getWorkflowProgress, getDelayDays } from "@/lib/constants";
+import { getDelayDays } from "@/lib/constants";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { getDocServiceCode, normalizeServiceRef } from "@/lib/utils";
 import { api } from "@/lib/api/client";
@@ -376,9 +376,48 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
     return statut;
   };
 
-  const progress = getWorkflowProgress(doc.serviceActuelKey || doc.serviceActuel);
   const delayDays = getDelayDays(doc.dateRaw || doc.date);
   const isLate = delayDays > 7;
+
+  // ── Dynamic journey ──
+  // The ordered list of services this folder *actually* passed through, built
+  // from its real transactions (oldest first). Unlike the previous fixed
+  // WORKFLOW_STEPS pipeline, services created from the admin panel appear
+  // correctly and a folder that skipped steps is not shown as if it had not.
+  const journey = (() => {
+    // Build a set of rejected (origin → destination) service-code pairs so
+    // the arrow between them can render ❌ instead of →.
+    const rejectedPairs = new Set<string>();
+    for (const entry of history) {
+      if (entry.statut === "Refuse") {
+        rejectedPairs.add(
+          `${normalizeServiceRef(entry.serviceOrigine)}→${normalizeServiceRef(entry.serviceDestination)}`
+        );
+      }
+    }
+
+    const nodes: { key: string; raw: string; rejected: boolean }[] = [];
+    const push = (value?: string | null, rejectedKey?: string) => {
+      if (!value) return;
+      const key = normalizeServiceRef(value);
+      if (!key) return;
+      if (nodes.length === 0 || nodes[nodes.length - 1].key !== key)
+        nodes.push({ key, raw: value, rejected: rejectedKey ? rejectedPairs.has(rejectedKey) : false });
+    };
+    for (const entry of history) {
+      const origKey = normalizeServiceRef(entry.serviceOrigine);
+      const destKey = normalizeServiceRef(entry.serviceDestination);
+      const pairKey = `${origKey}→${destKey}`;
+      push(entry.serviceOrigine);
+      push(entry.serviceDestination, pairKey);
+    }
+    // The folder's current location closes the path when it is not already there.
+    push(getDocServiceCode(doc) || doc.serviceActuelKey || doc.serviceActuel);
+    return nodes;
+  })();
+
+  // "Last sending service" — the origin of the most recent transfer.
+  const lastSender = history.length > 0 ? getServiceLabel(history[history.length - 1].serviceOrigine) : "";
 
   const inputClass = "w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm dark:bg-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition";
 
@@ -455,27 +494,59 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
                 </div>
               )}
 
-              {/* Progress Bar */}
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
-                <div className="flex justify-between items-center mb-2">
+              {/* Dynamic journey — the services this folder really passed through */}
+              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-center gap-2 mb-2">
                   <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                    {cur.avancement}
+                    {cur.parcoursDossier}
                   </span>
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{progress.label}</span>
+                  {journey.length > 0 && (
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 truncate">
+                      {cur.serviceActuel}: {getServiceLabel(journey[journey.length - 1].raw)}
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-1">
-                  {WORKFLOW_STEPS.map((step, i) => {
-                    const isActive = i < progress.step;
-                    const isCurrent = i === progress.step - 1;
-                    return (
-                      <div key={i} className="flex-1">
-                        <div className={`h-2 rounded-full ${isActive ? (isCurrent ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-200 dark:bg-slate-600"}`}></div>
-                        <p className={`text-[9px] mt-1 text-center ${isCurrent ? "text-blue-600 font-bold" : "text-slate-400"}`}>                           {langue === "fr" ? step.labelFr : step.labelAr}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
+                {journey.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">{cur.aucunParcours}</p>
+                ) : (
+                  <div className="flex items-center flex-wrap gap-y-2">
+                    {journey.map((node, index) => {
+                      const isCurrent = index === journey.length - 1;
+                      return (
+                        <div key={`${node.key}-${index}`} className="flex items-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                              node.rejected
+                                ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700"
+                                : isCurrent
+                                ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600"
+                            }`}
+                          >
+                            <span
+                              className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] ${
+                                node.rejected ? "bg-red-200 text-red-600 dark:bg-red-800 dark:text-red-300"
+                                : isCurrent ? "bg-white/25 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500"
+                              }`}
+                            >
+                              {node.rejected ? "✗" : index + 1}
+                            </span>
+                            {getServiceLabel(node.raw)}
+                          </span>
+                          {!isCurrent && (
+                            <span className={`mx-1 text-xs ${
+                              node.rejected
+                                ? "text-red-400 dark:text-red-500 font-bold"
+                                : "text-slate-300 dark:text-slate-600"
+                            }`}>
+                              {node.rejected ? "❌" : "→"}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Delay Alert */}
@@ -490,7 +561,12 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
               {/* Editable Fields */}
               <div className="grid grid-cols-2 gap-3">
-                {renderField(cur.numeroBureau, "NumeroBureauOrdre", docDetails?.NumeroBureauOrdre)}
+                {lastSender && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{cur.dernierExpediteur}</p>
+                    <p className="text-sm dark:text-slate-200">{lastSender}</p>
+                  </div>
+                )}
                 {renderField(cur.numeroInterne, "NumeroReference", docDetails?.NumeroReference || doc.reference)}
                 <div>
                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{cur.tblType}</p>
@@ -706,44 +782,48 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
               {/* Timeline */}
               <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
-                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">                   {cur.chronologie}
-                </h4>                 {loadingHistory ? (
-                   <p className="text-xs text-slate-400">{cur.loadingText}</p>
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-3">
+                  {cur.chronologie}
+                </h4>
+                {loadingHistory ? (
+                  <p className="text-xs text-slate-400">{cur.loadingText}</p>
                 ) : history.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">{cur.aucunMouvement}</p>
                 ) : (
-                  <div className="relative max-h-48 overflow-y-auto">
-                    <div className="absolute start-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-emerald-500 to-slate-200"></div>
+                  <div className="relative max-h-64 overflow-y-auto pe-1">
+                    <div className="absolute start-3 top-2 bottom-2 w-0.5 rounded-full bg-gradient-to-b from-blue-500 via-emerald-500 to-slate-200 dark:to-slate-600"></div>
                     <div className="space-y-3">
                       {history.map((entry, index) => {
                         const isLast = index === history.length - 1;
                         return (
-                          <div key={entry.id} className="relative ps-8">
-                            <div className={`absolute start-1.5 top-1.5 w-3 h-3 rounded-full border-2 border-white ${
+                          <div key={entry.id} className="relative ps-9">
+                            <div className={`absolute start-1.5 top-2 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow ${
                               entry.statut === "Accepte" ? "bg-emerald-500" :
                               entry.statut === "Refuse" ? "bg-red-500" :
                               isLast ? "bg-blue-500 animate-pulse" : "bg-amber-500"
                             }`}></div>
-                            <div className={`p-2 rounded-lg border ${isLast ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : "bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-700"}`}>
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
-                                  {getServiceLabel(entry.serviceOrigine)} → {getServiceLabel(entry.serviceDestination)}
+                            <div className={`rounded-lg border p-2.5 ${isLast ? "bg-blue-50/70 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : "bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-700"}`}>
+                              <div className="flex flex-wrap justify-between items-center gap-1.5 mb-1.5">
+                                <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                  <span>{getServiceLabel(entry.serviceOrigine)}</span>
+                                  <span className="text-slate-400">→</span>
+                                  <span>{getServiceLabel(entry.serviceDestination)}</span>
                                 </span>
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${getStatutBadge(entry.statut)}`}>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${getStatutBadge(entry.statut)}`}>
                                   {getStatutLabel(entry.statut)}
                                 </span>
                               </div>
-                              <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {new Date(entry.date).toLocaleString()}
                               </div>
                               {entry.remarques && (
-                                <div className="text-[9px] text-slate-600 dark:text-slate-300 mt-1 italic">{entry.remarques}</div>
+                                <div className="text-[10px] text-slate-600 dark:text-slate-300 mt-1.5 italic border-s-2 border-slate-300 dark:border-slate-600 ps-2">{entry.remarques}</div>
                               )}
                               {entry.motifRefus && (
-                                <div className="text-[9px] text-red-600 dark:text-red-400 mt-1">
+                                <div className="text-[10px] text-red-600 dark:text-red-400 mt-1.5 font-bold">
                                   {entry.motifRefus}
                                   {entry.doitRevenir && (
-                                    <span className="ms-1 text-amber-600 font-bold"> —                {cur.retourne}</span>
+                                    <span className="ms-1 text-amber-600"> — {cur.retourne}</span>
                                   )}
                                 </div>
                               )}

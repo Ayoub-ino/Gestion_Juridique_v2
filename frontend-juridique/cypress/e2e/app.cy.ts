@@ -73,8 +73,8 @@ describe("Application E2E Tests", () => {
     it("should navigate to different views via sidebar", () => {
       // Click on different sidebar items and verify view changes
       cy.get("aside").within(() => {
-        // Try clicking "Mes entités" / "Mes documents" (Arabic: ملفاتي)
-        cy.contains(/Mes entités|ملفاتي/).click();
+        // Try clicking "Mes dossiers" (Arabic: ملفاتي)
+        cy.contains(/Mes dossiers|ملفاتي/).click();
       });
       cy.url().should("include", "/");
     });

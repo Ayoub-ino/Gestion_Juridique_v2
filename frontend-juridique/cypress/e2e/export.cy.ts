@@ -79,10 +79,10 @@ describe("Export - Excel & Word (async bundle loading)", () => {
     cy.get('button[type="submit"]').click();
 
     cy.get("aside", { timeout: 10000 }).should("exist");
-    // "Mes entités" hosts the general Excel/Word export buttons and the
+    // "Mes dossiers" hosts the general Excel/Word export buttons and the
     // "download template" action.
     cy.get("aside").within(() => {
-      cy.contains(/Mes entités|وثائقي|ملفاتي/).click();
+      cy.contains(/Mes dossiers|وثائقي|ملفاتي/).click();
     });
     cy.wait(1000);
   });

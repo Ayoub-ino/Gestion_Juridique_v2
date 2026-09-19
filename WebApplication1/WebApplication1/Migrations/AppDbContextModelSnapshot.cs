@@ -109,6 +109,9 @@ namespace WebApplication1.Migrations
                     b.Property<string>("FilePath")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("NumeroBureauOrdre")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -767,9 +770,6 @@ namespace WebApplication1.Migrations
 
                     b.Property<string>("Expediteur")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("NumeroOrdre")

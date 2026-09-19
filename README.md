@@ -141,24 +141,24 @@ Gestion_Juridique-main/
 │   │   ├── types/                      # api.generated.ts (OpenAPI types)
 │   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   ├── e2e/                        # E2E test specs (77 tests across 7 specs)
+│   │   ├── e2e/                        # E2E test specs (80 tests across 8 specs)
 │   │   │   ├── app.cy.ts               # Core app flows (35 tests)
 │   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
 │   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer UI (6 tests)
 │   │   │   ├── repeated-actions.cy.ts  # Regression: repeated clicks (3 tests)
 │   │   │   ├── export.cy.ts            # Excel/Word export (3 tests)
+│   │   │   ├── recherche-dossiers.cy.ts # Search filters (3 tests)
 │   │   │   ├── admin-boundaries.cy.ts  # Admin role isolation (2 tests)
 │   │   │   └── permission-persistence.cy.ts  # Permission reload (1 test)
-│   │   └── support/                    # dbCleanup.ts, commands.ts
+│   │   └── support/                    # dbCleanup.ts (fixture purge), commands.ts
 │   └── public/                         # Static assets
 │
-├── scripts/
-│   ├── permission-audit.sh             # RBAC endpoint audit (46 checks)
-│   ├── generate-permission-matrix.sh   # Auto-generate permission docs
+├── dbinitialisation/
+│   ├── README.md                       # Seed logic + default accounts
 │   └── grant-permissions-existing-db.sql
 │
 ├── CHANGELOG_AGENTS.md                 # Agent session log
-├── PERMISSION_MATRIX.md                # Auto-generated permission reference
+├── PERMISSION_MATRIX.md                # Permission reference
 └── README.md
 ```
 
@@ -265,9 +265,6 @@ npx tsc --noEmit
 # Frontend lint
 cd frontend-juridique
 npx eslint .
-
-# Permission audit (46 checks)
-bash scripts/permission-audit.sh
 ```
 
 ### Test breakdown
@@ -282,8 +279,8 @@ bash scripts/permission-audit.sh
 | Cypress E2E — repeated-actions.cy.ts | 3 | `npx cypress run --spec cypress/e2e/repeated-actions.cy.ts` |
 | Cypress E2E — admin-boundaries.cy.ts | 2 | `npx cypress run --spec cypress/e2e/admin-boundaries.cy.ts` |
 | Cypress E2E — permission-persistence.cy.ts | 1 | `npx cypress run --spec cypress/e2e/permission-persistence.cy.ts` |
-| Permission audit | 46 | `bash scripts/permission-audit.sh` |
-| **Total** | **182** | |
+| Cypress E2E — recherche-dossiers.cy.ts | 3 | `npx cypress run --spec cypress/e2e/recherche-dossiers.cy.ts` |
+| **Total** | **185** | |
 
 ---
 
@@ -357,8 +354,6 @@ See [PERMISSION_MATRIX.md](PERMISSION_MATRIX.md) for the complete reference.
 
 | Script | Description |
 |---|---|
-| `bash scripts/permission-audit.sh` | Run 46 RBAC endpoint checks (enabled/disabled for each permission) |
-| `bash scripts/generate-permission-matrix.sh` | Auto-generate PERMISSION_MATRIX.md from codebase scan |
 | `npm run dev` | Start Next.js dev server with Webpack |
 | `npm run dev:turbo` | Start Next.js dev server with Turbopack |
 | `npm run build` | Build Next.js for production |
@@ -392,5 +387,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 105 unit tests, 77 E2E tests, 46 audit checks ✅
-> All 182 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.
+> Last verified: September 2026 — 105 unit tests, 80 E2E tests ✅
+> All 185 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

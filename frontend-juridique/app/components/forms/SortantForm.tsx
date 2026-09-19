@@ -22,7 +22,6 @@ interface SortantFormProps {
   setObjet: (v: string) => void;
   dateEnvoi: string;
   setDateEnvoi: (v: string) => void;
-  typeCourrier: string;
   cur: TranslationKeys;
   notes: string;
   setNotes: (v: string) => void;

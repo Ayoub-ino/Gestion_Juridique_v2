@@ -126,7 +126,7 @@ export function RechercheDossiersView({
             <option value="">{cur.tousLesTypes}</option>
             <option value="entrant-admin">{cur.admin}</option>
             <option value="entrant-juridique">{cur.juridique}</option>
-            <option value="sortant-normal">{cur.sortants}</option>
+            <option value="sortant-normal">{cur.typeSortant}</option>
           </select>
           <input type="date" value={searchFilterDateDebut} onChange={(e) => setSearchFilterDateDebut(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-[11px] font-bold bg-white dark:bg-slate-700 dark:text-slate-200 outline-none" title={cur.dateArrivee} />
           {(searchFilterService || searchFilterType || searchFilterDateDebut) && (
@@ -146,7 +146,7 @@ export function RechercheDossiersView({
             )}
             {searchFilterType && (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                {cur.tblType}: {searchFilterType === "entrant-admin" ? cur.admin : searchFilterType === "entrant-juridique" ? cur.juridique : cur.sortants}
+                {cur.tblType}: {searchFilterType === "entrant-admin" ? cur.admin : searchFilterType === "entrant-juridique" ? cur.juridique : cur.typeSortant}
                 <button onClick={() => setSearchFilterType("")} className="ml-1 text-emerald-500 hover:text-emerald-800 font-bold">×</button>
               </span>
             )}

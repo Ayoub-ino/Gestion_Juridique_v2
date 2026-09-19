@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using WebApplication1.Data;
+using WebApplication1.Helpers;
 using WebApplication1.Models;
 using WebApplication1.Security;
 
@@ -19,6 +20,33 @@ namespace WebApplication1.Controllers
         public DocumentsController(AppDbContext context)
         {
             _context = context;
+        }
+
+        /// <summary>
+        /// Visibility scope of the caller. Admin-like roles (Admin, Greffier,
+        /// Directeur, Consultant) see every document; everyone else is restricted
+        /// to the documents currently held by their own RBAC service.
+        /// This mirrors the service scoping already applied by the listing
+        /// controllers, so a user's trash only contains what they deleted.
+        /// </summary>
+        private async Task<(bool IsAdminLike, string? ServiceCode, ServiceTribunal? ServiceEnum)> ResolveScopeAsync()
+        {
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!ServiceMapper.TryParseUserId(userIdStr, out var userId))
+                return (false, null, null);
+
+            var user = await _context.Utilisateurs.FindAsync(userId);
+            if (user == null) return (false, null, null);
+
+            var role = user.Role ?? "";
+            var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
+
+            var code = ServiceMapper.NormalizeServiceCode(user.Service);
+            ServiceTribunal? serviceEnum = ServiceMapper.TryMapToServiceEnum(user.Service ?? "", out var mapped)
+                ? mapped
+                : null;
+
+            return (isAdminLike, code, serviceEnum);
         }
 
         // SOFT DELETE - Suppression logique
@@ -72,8 +100,28 @@ namespace WebApplication1.Controllers
         [RequirePermission("voir_corbeille")]
         public async Task<IActionResult> GetCorbeille()
         {
-            var docs = await _context.Documents
-                .Where(d => d.EstSupprime == true)
+            var scope = await ResolveScopeAsync();
+
+            var query = _context.Documents.Where(d => d.EstSupprime == true);
+
+            // The trash belongs to the service that deleted the document: a user
+            // only sees what their own service put in the archive. Admin-like
+            // roles keep the global view.
+            if (!scope.IsAdminLike && !string.IsNullOrEmpty(scope.ServiceCode))
+            {
+                var code = scope.ServiceCode;
+                if (scope.ServiceEnum is { } serviceEnum)
+                {
+                    query = query.Where(d => d.ServiceActuelCode == code
+                        || (d.ServiceActuelCode == null && d.ServiceActuel == serviceEnum));
+                }
+                else
+                {
+                    query = query.Where(d => d.ServiceActuelCode == code);
+                }
+            }
+
+            var docs = await query
                 .OrderByDescending(d => d.DateCreation)
                 .Select(d => new {
                     id = d.Id,

@@ -74,7 +74,7 @@ namespace WebApplication1.Services
                     cs.DestinataireExterne,
                     cs.TribunalOrigine, cs.TribunalDestination,
                     cs.ServiceActuel, cs.StatutActuel,
-                    cs.FilePath,
+                    cs.FilePath, cs.Notes,
                     cs.NumeroBureauOrdre, cs.EstSupprime,
                     transactions = cs.Transactions.Select(t => new
                     {
@@ -142,6 +142,7 @@ namespace WebApplication1.Services
                     Track("TribunalOrigine", cs.TribunalOrigine, dto.TribunalOrigine); cs.TribunalOrigine = dto.TribunalOrigine ?? cs.TribunalOrigine;
                     Track("TribunalDestination", cs.TribunalDestination, dto.TribunalDestination); cs.TribunalDestination = dto.TribunalDestination ?? cs.TribunalDestination;
                     Track("Sujet", cs.Sujet, dto.Sujet); cs.Sujet = dto.Sujet ?? cs.Sujet;
+                    Track("Notes", cs.Notes, dto.Notes); cs.Notes = dto.Notes ?? cs.Notes;
                     break;
             }
 

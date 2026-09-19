@@ -18,5 +18,6 @@ namespace WebApplication1.DTO
         public string? DestinataireExterne { get; set; }
         public string? TribunalOrigine { get; set; }
         public string? TribunalDestination { get; set; }
+        public string? Notes { get; set; }
     }
 }

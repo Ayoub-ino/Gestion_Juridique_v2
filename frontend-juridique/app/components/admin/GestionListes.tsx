@@ -31,6 +31,7 @@ const LIST_CATEGORIES = [
   { key: "etats_equipement", fr: "États d'équipement", ar: "حالات المعدات" },
   { key: "types_juridique", fr: "Types judiciaires", ar: "الأنواع القضائية" },
   { key: "types_tribunal", fr: "Types de tribunal", ar: "أنواع المحاكم" },
+  { key: "tribunaux", fr: "Tribunaux", ar: "المحاكم" },
   { key: "etats_document", fr: "États de document", ar: "حالات الوثيقة" },
   { key: "direction", fr: "Direction", ar: "الاتجاه" },
   { key: "type_correspondance", fr: "Type de correspondance", ar: "نوع المراسلة" },

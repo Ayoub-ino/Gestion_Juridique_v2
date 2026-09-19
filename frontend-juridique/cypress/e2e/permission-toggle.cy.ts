@@ -1118,8 +1118,8 @@ describe("9. Permission Toggle Lifecycle", () => {
       });
   });
 
-  it("custody: transfer button blocked when user service != document ServiceActuel", () => {
-    // Create a document as bureauordre, transfer to archive,
+  it("custody: transfer blocked when receiver accepted (sender lost custody)", () => {
+    // Create a document as bureauordre, transfer to secretarait, accept it,
     // then bureauordre (lost custody) tries to transfer → 403
     login("admin", "admin123")
       .then(() => login("bureauordre", "bureauordre123"))
@@ -1131,28 +1131,35 @@ describe("9. Permission Toggle Lifecycle", () => {
         }).then((res) => {
           expect(res.status).to.eq(201);
           const docId = res.body.courrier?.id ?? res.body.id;
-          // Transfer to archive
+          // Transfer to KitabaKhasa
           authed(boToken, "POST", `${API_URL}/api/Transfer`, {
             documentId: docId,
             documentType: "entrant-admin",
-            serviceDestination: "Archive",
+            serviceDestination: "KitabaKhasa",
           }).then((txRes) => {
             expect(txRes.status).to.eq(200);
-            // bureauordre (lost custody) tries to transfer again → 403
-            authed(boToken, "POST", `${API_URL}/api/Transfer`, {
-              documentId: docId,
-              documentType: "entrant-admin",
-              serviceDestination: "OuvertureDossier",
-            }).then((r) => {
-              expect(r.status).to.eq(403);
+            const txId = txRes.body.transactionIds[0];
+            // Receiver accepts the transfer
+            login("secretarait", "secretarait123").then((secToken) =>
+              authed(secToken, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {}),
+            ).then((accRes) => {
+              expect(accRes.status).to.eq(200);
+              // bureauordre (lost custody) tries to transfer again → 403
+              authed(boToken, "POST", `${API_URL}/api/Transfer`, {
+                documentId: docId,
+                documentType: "entrant-admin",
+                serviceDestination: "OuvertureDossier",
+              }).then((r) => {
+                expect(r.status).to.eq(403);
+              });
             });
           });
         });
       });
   });
 
-  it("custody: delete blocked when user service != document ServiceActuel", () => {
-    // Create a document as bureauordre, transfer to secretarait,
+  it("custody: delete blocked when receiver accepted (sender lost custody)", () => {
+    // Create a document as bureauordre, transfer to secretarait, accept it,
     // then bureauordre (lost custody) tries to delete → 403
     login("admin", "admin123")
       .then(() => login("bureauordre", "bureauordre123"))
@@ -1164,16 +1171,23 @@ describe("9. Permission Toggle Lifecycle", () => {
         }).then((res) => {
           expect(res.status).to.eq(201);
           const docId = res.body.courrier?.id ?? res.body.id;
-          // Transfer to secretarait
+          // Transfer to KitabaKhasa
           authed(boToken, "POST", `${API_URL}/api/Transfer`, {
             documentId: docId,
             documentType: "entrant-admin",
             serviceDestination: "KitabaKhasa",
           }).then((txRes) => {
             expect(txRes.status).to.eq(200);
-            // bureauordre (lost custody) tries to delete → 403
-            authed(boToken, "DELETE", `${API_URL}/api/CourrierAdmin/${docId}`).then((r) => {
-              expect(r.status).to.eq(403);
+            const txId = txRes.body.transactionIds[0];
+            // Receiver accepts the transfer
+            login("secretarait", "secretarait123").then((secToken) =>
+              authed(secToken, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {}),
+            ).then((accRes) => {
+              expect(accRes.status).to.eq(200);
+              // bureauordre (lost custody) tries to delete → 403
+              authed(boToken, "DELETE", `${API_URL}/api/CourrierAdmin/${docId}`).then((r) => {
+                expect(r.status).to.eq(403);
+              });
             });
           });
         });
