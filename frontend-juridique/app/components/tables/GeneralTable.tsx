@@ -4,7 +4,8 @@ import type { TranslationKeys } from "@/lib/translations";
 import { useRef } from "react";
 import { CourrierSimule } from "@/app/types";
 import { ExportFormat } from "@/lib/exportImport";
-import { getWorkflowProgress, getDelayDays } from "@/lib/constants";
+import { getWorkflowProgress, getDelayDays, type WorkflowStep } from "@/lib/constants";
+import { getDocServiceCode } from "@/lib/utils";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 import { useAuth } from "@/context/AuthContext";
 
@@ -22,6 +23,8 @@ interface GeneralTableProps {
   selectedIds?: number[];
   onToggleSelect?: (id: number) => void;
   onSelectAll?: () => void;
+  /** Pipeline stages, read from the live service catalog (see useWorkflowSteps). */
+  steps?: WorkflowStep[];
 }
 
 export function GeneralTable({
@@ -36,6 +39,7 @@ export function GeneralTable({
   selectedIds = [],
   onToggleSelect,
   onSelectAll,
+  steps = [],
 }: GeneralTableProps) {
   const { hasPermission } = useAuth();
   const canImport = hasPermission("creer_courrier_admin") || hasPermission("creer_courrier_juridique");
@@ -93,7 +97,7 @@ export function GeneralTable({
             ) : (
               documents.map((doc) => {
                 const typeColor = doc.type === "entrant-juridique" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700";
-                const progress = getWorkflowProgress(doc.serviceActuelKey || doc.serviceActuel);
+                const progress = getWorkflowProgress(steps, getDocServiceCode(doc));
                 const delayDays = getDelayDays(doc.dateRaw || doc.date);
                 const isLate = delayDays > 7;
 

@@ -37,7 +37,7 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 - **Bilingual Interface**: Full French/Arabic support with RTL layout and proper Arabic terminology
 - **Transaction Lifecycle**: Full sender → receiver workflow with accept, refuse, cancel, and notification sync
 - **Import/Export**: Excel and Word document import/export with self-seeding E2E tests
-- **Dashboard & Analytics**: Real-time document statistics and workflow visualization
+- **Dashboard & Analytics**: Real-time document statistics and a workflow pipeline built from the live service catalog — adding, renaming or archiving a service changes the stages immediately
 - **Dark/Light Theme**: Toggle between themes with persistent preference
 - **In-App Feedback**: Toast notifications and confirmation dialogs replacing native browser alerts
 
@@ -143,12 +143,13 @@ Gestion_Juridique-main/
 │   │   ├── types/                      # api.generated.ts (OpenAPI types)
 │   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   ├── e2e/                        # E2E test specs (90 tests across 10 specs)
+│   │   ├── e2e/                        # E2E test specs (94 tests across 11 specs)
 │   │   │   ├── app.cy.ts               # Core app flows (35 tests)
 │   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
 │   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer custody flow (9 tests)
 │   │   │   ├── corbeille-vider.cy.ts   # Trash purge scoping (4 tests)
 │   │   │   ├── juridique-destination.cy.ts  # Destination picker (3 tests)
+│   │   │   ├── workflow-pipeline.cy.ts # Pipeline follows the catalog (4 tests)
 │   │   │   ├── repeated-actions.cy.ts  # Regression: repeated clicks (3 tests)
 │   │   │   ├── export.cy.ts            # Excel/Word export (3 tests)
 │   │   │   ├── recherche-dossiers.cy.ts # Search filters (3 tests)
@@ -258,7 +259,7 @@ Open **http://localhost:3000** in your browser.
 cd WebApplication1/WebApplication1.Tests
 dotnet test
 
-# Frontend E2E tests (90 tests across 10 specs)
+# Frontend E2E tests (94 tests across 11 specs)
 cd frontend-juridique
 CYPRESS_API_URL=http://localhost:5200 npx cypress run
 
@@ -286,7 +287,8 @@ npx eslint .
 | Cypress E2E — recherche-dossiers.cy.ts | 3 | `npx cypress run --spec cypress/e2e/recherche-dossiers.cy.ts` |
 | Cypress E2E — corbeille-vider.cy.ts | 4 | `npx cypress run --spec cypress/e2e/corbeille-vider.cy.ts` |
 | Cypress E2E — juridique-destination.cy.ts | 3 | `npx cypress run --spec cypress/e2e/juridique-destination.cy.ts` |
-| **Total** | **215** | |
+| Cypress E2E — workflow-pipeline.cy.ts | 4 | `npx cypress run --spec cypress/e2e/workflow-pipeline.cy.ts` |
+| **Total** | **219** | |
 
 ---
 
@@ -393,5 +395,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 125 unit tests, 90 E2E tests ✅
+> Last verified: September 2026 — 125 unit tests, 94 E2E tests ✅
 > All 208 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

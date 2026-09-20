@@ -4,12 +4,8 @@ import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
-
-interface WorkflowStep {
-  labelFr: string;
-  labelAr: string;
-  service: string;
-}
+import type { WorkflowStep } from "@/lib/constants";
+import { isDocInService } from "@/lib/utils";
 
 interface WorkflowStepsProps {
   steps: WorkflowStep[];
@@ -23,38 +19,31 @@ interface WorkflowStepsProps {
   docsPerStep?: number[];
 }
 
-const SERVICE_COLORS: Record<string, string> = {
-  BureauOrdre: "#3b82f6",
-  OuvertureDossier: "#8b5cf6",
-  KitabaKhasa: "#06b6d4",
-  JalsatWaIjra2at: "#f59e0b",
-  TaslimNusakh: "#10b981",
-  Archive: "#6b7280",
-};
+// A fixed colour table cannot work any more: the pipeline is built from the live
+// catalog, so a service created tomorrow would have no entry in it. The colour is
+// derived from the code instead, which makes it stable and self-assigning.
+const STEP_COLORS = [
+  "#3b82f6",
+  "#8b5cf6",
+  "#06b6d4",
+  "#f59e0b",
+  "#10b981",
+  "#6b7280",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#6366f1",
+];
 
 function resolveServiceColor(key?: string): string {
-  if (key && SERVICE_COLORS[key]) return SERVICE_COLORS[key];
-  const map: Record<string, string> = {
-    Ijra2Baht: "#f59e0b",
-    MofawidMalaki: "#f59e0b",
-    Khibra: "#f59e0b",
-    MustacharMoqarir: "#f59e0b",
-    Tabligh: "#10b981",
-    TasfiyatSawa2ir: "#10b981",
-    BureauNotification: "#ec4899",
-    BureauExpertise: "#14b8a6",
-    CelluleInformatique: "#8b5cf6",
-    GestionFinanciere: "#f97316",
-    CaisseTribunal: "#eab308",
-    BureauRecouvrement: "#ef4444",
-    ProcduresCommissaireRoyal: "#6366f1",
-    GestionPourvoisCassation: "#a855f7",
-    RemiseCopieJugement: "#06b6d4",
-    EfficaciteJudiciaire: "#10b981",
-    Greffe: "#3b82f6",
-    Direction: "#1e293b",
-  };
-  return map[key || ""] || "#64748b";
+  const normalized = (key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!normalized) return "#64748b";
+
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = (hash * 31 + normalized.charCodeAt(i)) % 100000;
+  }
+  return STEP_COLORS[hash % STEP_COLORS.length];
 }
 
 export function WorkflowSteps({
@@ -70,8 +59,6 @@ export function WorkflowSteps({
 }: WorkflowStepsProps) {
   const { token } = useAuth();
   const { getServiceLabel } = useServiceLabels(token, langue);
-
-  const getLabel = (step: WorkflowStep) => (langue === "fr" ? step.labelFr : step.labelAr);
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-5">
@@ -127,17 +114,25 @@ export function WorkflowSteps({
       )}
 
       {/* Workflow steps */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+      {steps.length === 0 ? (
+        <p className="text-xs text-slate-400 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center">
+          {langue === "fr"
+            ? "Aucun service dans le catalogue : le circuit s'affichera dès qu'un service sera enregistré."
+            : "لا توجد مصالح في الدليل: سيظهر المسار بمجرد تسجيل مصلحة."}
+        </p>
+      ) : (
+      <div data-testid="workflow-steps" className="grid grid-cols-1 md:grid-cols-6 gap-2">
         {steps.map((step, index) => {
           const isReached = index <= currentIndex;
           const isCurrent = index === currentIndex;
           const count = docsPerStep[index] || 0;
-          const docsAtStep = allDocs.filter((d) => d.serviceActuelKey === step.service);
+          const docsAtStep = allDocs.filter((d) => isDocInService(d, step.code));
           return (
             <button
-              key={step.service}
+              key={step.code}
               type="button"
-              onClick={() => onStepClick(getLabel(step), index)}
+              data-testid="workflow-step"
+              onClick={() => onStepClick(step.label, index)}
               className={`relative rounded-lg border p-3 min-h-20 text-start transition ${
                 isCurrent
                   ? "bg-blue-600 border-blue-600 text-white shadow-md"
@@ -153,7 +148,7 @@ export function WorkflowSteps({
               >
                 {index + 1}
               </span>
-              <p className="text-[11px] font-bold mt-2">{getLabel(step)}</p>
+              <p data-testid="workflow-step-label" className="text-[11px] font-bold mt-2">{step.label}</p>
               {count > 0 && (
                 <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] font-bold ${
                   isCurrent ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
@@ -187,6 +182,7 @@ export function WorkflowSteps({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

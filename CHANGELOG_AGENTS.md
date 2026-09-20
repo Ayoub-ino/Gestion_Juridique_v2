@@ -672,7 +672,8 @@ Targeted live API verification:
   (*Mes dossiers*, *Courriers Entrants*, *Courrier Juridique*, *Courrier Sortant*)
   reflect the real custody state.
 - Backend was started for this verification and left running on `:5200`; the
-  frontend (`:3000`) was not running and was not started.- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  frontend (`:3000`) was not running and was not started.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
   hardcoded six-step list.
 
 
@@ -1351,4 +1352,82 @@ Targeted live API verification:
   independently editable.
 - Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
   hardcoded six-step list.
+
+---
+
+## [2026-09-20 18:05] — Dashboard Workflow Pipeline Reads the Live Service Catalog
+
+### 1. Context & Objective
+- `WORKFLOW_STEPS` in `lib/constants.ts` was a fixed six-stage list
+  (`bureauordre`, `ouverture`, `secretarait`, `seances`, `greffe`,
+  `bureaudetranscription`), with a parallel `WORKFLOW_SERVICE_MAP`. Keeping a
+  service on the chart meant editing the file by hand, and every view that drew
+  the pipeline (dashboard, both tables, the detail modal, the per-stage
+  counters) read from it independently.
+- Service management is dynamic — services are created, renamed and archived from
+  the admin panel — so any of those actions silently desynchronised the chart
+  from the live catalog: a newly created service never appeared as a stage, an
+  archived one stayed on the chart forever, and reordering was impossible
+  without code.
+- Goal: derive the pipeline from the same live catalog the rest of the app uses,
+  with no static service list anywhere in that path.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `frontend-juridique/lib/constants.ts` — Removed `WORKFLOW_STEPS`
+  and `WORKFLOW_SERVICE_MAP`. Added `buildWorkflowSteps()` (catalog rows → steps:
+  code, FR/AR label, order) and `workflowProgress()` (the index of a document's
+  current service inside the pipeline).
+- `[CREATE]` `frontend-juridique/app/hooks/useWorkflowSteps.ts` —
+  `useWorkflowSteps()` merges the active catalog (`/api/rbac/services`) with
+  `/api/historical-services`, de-duplicates by code and returns the ordered
+  steps.
+- `[MODIFY]` `frontend-juridique/app/components/dashboard/WorkflowSteps.tsx` —
+  Takes `steps` as a prop; step colour is derived (active vs. pending) instead of
+  coming from a baked-in map. Added `data-testid="workflow-step"` /
+  `data-step-label` for stable selectors.
+- `[MODIFY]` `frontend-juridique/app/components/dashboard/DashboardView.tsx` —
+  Consumes the hook and passes the ordered steps down.
+- `[MODIFY]` `frontend-juridique/app/components/tables/GeneralTable.tsx`,
+  `frontend-juridique/app/components/tables/SortantTable.tsx` — Accept the
+  pipeline as a prop instead of importing the removed map.
+- `[MODIFY]` `frontend-juridique/app/page.tsx` — Dropped `WORKFLOW_SERVICE_MAP`
+  and `getWorkflowIndex`; per-stage counters now key on the service code from the
+  hook.
+- `[MODIFY]` `frontend-juridique/app/components/modals/DetailModal.tsx` — Stage
+  lookup goes through the hook-backed pipeline.
+- `[CREATE]` `frontend-juridique/cypress/e2e/workflow-pipeline.cy.ts` — 4 tests:
+  the pipeline renders from the catalog; a service created at runtime becomes a
+  stage; an archived service disappears; parent/child ordering is respected.
+- `[MODIFY]` `README.md` — Test counts and the dynamic-pipeline description.
+
+### 3. Key Technical & Architectural Decisions
+- **No static service list in the chart path.** The pipeline *is* the catalog;
+  the only merge is with historical services, which are read from the API too.
+- **Ordering is data-driven.** The catalog's own order column wins over array
+  position, so reordering services in the admin panel reorders the chart with no
+  code change.
+- **Stage membership keyed on the service code, not the label**, so renaming a
+  service updates the chart text without breaking progress or the counters.
+- A single hook is now the source of truth for the dashboard, both tables and the
+  detail modal, so those views can no longer disagree about the pipeline.
+
+### 4. Verification & Test Results
+- **Live catalog check:** created a service through the admin API at runtime — it
+  rendered as a stage immediately; archived it — it left the chart.
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **125/125**.
+- `tsc --noEmit`: 0 errors. `eslint`: 0 errors, 0 warnings.
+- Cypress E2E: **94/94 across 11 specs** (the 4 new pipeline tests plus the
+  existing 90, no regressions).
+- Database after the run: no test artifacts, no trashed rows, no orphaned
+  transactions.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200`, web on `:3000`.
+- The dashboard pipeline, both tables and the detail modal all follow the live
+  service catalog.
+- **Known interaction:** a document sitting in a service that is later archived
+  keeps its stage until that service leaves the catalog entirely — historical
+  services are intentionally part of the pipeline, since a document can still
+  reside in them.
 

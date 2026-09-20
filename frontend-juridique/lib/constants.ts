@@ -154,20 +154,85 @@ export function getStatusLabel(value: string, langue: Langue): string {
   return langue === "fr" ? mapping.fr : mapping.ar;
 }
 
-export const WORKFLOW_STEPS = [
-  { labelFr: "Bureau d'ordre", labelAr: "مكتب الضبط", service: "BureauOrdre" },
-  { labelFr: "Ouverture des dossiers", labelAr: "فتح الملفات", service: "OuvertureDossier" },
-  { labelFr: "Secrétariat particulier", labelAr: "الكتابة الخاصة", service: "KitabaKhasa" },
-  { labelFr: "Séances & audiences", labelAr: "الجلسات والإجراءات", service: "JalsatWaIjra2at" },
-  { labelFr: "Délivrance & Clôture", labelAr: "قسم تسليم النسخ", service: "TaslimNusakh" },
-  { labelFr: "Archivage définitif", labelAr: "الإيداع النهائي بالأرشيف", service: "Archive" }
-];
+// ── Workflow pipeline ─────────────────────────────────────────────────────────
+// The dashboard pipeline used to be a fixed six-step list, which meant a service
+// added from the admin panel could never appear in it. The stages are now simply
+// the services that exist in the RBAC catalog, so they follow it automatically.
 
-export function getWorkflowProgress(serviceActuel: string): { step: number; total: number; pct: number; label: string } {
-  const total = WORKFLOW_STEPS.length;
-  const idx = WORKFLOW_STEPS.findIndex((s) => s.service === serviceActuel);
-  if (idx === -1) return { step: 0, total, pct: 0, label: serviceActuel };
-  return { step: idx + 1, total, pct: Math.round(((idx + 1) / total) * 100), label: `${idx + 1}/${total}` };
+export interface WorkflowStep {
+  /** RBAC service code — the value documents carry. */
+  code: string;
+  /** Display name, as registered for that service. */
+  label: string;
+}
+
+/** A service as returned by `/api/rbac/services`. */
+export interface CatalogService {
+  id: number;
+  nom: string;
+  code: string;
+  parentId?: number | null;
+  isActive: boolean;
+}
+
+/**
+ * Orders the catalog into the pipeline.
+ *
+ * A parent service is followed by its own sub-services, and each group keeps the
+ * catalog's creation order. Nothing about the stages is hardcoded: create a
+ * service and it joins the pipeline, archive it and it leaves.
+ */
+export function buildWorkflowSteps(services: CatalogService[]): WorkflowStep[] {
+  const active = services.filter((s) => s.isActive).sort((a, b) => a.id - b.id);
+  const ids = new Set(active.map((s) => s.id));
+  const ordered: CatalogService[] = [];
+
+  for (const service of active) {
+    // Children are emitted together with their parent.
+    if (service.parentId != null && ids.has(service.parentId)) continue;
+    ordered.push(service);
+    ordered.push(...active.filter((s) => s.parentId === service.id));
+  }
+
+  return ordered.map((s) => ({ code: s.code, label: s.nom }));
+}
+
+/** Case/separator-insensitive service reference, for matching codes and enum names. */
+function normalizeRef(value: string | number | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** Index of a service inside the pipeline, or -1 when it is not one of the stages. */
+export function workflowStepIndexOf(steps: WorkflowStep[], serviceRef: string | null | undefined): number {
+  const target = normalizeRef(serviceRef);
+  if (!target) return -1;
+  return steps.findIndex((s) => normalizeRef(s.code) === target);
+}
+
+/**
+ * Where a folder sits in the pipeline. The stages are passed in because they come
+ * from the live catalog — there is no stage list to read them from here.
+ */
+export function getWorkflowProgress(
+  steps: WorkflowStep[],
+  serviceRef: string | null | undefined
+): { step: number; total: number; pct: number; label: string } {
+  const total = steps.length;
+  if (total === 0) return { step: 0, total: 0, pct: 0, label: "—" };
+
+  const idx = workflowStepIndexOf(steps, serviceRef);
+  // A folder sitting somewhere that is not a pipeline stage has no progress:
+  // showing it as step 0 is honest, showing it as the last step is not.
+  if (idx === -1) return { step: 0, total, pct: 0, label: `0/${total}` };
+
+  return {
+    step: idx + 1,
+    total,
+    pct: Math.round(((idx + 1) / total) * 100),
+    label: `${idx + 1}/${total}`,
+  };
 }
 
 export function getDelayDays(dateStr: string): number {

@@ -2,9 +2,9 @@
 
 import type { TranslationKeys } from "@/lib/translations";
 import { CourrierSimule } from "@/app/types";
-import { normalizeStatus } from "@/lib/utils";
+import { normalizeStatus, getDocServiceCode } from "@/lib/utils";
 import { ExportFormat } from "@/lib/exportImport";
-import { getWorkflowProgress, getDelayDays } from "@/lib/constants";
+import { getWorkflowProgress, getDelayDays, type WorkflowStep } from "@/lib/constants";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
 
 interface SortantTableProps {
@@ -24,6 +24,8 @@ interface SortantTableProps {
   cur: TranslationKeys;
   langue?: "fr" | "ar";
   onExport?: (format: ExportFormat) => void;
+  /** Pipeline stages, read from the live service catalog (see useWorkflowSteps). */
+  steps?: WorkflowStep[];
 }
 
 export function SortantTable({
@@ -40,7 +42,8 @@ export function SortantTable({
   onMarquerAttente,
   onAnnuler,
   cur,
-  onExport
+  onExport,
+  steps = []
 }: SortantTableProps) {
   const statuts = ["tous", "Brouillon", "EnAttente", "Envoye", "Annule"];
   const statutLabels: Record<string, string> = {
@@ -94,7 +97,7 @@ export function SortantTable({
             ) : (
               documents.map((doc) => {
                 const statutBrut = normalizeStatus(doc.statut);
-                const progress = getWorkflowProgress(doc.serviceActuelKey || doc.serviceActuel);
+                const progress = getWorkflowProgress(steps, getDocServiceCode(doc));
                 const delayDays = getDelayDays(doc.dateRaw || doc.date);
                 const isLate = delayDays > 7;
 

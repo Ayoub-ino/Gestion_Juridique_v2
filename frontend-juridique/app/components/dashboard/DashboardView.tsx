@@ -8,7 +8,7 @@ import { StatsCircles, StatsData } from "@/app/components/dashboard/StatsCircles
 import { ActivityCards } from "@/app/components/dashboard/ActivityCards"; 
 import { GeneralTable } from "@/app/components/tables/GeneralTable";      
 import { SortantTable } from "@/app/components/tables/SortantTable";     
-import { WORKFLOW_STEPS } from "@/lib/constants";
+import type { WorkflowStep } from "@/lib/constants";
 import { ExportFormat } from "@/lib/exportImport";
 import { notify } from "@/lib/feedback";
 
@@ -41,6 +41,8 @@ interface DashboardViewProps {
   onExportGeneral?: (format: ExportFormat) => void;
   onImportExcel?: (file: File) => void;
   onExportSortant?: (format: ExportFormat) => void;
+  /** Pipeline stages, read from the live service catalog (see useWorkflowSteps). */
+  steps?: WorkflowStep[];
   docsPerStep?: number[];
   workflowIndex?: number;
   selectedDocIds?: number[];
@@ -78,6 +80,7 @@ export function DashboardView({
   onExportGeneral,
   onImportExcel,
   onExportSortant,
+  steps = [],
   docsPerStep = [],
   workflowIndex = 0,
   selectedDocIds = [],
@@ -164,7 +167,7 @@ export function DashboardView({
       />
 
       <WorkflowSteps
-        steps={WORKFLOW_STEPS}
+        steps={steps}
         currentIndex={workflowIndex}
         selectedDoc={workflowDoc}
         allDocs={allDocs}
@@ -190,6 +193,7 @@ export function DashboardView({
         canDelete={canDelete}
         cur={cur}
         langue={langue}
+        steps={steps}
         onExport={onExportGeneral}
         onImportExcel={onImportExcel}
         selectedIds={selectedDocIds}
@@ -199,6 +203,7 @@ export function DashboardView({
 
       <SortantTable
         documents={filteredSortant}
+        steps={steps}
         filtreStatut={filtreStatutSortant}
         setFiltreStatut={setFiltreStatutSortant}
         onView={onViewDoc}

@@ -32,9 +32,10 @@ const RechercheDossiersView = lazy(() => import("@/app/components/pages/Recherch
 const SortantTable = lazy(() => import("@/app/components/tables/SortantTable").then(m => ({ default: m.SortantTable })));
 
 import { translations } from "@/lib/translations";
-import { normalizeStatus, getDocKey, getErrorMessage } from "@/lib/utils";
-import { getStatusLabel, USER_SERVICE_TO_ENUM, WORKFLOW_STEPS } from "@/lib/constants";
+import { normalizeStatus, getDocKey, getErrorMessage, getDocServiceCode, isDocInService } from "@/lib/utils";
+import { getStatusLabel, USER_SERVICE_TO_ENUM, workflowStepIndexOf } from "@/lib/constants";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { useWorkflowSteps } from "@/app/hooks/useWorkflowSteps";
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { exportRows, importFromFile, downloadExcelTemplate, ExportFormat, ExportRow } from "@/lib/exportImport";
 import { useListItems } from "@/app/hooks/useListItems";
@@ -441,61 +442,21 @@ export default function Home() {
     filteredGeneral.find((doc: CourrierSimule) => doc.type === "entrant-juridique") ||
     filteredGeneral[0] || visibleCourriers[0] || null;
 
-  const WORKFLOW_SERVICE_MAP: Record<string, number> = {
-    "BureauOrdre": 0,
-    "OuvertureDossier": 1,
-    "KitabaKhasa": 2,
-    "JalsatWaIjra2at": 3,
-    "Ijra2Baht": 3,
-    "MofawidMalaki": 3,
-    "Khibra": 3,
-    "MustacharMoqarir": 3,
-    "TaslimNusakh": 4,
-    "Tabligh": 4,
-    "TasfiyatSawa2ir": 4,
-    "Archive": 5,
-    "BureauNotification": 3,
-    "BureauExpertise": 3,
-    "CelluleInformatique": 3,
-    "GestionFinanciere": 3,
-    "CaisseTribunal": 3,
-    "BureauRecouvrement": 3,
-    "ProcduresCommissaireRoyal": 3,
-    "GestionPourvoisCassation": 3,
-    "RemiseCopieJugement": 4,
-    "Greffe": 2,
-    "Direction": 0,
-  };
+  // ── Workflow pipeline ──
+  // The stages ARE the services in the RBAC catalog: adding one in
+  // « Gestion des services » adds a stage, archiving one removes it. The
+  // selected folder's position is simply its stage's index, so nothing has to
+  // map enum names (let alone French or Arabic labels) onto a fixed list.
+  const { steps: workflowSteps } = useWorkflowSteps(token);
 
-  const getWorkflowIndex = (doc: CourrierSimule | null) => {
-    if (!doc) return 0;
-    const key = doc.serviceActuelKey || "";
-    if (WORKFLOW_SERVICE_MAP[key] !== undefined) return WORKFLOW_SERVICE_MAP[key];
-    const service = doc.serviceActuel.toLowerCase();
-    if (service.includes("archive") || service.includes("الأرشيف") || service.includes("مؤرشف")) return 5;
-    if (service.includes("taslim") || service.includes("tabligh") || service.includes("tasfiya") || service.includes("نسخ") || service.includes("التبليغ") || service.includes("الصوائر")) return 4;
-    if (service.includes("jalsat") || service.includes("audience") || service.includes("recherche") || service.includes("expertise") || service.includes("rapporteur") || service.includes("الجلسات") || service.includes("الخبرة") || service.includes("المقرر")) return 3;
-    if (service.includes("kitaba") || service.includes("secrétariat") || service.includes("الكتابة")) return 2;
-    if (service.includes("ouverture") || service.includes("فتح")) return 1;
-    return 0;
-  };
-  const workflowCurrentIndex = getWorkflowIndex(selectedWorkflowDoc);
+  const workflowIndex = selectedWorkflowDoc
+    ? workflowStepIndexOf(workflowSteps, getDocServiceCode(selectedWorkflowDoc))
+    : -1;
+  const workflowCurrentIndex = Math.max(0, workflowIndex);
 
-  const docsPerStep = WORKFLOW_STEPS.map((ws) => {
-    return visibleCourriers.filter((doc) => {
-      const key = doc.serviceActuelKey || "";
-      if (WORKFLOW_SERVICE_MAP[key] !== undefined) {
-        const stepIndex = WORKFLOW_SERVICE_MAP[key];
-        if (ws.service === "BureauOrdre") return stepIndex === 0;
-        if (ws.service === "OuvertureDossier") return stepIndex === 1;
-        if (ws.service === "KitabaKhasa") return stepIndex === 2;
-        if (ws.service === "JalsatWaIjra2at") return stepIndex === 3;
-        if (ws.service === "TaslimNusakh") return stepIndex === 4;
-        if (ws.service === "Archive") return stepIndex === 5;
-      }
-      return false;
-    }).length;
-  });
+  const docsPerStep = workflowSteps.map(
+    (step) => visibleCourriers.filter((doc) => isDocInService(doc, step.code)).length
+  );
 
   const recentActivity = visibleCourriers.slice(0, 6).map((d) => ({
     type: d.type,
@@ -1381,6 +1342,7 @@ export default function Home() {
               selectedDocIds={selectedDocIds}
               onToggleDocSelect={toggleDocSelect}
               onSelectAllDocs={selectAllDocs}
+              steps={workflowSteps}
               docsPerStep={docsPerStep}
               workflowIndex={workflowCurrentIndex}
               recentActivity={recentActivity}
@@ -1598,6 +1560,7 @@ export default function Home() {
                 onAnnuler={(id) => changerStatutSortant(id, "Annule")}
                 cur={cur}
                 langue={langue}
+                steps={workflowSteps}
                 onExport={vueActive === "sortant-normal" ? exportSortantDocs : exportSortantDocs}
               />
             </Suspense>

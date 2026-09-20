@@ -381,9 +381,9 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
   // ── Dynamic journey ──
   // The ordered list of services this folder *actually* passed through, built
-  // from its real transactions (oldest first). Unlike the previous fixed
-  // WORKFLOW_STEPS pipeline, services created from the admin panel appear
-  // correctly and a folder that skipped steps is not shown as if it had not.
+  // from its real transactions (oldest first). Unlike a fixed stage list,
+  // services created from the admin panel appear correctly here and a folder that
+  // skipped steps is not shown as if it had not.
   const journey = (() => {
     // Build a set of rejected (origin → destination) service-code pairs so
     // the arrow between them can render ❌ instead of →.
