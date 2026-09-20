@@ -192,6 +192,60 @@ namespace WebApplication1.Services
             return docIdsWithoutAccess.Count;
         }
 
+        /// <summary>
+        /// Put folders handed over by an unanswered request back with the service
+        /// that sent them.
+        /// </summary>
+        /// <remarks>
+        /// A folder must stay with its sender until the destination accepts the
+        /// transfer — <c>TransactionService.AccepterAsync</c> is the only thing that
+        /// is supposed to move it. An older build of the "Transaction Unique"
+        /// creation mode moved the folder straight away while still recording a
+        /// <see cref="StatutTransaction.EnAttente"/> request, so the receiver saw it
+        /// in Mes dossiers / Courriers Entrants / Courrier Juridique before ever
+        /// answering. The source is fixed; this restores the rows that build left
+        /// behind and is a no-op (0 rows) once they are repaired.
+        /// </remarks>
+        /// <returns>How many folders were moved back.</returns>
+        public async Task<int> RepairUnansweredHandoversAsync()
+        {
+            // Only an unanswered handover can contradict a folder's location, and
+            // only when the folder already sits at the requested destination.
+            // Refusal notices carry a Commentaire, hence the null check.
+            var stranded = await _context.Transactions
+                .Where(t => t.Statut == StatutTransaction.EnAttente
+                    && t.Commentaire == null
+                    && t.ServiceOrigineCode != null
+                    && t.ServiceDestinationCode != null
+                    && t.ServiceOrigineCode != t.ServiceDestinationCode
+                    && t.Document != null
+                    && !t.Document.EstSupprime
+                    && t.Document.ServiceActuelCode == t.ServiceDestinationCode)
+                .Include(t => t.Document)
+                .OrderBy(t => t.DateTransaction)
+                .ToListAsync();
+
+            if (stranded.Count == 0) return 0;
+
+            var repaired = 0;
+            foreach (var handover in stranded.GroupBy(t => t.DocumentId))
+            {
+                // The earliest unanswered handover is the one that moved the folder.
+                var document = handover.First().Document!;
+                var originCode = handover.First().ServiceOrigineCode!;
+
+                document.ServiceActuelCode = originCode;
+                // Legacy mirror of the code. Dynamic services have no enum value, so
+                // this falls back exactly like creation and transfer already do.
+                document.ServiceActuel = ServiceMapper.MapToServiceEnum(originCode);
+                document.StatutActuel = StatutDossier.EnInstance;
+                repaired++;
+            }
+
+            await _context.SaveChangesAsync();
+            return repaired;
+        }
+
         // ── Private helpers ──
 
         private async Task UpsertAccessAsync(int documentId, string serviceCode, DocumentAccessLevel level, int? grantedByUserId)

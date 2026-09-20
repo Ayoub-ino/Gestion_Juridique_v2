@@ -101,10 +101,11 @@ namespace WebApplication1.Tests
             Assert.Contains("transferer", bureauPerms);
             Assert.Contains("creer_courrier_admin", bureauPerms);
             Assert.Contains("supprimer", bureauPerms);
-            // bureauordre matrix has 22 keys -> pre-seeded transferer is part of it,
-            // and voir_corbeille/restaurer/archives_view are included so a deleted
-            // folder can be found in the deleter's own archive.
-            Assert.Equal(22, bureauPerms.Count);
+            // bureauordre matrix has 23 keys -> pre-seeded transferer is part of it,
+            // and archiver/voir_corbeille/restaurer/archives_view are included so
+            // a deleted folder can be found in the deleter's own archive, and any
+            // custodian can move a folder to the archive state.
+            Assert.Equal(23, bureauPerms.Count);
 
             // Overrides: pre-seeded transferer + the 19 missing ones
             Assert.Equal(ExpectedOverrides, await ctx.AdminPermissionOverrides.CountAsync());

@@ -18,11 +18,16 @@ namespace WebApplication1.Services
     {
         private readonly AppDbContext _context;
         private readonly DocumentAccessService _accessService;
+        private readonly DocumentCloneService _cloneService;
 
-        public TransactionService(AppDbContext context, DocumentAccessService accessService)
+        public TransactionService(
+            AppDbContext context,
+            DocumentAccessService accessService,
+            DocumentCloneService cloneService)
         {
             _context = context;
             _accessService = accessService;
+            _cloneService = cloneService;
         }
 
         private static bool IsAdminLike(Utilisateur user)
@@ -64,6 +69,30 @@ namespace WebApplication1.Services
 
         private async Task<Utilisateur?> LoadUserOrNullAsync(int userId) =>
             await _context.Utilisateurs.FindAsync(userId);
+
+        /// <summary>
+        /// True when this request names a recipient AND another pending request for
+        /// the same folder names a DIFFERENT recipient.
+        ///
+        /// That is the one case where a single folder cannot serve everybody: each
+        /// named recipient must receive their own copy, otherwise the first one to
+        /// answer would move the folder out from under the others. Service-wide
+        /// requests are excluded on purpose — the folder simply lands in the service
+        /// where every member can work on it.
+        /// </summary>
+        private async Task<bool> HasOtherTargetedRecipientAsync(Transaction transaction)
+        {
+            if (!transaction.TargetUserId.HasValue) return false;
+
+            var targetUserId = transaction.TargetUserId.Value;
+
+            return await _context.Transactions
+                .AnyAsync(t => t.DocumentId == transaction.DocumentId
+                    && t.Statut == StatutTransaction.EnAttente
+                    && t.Id != transaction.Id
+                    && t.TargetUserId.HasValue
+                    && t.TargetUserId.Value != targetUserId);
+        }
 
         public async Task<ServiceResult> GetPendingAsync(int userId)
         {
@@ -197,25 +226,99 @@ namespace WebApplication1.Services
 
             var originCode = TransactionOriginCode(transaction);
 
-            transaction.Statut = StatutTransaction.Accepte;
-            // Keep the original marker so the sender's notification stays identifiable
-            if (!IsRefusalNotice(transaction)) transaction.Commentaire = commentaire;
+            // A refusal notice only needs an acknowledgement: it is a message to the
+            // sender, not a handoff, so it never moves the folder.
+            var isRefusalNotice = IsRefusalNotice(transaction);
+
+            // Set when the folder was handed to the receiver as a COPY of the one
+            // the sender holds, rather than by moving the folder itself.
+            var copyHandedOver = false;
 
             // The folder stayed with the sender until this point (pending transfer).
             // doitRevenir: the receiver processed it but it must go back to the sender.
-            if (transaction.DoitRevenir && !IsRefusalNotice(transaction))
+            if (transaction.DoitRevenir && !isRefusalNotice)
             {
                 transaction.Document.StatutActuel = StatutDossier.EnInstance;
             }
             else
             {
-                // Normal acceptance: move the folder to the receiver's service.
-                transaction.Document.ServiceActuel = transaction.ServiceDestination;
-                transaction.Document.ServiceActuelCode = destCode;
-                transaction.Document.StatutActuel = StatutDossier.EnCours;
+                var document = transaction.Document;
+
+                // ── ONE FOLDER PER NAMED RECIPIENT ──
+                // A send can name several users, each with their own request. Rather
+                // than let them race for a single row — the first acceptance would
+                // move the folder out from under the others — the first acceptance
+                // spins off a copy for THAT user, while the folder itself stays put
+                // and is taken by the LAST recipient to answer. N recipients end up
+                // with N independent folders and the sender is left with nothing
+                // extra to clean up.
+                if (await HasOtherTargetedRecipientAsync(transaction))
+                {
+                    var copy = _cloneService.BuildCopy(document);
+                    _context.Documents.Add(copy);
+                    await _context.SaveChangesAsync();
+
+                    // The copy inherits the journey of the folder it came from.
+                    await _cloneService.CopyCommittedHistoryAsync(document.Id, copy.Id);
+
+                    // Re-point this request at the copy: it becomes the copy's own
+                    // acceptance hop, and the original keeps its untouched journey.
+                    transaction.DocumentId = copy.Id;
+                    transaction.Document = copy;
+                    document = copy;
+
+                    copyHandedOver = true;
+                }
+
+                // Move the folder to the receiver's service.
+                document.ServiceActuel = transaction.ServiceDestination;
+                document.ServiceActuelCode = destCode;
+                document.StatutActuel = StatutDossier.EnCours;
 
                 // Grant the receiver's service edit access (was withheld during the pending phase).
-                await _accessService.GrantEditorAsync(transaction.DocumentId, destCode, userId);
+                await _accessService.GrantEditorAsync(document.Id, destCode, userId);
+            }
+
+            // ── RECORD THE DECISION ──
+            // Written last on purpose: the copy step above reads the folder's
+            // committed history, and this request must not land in it twice.
+            transaction.Statut = StatutTransaction.Accepte;
+            // Keep the original marker so the sender's notification stays identifiable
+            if (!isRefusalNotice) transaction.Commentaire = commentaire;
+
+            // ── CLOSE THE COMPETING REQUESTS ──
+            // One send can target several users, so this document may still be
+            // sitting in other inboxes. Accepting it MOVES the folder, which makes
+            // every other pending handoff of it stale — leaving them open would ask
+            // a second user to accept a folder already in their own service, and a
+            // later refusal there would contradict the completed transfer.
+            //
+            // A "doit revenir" acceptance only answers that one handoff, so it is
+            // scoped to the same origin → destination pair. "[REFUS]" notices are
+            // messages to the sender and are never cancelled here.
+            //
+            // This is skipped when the folder was handed over as a copy: the
+            // original did not move, so every other pending request is still valid.
+            if (!isRefusalNotice && !copyHandedOver)
+            {
+                var competing = _context.Transactions
+                    .Where(t => t.DocumentId == transaction.DocumentId
+                        && t.Statut == StatutTransaction.EnAttente
+                        && t.Id != transaction.Id
+                        && (t.Commentaire == null || t.Commentaire != "[REFUS]"));
+
+                if (transaction.DoitRevenir)
+                {
+                    // Rows written before the code columns existed only carry the enum.
+                    competing = competing.Where(t =>
+                        (t.ServiceDestinationCode == destCode
+                            || (t.ServiceDestinationCode == null && t.ServiceDestination == transaction.ServiceDestination))
+                        && (t.ServiceOrigineCode == originCode
+                            || (t.ServiceOrigineCode == null && t.ServiceOrigine == transaction.ServiceOrigine)));
+                }
+
+                foreach (var other in await competing.ToListAsync())
+                    other.Statut = StatutTransaction.Annule;
             }
 
             await _context.SaveChangesAsync();
@@ -269,6 +372,32 @@ namespace WebApplication1.Services
                 Commentaire = "[REFUS]"
             };
             _context.Transactions.Add(senderNotificationTx);
+
+            // ── CLOSE THE SIBLING REQUESTS OF THE SAME SEND ──
+            // Refusing answers THIS handoff, so no other user targeted by the same
+            // send may accept it afterwards — otherwise the sender would end up
+            // with both a refusal notice and a completed transfer for one folder.
+            // Handoffs to other services are left untouched: the folder did not
+            // move, so they remain legitimately actionable.
+            //
+            // Requests naming a DIFFERENT recipient are also left open: each named
+            // recipient receives their own copy of the folder, so one of them
+            // refusing says nothing about the others' requests.
+            var siblings = await _context.Transactions
+                .Where(t => t.DocumentId == transaction.DocumentId
+                    && t.Statut == StatutTransaction.EnAttente
+                    && t.Id != transaction.Id
+                    // Rows written before the code columns existed only carry the enum.
+                    && (t.ServiceDestinationCode == destCode
+                        || (t.ServiceDestinationCode == null && t.ServiceDestination == transaction.ServiceDestination))
+                    && (t.ServiceOrigineCode == originCode
+                        || (t.ServiceOrigineCode == null && t.ServiceOrigine == transaction.ServiceOrigine))
+                    && (t.TargetUserId == null || t.TargetUserId == transaction.TargetUserId)
+                    && (t.Commentaire == null || t.Commentaire != "[REFUS]"))
+                .ToListAsync();
+
+            foreach (var sibling in siblings)
+                sibling.Statut = StatutTransaction.Annule;
 
             await _context.SaveChangesAsync();
 
@@ -475,10 +604,28 @@ namespace WebApplication1.Services
             return ServiceResult.Ok(transactions);
         }
 
+        /// <summary>
+        /// The folder's real journey. A transfer only becomes part of the history
+        /// once it has actually moved the folder:
+        ///   - <c>Accepte</c>  : a completed movement. This includes historique
+        ///                       (record-only) services, which are auto-accepted
+        ///                       because they have no accounts and cannot act.
+        ///   - <c>Refuse</c>   : the folder did NOT move, but the denied attempt is
+        ///                       kept so the UI can mark that hop with ❌.
+        /// Excluded: <c>EnAttente</c> (the folder is still with the sender, so the
+        /// transfer must not appear as if it had happened), <c>Annule</c> (never
+        /// happened), and "[REFUS]" notices (messages addressed to the sender,
+        /// not movements of the folder).
+        /// </summary>
         public async Task<ServiceResult> GetHistoryAsync(int documentId)
         {
             var transactions = await _context.Transactions
-                .Where(t => t.DocumentId == documentId)
+                .Where(t => t.DocumentId == documentId
+                    && (t.Statut == StatutTransaction.Accepte
+                        || t.Statut == StatutTransaction.Refuse)
+                    // SQL three-valued logic: `Commentaire <> '[REFUS]'` would also
+                    // drop rows where the column is NULL, hence the explicit check.
+                    && (t.Commentaire == null || t.Commentaire != "[REFUS]"))
                 .OrderBy(t => t.DateTransaction)
                 .Select(t => new
                 {

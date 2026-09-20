@@ -119,6 +119,16 @@ namespace WebApplication1.Controllers
                 if (refExists)
                     return Conflict(new { error = "Ce numéro de référence existe déjà" });
 
+                // ── The folder belongs to its CREATOR's service ──
+                // Resolved from the live user row so services created from the admin
+                // panel work too. This is what makes the folder appear in the SENDER's
+                // Mes dossiers / Courriers Entrants first.
+                var creatorUser = await _context.Utilisateurs.FindAsync(creatorUserId);
+                var creatorServiceCode = ServiceMapper.NormalizeServiceCode(creatorUser?.Service) is { Length: > 0 } creatorCode
+                    ? creatorCode
+                    : "bureauordre";
+                var creatorServiceEnum = ServiceMapper.MapToServiceEnum(creatorServiceCode);
+
                 // ===== 1. CRÉATION DU COURRIER =====
                 var courrier = new CourrierAdministratif
                 {
@@ -133,8 +143,8 @@ namespace WebApplication1.Controllers
                     NumeroReference = numeroRef,
                     Sujet = dto.Objet,
                     DateCreation = DateTime.Now,
-                    ServiceActuel = ServiceTribunal.BureauOrdre,
-                    ServiceActuelCode = "bureauordre",
+                    ServiceActuel = creatorServiceEnum,
+                    ServiceActuelCode = creatorServiceCode,
                     StatutActuel = StatutDossier.Nouveau,
                     NumeroBureauOrdre = numeroBureauOrdre,
                     Transmissible = dto.Transmissible,
@@ -150,6 +160,10 @@ namespace WebApplication1.Controllers
                 // ===== 2. GESTION DU MODE DE TRAITEMENT =====
                 if (dto.ModeTraitement == "archivage")
                 {
+                    // "Archivage Direct" is a deliberate, immediate filing — there is no
+                    // recipient to answer it — so the folder really does move here and
+                    // the movement is recorded as completed (never as a pending request,
+                    // which would otherwise show up in the archive service's inbox).
                     courrier.ServiceActuel = ServiceTribunal.Archive;
                     courrier.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive);
                     courrier.StatutActuel = StatutDossier.Archive;
@@ -157,13 +171,14 @@ namespace WebApplication1.Controllers
                     var transaction = new Transaction
                     {
                         DocumentId = courrier.Id,
-                        ServiceOrigine = ServiceTribunal.BureauOrdre,
-                        ServiceOrigineCode = "bureauordre",
+                        ServiceOrigine = creatorServiceEnum,
+                        ServiceOrigineCode = creatorServiceCode,
                         ServiceDestination = ServiceTribunal.Archive,
                         ServiceDestinationCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive),
                         DateTransaction = DateTime.Now,
                         Remarques = "Archivage direct du courrier",
-                        NomPersonneExterne = ""
+                        NomPersonneExterne = "",
+                        Statut = StatutTransaction.Accepte
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -180,20 +195,23 @@ namespace WebApplication1.Controllers
 
                     var destService = ServiceMapper.MapToServiceEnum(destCode);
 
-                    courrier.ServiceActuel = destService;
-                    courrier.ServiceActuelCode = destCode;
-                    courrier.StatutActuel = StatutDossier.EnCours;
+                    // "Transaction Unique" is a REQUEST, not a move: the folder stays
+                    // with the sender's service until the destination accepts it
+                    // (TransactionService.AccepterAsync performs the move). Otherwise
+                    // it would land in the receiver's lists before they ever answer.
+                    courrier.StatutActuel = StatutDossier.EnInstance;
 
                     var transaction = new Transaction
                     {
                         DocumentId = courrier.Id,
-                        ServiceOrigine = ServiceTribunal.BureauOrdre,
-                        ServiceOrigineCode = "bureauordre",
+                        ServiceOrigine = creatorServiceEnum,
+                        ServiceOrigineCode = creatorServiceCode,
                         ServiceDestination = destService,
                         ServiceDestinationCode = destCode,
                         DateTransaction = DateTime.Now,
                         Remarques = $"Transfert vers {destService}",
-                        NomPersonneExterne = ""
+                        NomPersonneExterne = "",
+                        Statut = StatutTransaction.EnAttente
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -202,9 +220,9 @@ namespace WebApplication1.Controllers
                     if (dto.ServicesDiffusion == null || dto.ServicesDiffusion.Count == 0)
                         return BadRequest(new { error = "Au moins un service est requis pour la diffusion" });
 
-                    courrier.ServiceActuel = ServiceTribunal.BureauOrdre;
-                    courrier.ServiceActuelCode = "bureauordre";
-                    courrier.StatutActuel = StatutDossier.EnCours;
+                    // Diffusion broadcasts REQUESTS: the folder stays with the sender
+                    // and each destination answers on its own.
+                    courrier.StatutActuel = StatutDossier.EnInstance;
 
                     foreach (var serviceName in dto.ServicesDiffusion)
                     {
@@ -218,13 +236,14 @@ namespace WebApplication1.Controllers
                         var transaction = new Transaction
                         {
                             DocumentId = courrier.Id,
-                            ServiceOrigine = ServiceTribunal.BureauOrdre,
-                            ServiceOrigineCode = "bureauordre",
+                            ServiceOrigine = creatorServiceEnum,
+                            ServiceOrigineCode = creatorServiceCode,
                             ServiceDestination = destService,
                             ServiceDestinationCode = diffCode,
                             DateTransaction = DateTime.Now,
                             Remarques = $"Diffusion vers {destService}",
-                            NomPersonneExterne = ""
+                            NomPersonneExterne = "",
+                            Statut = StatutTransaction.EnAttente
                         };
                         _context.Transactions.Add(transaction);
                     }
@@ -233,13 +252,7 @@ namespace WebApplication1.Controllers
                 await _context.SaveChangesAsync();
 
                 // ── Auto-grant Owner access to creator's service ──
-                {
-                    var creatorUser = await _context.Utilisateurs.FindAsync(creatorUserId);
-                    var creatorServiceCode = ServiceMapper.NormalizeServiceCode(creatorUser?.Service) is { Length: > 0 } code
-                        ? code
-                        : "bureauordre";
-                    await _accessService.GrantOwnerAsync(courrier.Id, creatorServiceCode, creatorUserId);
-                }
+                await _accessService.GrantOwnerAsync(courrier.Id, creatorServiceCode, creatorUserId);
 
                 return CreatedAtAction(nameof(GetById), new { id = courrier.Id },
                     new { message = $"Courrier créé avec succès (Mode: {dto.ModeTraitement})", courrier });

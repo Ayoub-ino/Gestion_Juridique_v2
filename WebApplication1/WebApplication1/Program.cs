@@ -71,6 +71,7 @@ builder.Services.AddScoped<WebApplication1.Services.ServiceCatalog>();
 builder.Services.AddScoped<WebApplication1.Services.TransactionService>();
 builder.Services.AddScoped<WebApplication1.Services.WorkspaceService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentAccessService>();
+builder.Services.AddScoped<WebApplication1.Services.DocumentCloneService>();
 
 var app = builder.Build();
 
@@ -113,6 +114,14 @@ using (var scope = app.Services.CreateScope())
 {
     var seeder = scope.ServiceProvider.GetRequiredService<SeederService>();
     await seeder.SeedAsync();
+
+    // Folders moved to their destination while their transfer was still
+    // unanswered are put back with the service that sent them, so they only
+    // reach the receiver once it accepts. Idempotent: 0 rows once repaired.
+    var accessService = scope.ServiceProvider.GetRequiredService<DocumentAccessService>();
+    var repairedHandovers = await accessService.RepairUnansweredHandoversAsync();
+    if (repairedHandovers > 0)
+        Console.WriteLine($"{repairedHandovers} dossier(s) remis au service expediteur (transferts sans reponse).");
 }
 
 app.Run();

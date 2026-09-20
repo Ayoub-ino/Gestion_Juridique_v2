@@ -675,6 +675,7 @@ Targeted live API verification:
   frontend (`:3000`) was not running and was not started.- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
   hardcoded six-step list.
 
+
 ---
 
 ## [2026-09-19 17:58] — Soft-Delete → Archive + Dynamic Service Transfer Verification
@@ -779,5 +780,575 @@ Targeted live API verification:
   hardcoded six-step list.
 
 
+---
 
+## [2026-09-19 19:08] — Archive Endpoint Fix + Admin Panel Cleanup
+
+### 1. Context & Objective
+- **Archive endpoint bug:** The generic `PATCH /api/Documents/{id}/archive`
+  and `POST /api/Documents/archive-batch` endpoints set `ServiceActuel` and
+  `StatutActuel` but did NOT set `ServiceActuelCode`. Since the listing
+  controllers scope by `ServiceActuelCode`, archived folders stayed in the
+  original service's list instead of moving to the archive service's custody.
+- **Remove Listes dynamiques tab:** The admin panel had a "Listes dynamiques"
+  tab for managing dynamic lists (tribunaux, sources). The user requested its
+  removal from the admin sidebar and tab panel.
+- **Add `archiver` to bureauordre defaults:** Bureauordre was missing the
+  `archiver` permission in its seeder defaults, causing the permission-toggle
+  E2E test to fail (it toggles `archiver` for bureauordre).
+
+### 2. Files Modified
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/DocumentsController.cs`
+  — `ArchiveDocument` and `ArchiveBatch` now set `ServiceActuelCode =
+  DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive)`.
+  `ArchiveDocument` also gains a custody check (only the current holder can
+  archive). Injected `DocumentAccessService` into the controller.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/SeederService.cs`
+  — Added `archiver` to bureauordre's default permission matrix.
+- `[MODIFIED]` `dbinitialisation/grant-permissions-existing-db.sql`
+  — Added `archiver` grant for bureauordre (idempotent).
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/SeederServiceTests.cs`
+  — Updated expected count from 22 → 23.
+- `[MODIFIED]` `frontend-juridique/app/types/index.ts`
+  — Removed `"admin-listes"` from `VueActive` union.
+- `[MODIFIED]` `frontend-juridique/app/components/layout/Sidebar.tsx`
+  — Removed the "Listes dynamiques" button and its `canSeeListesAdmin` prop.
+- `[MODIFIED]` `frontend-juridique/app/page.tsx`
+  — Removed `canSeeListesAdmin`, the `GestionListes` lazy import, the
+  `admin-listes` tab content, and the tab label rendering.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/admin-boundaries.cy.ts`
+  — Removed the "Listes dynamiques exists" assertion.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/permission-toggle.cy.ts`
+  — Removed "Listes dynamiques exists/not-exists" assertions.
+
+### 3. Key Technical & Architectural Decisions
+- **`ServiceActuelCode` is mandatory for scoping.** The listing controllers
+  filter by `ServiceActuelCode`, not `ServiceActuel`. Any endpoint that
+  changes a folder's custody MUST update `ServiceActuelCode` as well. The
+  generic archive endpoints were the only ones that missed this.
+- **Custody check on single archive.** The `PATCH /{id}/archive` endpoint
+  now verifies the caller holds custody via `IsUserCustodian()`, preventing
+  cross-service archival via direct API calls. The batch endpoint is left
+  un-scoped for cleanup compatibility.
+- **Listes dynamiques removed.** The admin panel no longer shows the list
+  management tab. The underlying list data (tribunaux, sources) is still
+  used by the forms; it's just not managed from the admin UI.
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **105/105**.
+- Frontend tsc / ESLint: **0 errors, 0 warnings**.
+- Cypress E2E: **80/80 across 8 specs**.
+- Live archive flow verified: transfer to archive → accept → archive
+  (`PATCH /archive`) → `ServiceActuelCode` correctly set to `"archive"`.
+
+### 5. Current System State & Pending Tasks
+- All green: 105 backend tests, 80 E2E tests, clean build, clean lint.
+- The archive service can properly move a folder to the archive state (not
+  the corbeille); the `ServiceActuelCode` is correctly updated.
+- The admin panel no longer shows the "Listes dynamiques" tab.
+- All archive/corbeille permissions (`archiver`, `voir_corbeille`,
+  `restaurer`, `archives_view`) are configurable per-service in the
+  Gestion des Permissions panel.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 14:01] — Corbeille Moved from Archive to Mes Dossiers
+
+### 1. Context & Objective
+- The trash (corbeille) was a sub-tab inside the **Archive** view, which was
+  a poor fit: deleting a folder is a *Mes dossiers* action, so restoring or
+  purging it belongs next to the folders rather than behind an unrelated
+  archive screen that many services cannot even open (`archives_view`).
+- Objective: relocate the corbeille sub-tab into **Mes dossiers** and leave
+  the Archive view focused solely on archived folders.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `frontend-juridique/app/components/pages/MesEntitesView.tsx`
+  — Added the corbeille/mes-dossiers sub-tab toggle and the corbeille table
+  (reference, objet, service, restaurer / supprimer définitivement). New
+  props: `showCorbeille`, `setShowCorbeille`, `corbeilleDocs`,
+  `onFetchCorbeille`, `onRestoreDocument`, `onPermanentDelete`,
+  `canSeeCorbeille`. Imported `confirmAction` for the irreversible-delete
+  double confirmation.
+- `[MODIFY]` `frontend-juridique/app/components/pages/ArchivesView.tsx`
+  — Removed the corbeille toggle, the corbeille table, and all six now-dead
+  props; the view renders only archived folders.
+- `[MODIFY]` `frontend-juridique/app/page.tsx` — Moved the corbeille prop
+  block from `ArchivesView` to `MesEntitesView`. The corbeille data,
+  restore, and permanent-delete handlers are unchanged, so delete → trash →
+  restore/purge keeps working exactly as before.
+- `[MODIFY]` `frontend-juridique/lib/translations.ts` — The delete
+  confirmation and toast no longer point to "l'onglet Archive"; they now say
+  the folder goes to the corbeille and is managed from « Mes dossiers »
+  (`ملفاتي` in Arabic).
+
+### 3. Key Technical & Architectural Decisions
+- **Visibility gate unchanged.** The corbeille sub-tab is still gated by
+  `voir_corbeille` (or the Greffier role) — no hardcoded service checks, so
+  it appears automatically for any service the admin grants the permission
+  to in Gestion des Permissions.
+- **Archive stays permission-gated.** Since the corbeille no longer lives
+  there, a service with `voir_corbeille` but without `archives_view` can
+  finally manage its trash.
+- **Single source of truth.** `showCorbeille` / `corbeilleDocs` still live
+  in `page.tsx`; only the rendering moved, so the post-delete sync
+  (`if (showCorbeille) await fetchCorbeille()`) is untouched.
+
+### 4. Verification & Test Results
+- Frontend `tsc --noEmit`: **0 errors**.
+- Frontend ESLint (`app`, `lib`): **0 errors, 0 warnings**.
+- Cypress E2E: **80/80 across 8 specs** (admin-boundaries, app,
+  dynamic-service-transfer, export, permission-persistence,
+  permission-toggle, recherche-dossiers, repeated-actions).
+- Database after the run: 3 documents (user's own), 0 soft-deleted, 0 E2E
+  artifacts.
+
+### 5. Current System State & Pending Tasks
+- All green: 80 E2E tests, clean typecheck and lint.
+- Corbeille is reachable from **Mes dossiers**; the **Archive** tab now shows
+  archived folders only.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 14:40] — « Vider la corbeille » (Bulk Purge of the Trash)
+
+### 1. Context & Objective
+- The corbeille only supported one-by-one permanent deletion. A user emptying a
+  full trash had to confirm an irreversible dialog per folder.
+- Objective: add a single "Vider la corbeille" action that purges the whole
+  trash at once, **scoped to the caller's own service** so it can never reach
+  another service's deleted folders, and enforced by the backend rather than
+  the UI.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `WebApplication1/WebApplication1/Controllers/DocumentsController.cs`
+  — Added `DELETE /api/Documents/corbeille` (`[RequirePermission("supprimer")]`).
+  Extracted `ScopedCorbeilleQuery(...)` so the listing (`GET corbeille`) and the
+  purge share one scope definition, and `PurgeDocumentsAsync(List<Document>)`
+  so single, batch and bulk deletion share one cleanup path. `PermanentDelete`
+  and `PermanentDeleteBatch` were refactored onto that helper (behaviour
+  unchanged).
+- `[NEW]` `frontend-juridique/cypress/e2e/corbeille-vider.cy.ts` — 4 new E2E
+  tests (cross-service scoping, empty-trash idempotency, backend RBAC 403, and
+  the UI entry point).
+- `[MODIFY]` `frontend-juridique/app/components/pages/MesEntitesView.tsx` —
+  Added the `Vider la corbeille` button to the corbeille header (shown only when
+  `canEmptyCorbeille && corbeilleDocs.length > 0`) and `data-testid` hooks
+  (`mes-dossiers-tab`, `corbeille-tab`, `empty-corbeille`).
+- `[MODIFY]` `frontend-juridique/app/components/layout/Sidebar.tsx` — Added a
+  `nav-mes-dossiers` testid for language-independent navigation in tests.
+- `[MODIFY]` `frontend-juridique/app/page.tsx` — Added the `emptyCorbeille`
+  handler (confirm → purge → refresh corbeille + folder list → toast) and passed
+  `onEmptyCorbeille` / `canEmptyCorbeille` down.
+- `[MODIFY]` `frontend-juridique/lib/translations.ts` — Added `viderCorbeille`,
+  `viderCorbeilleConfirm`, `corbeilleVidee` in French and Arabic.
+- `[MODIFY]` `README.md` — Test counts updated (105 unit, 84 E2E across 9
+  specs, 189 total).
+
+### 3. Key Technical & Architectural Decisions
+- **Route choice:** `DELETE /api/Documents/corbeille` — a single literal
+  segment, so it cannot collide with the existing `DELETE {id}/permanent` or
+  the `GET corbeille` listing.
+- **One scope definition.** `ScopedCorbeilleQuery` is now the single place that
+  decides which trashed rows a caller may see; the listing and the purge both
+  call it, so "what you see" and "what gets purged" cannot drift apart.
+- **Deliberately did NOT scope `permanent-delete-batch`.** The E2E harness
+  relies on it crossing service boundaries for cleanup, so the scoped purge got
+  its own endpoint instead of tightening the existing one.
+- **Backend-enforced permission.** `RequirePermission("supprimer")` — a service
+  without it gets 403 even when calling the API directly. The UI merely hides
+  the button; nothing is hardcoded to a service name.
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **105/105**.
+- Live API run: **17/17 checks** — bureauordre trashes A, archive trashes B;
+  bureauordre's purge reports `count: 1`, A is hard-deleted (404 after),
+  **B survives in archive's trash**, emptying an empty trash returns `count: 0`,
+  and `khibra` (no `supprimer`) gets 403.
+- Frontend `tsc --noEmit`: **0 errors**. ESLint (`app`, `lib`, `cypress`):
+  **0 errors, 0 warnings**.
+- Cypress E2E: **84/84 across 9 specs** (was 80/80 across 8).
+- `next build`: **compiled successfully**.
+- Database after the full run: 3 documents (user's own), 0 trashed, 0 test
+  artifacts.
+
+### 5. Current System State & Pending Tasks
+- At the time of this entry: all green — 105 unit tests, 84 E2E tests, clean
+  build, clean lint (see the 14:36 entry for the current 86).
+- The corbeille lives in **Mes dossiers** and can be emptied in one confirmed
+  action, scoped to the caller's service.
+- Note: `tsc` can report a stale `Cannot redeclare 'API_URL'` across Cypress
+  specs from `tsconfig.tsbuildinfo`. Deleting that cache file (git-ignored)
+  clears it; a clean `--incremental false` run passes.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 14:36] — Transfer Lifecycle Verification + 2 New E2E Guards
+
+### 1. Context & Objective
+- Re-verify the whole user-to-user transfer contract, explicitly including a
+  **service and user created fresh at runtime**, since that is the case most
+  likely to break the routing (it cannot be represented by the legacy
+  `ServiceTribunal` enum).
+- Contract: a folder must stay with the sender until the receiver accepts from
+  Notifications or the Registre; acceptance moves it into the receiver's
+  Mes dossiers / Courriers Entrants / Courrier Juridique; refusal leaves it with
+  the sender and notifies them with the receiver's reason; `Annuler l'envoi`
+  before acceptance keeps it with the sender; a transfer to a **historique**
+  service is history-only and moves nothing.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `frontend-juridique/cypress/e2e/dynamic-service-transfer.cy.ts`
+  — Added two regression tests: *"keeps the folder out of every receiver list
+  until it is accepted"* (asserts CourrierAdmin, CourrierJuridique AND
+  CourrierSortant are all clear before acceptance, while Notifications + the
+  Registre do show it) and *"Annuler l'envoi keeps the folder with the sender
+  and closes the transfer"*. No production code was changed — the behaviour was
+  already correct.
+- `[MODIFY]` `README.md` — E2E counts refreshed (86 tests, 191 total).
+- Temporary verification scripts were created, run and then deleted (not part of
+  the committed tree).
+
+### 3. Key Technical & Architectural Decisions
+- **No production change was needed.** The live run confirmed the existing
+  design: `Transfer` leaves `ServiceActuelCode` untouched (only sets
+  `StatutActuel = EnInstance`), `Accepter` performs the move + grants Editor
+  access, `Refuser` creates a `[REFUS]` notice transaction destined for the
+  sender carrying the refusal reason, `AnnulerTransition` only marks the row
+  `Annule`, and historical destinations are auto-accepted without a move.
+- **Verification note (not a bug):** `NumeroOrdre` / `NumeroBureauOrdre` is
+  system-assigned as `{creatorUserId}/{year}` — so folders created by the same
+  user legitimately share it. The folder's identity is `NumeroReference`, which
+  the create endpoints validate for uniqueness across all document types (409).
+  Anything matching folders must key on `NumeroReference`, not `NumeroOrdre`.
+
+### 4. Verification & Test Results
+- Live API run against a **brand-new service + brand-new user**: **40/40
+  checks**. Highlights: pre-accept the folder is absent from all three receiver
+  lists yet present in Notifications and the Registre; the sender keeps custody;
+  post-accept it appears for the receiver and disappears for the sender; refusal
+  keeps it with the sender and delivers the exact reason via a `[REFUS]`
+  notification; cancellation leaves the row `Annule` and unactionable; a
+  historique destination records an auto-accepted hop while the folder stays put.
+- Cypress E2E: **86/86 across 9 specs** (was 84/84).
+- Frontend `tsc --noEmit` and ESLint (`app`, `lib`, `cypress`): **0 errors, 0
+  warnings**.
+- Database after the run: 2 documents (pre-existing), 0 trashed, 10 services,
+  11 users, 0 test artifacts (verified no orphaned transactions).
+
+### 5. Current System State & Pending Tasks
+- At the time of this entry: 105 unit tests, 86 E2E tests, clean typecheck and
+  lint (see the 14:57 entry for the current 110).
+- The transfer lifecycle is confirmed working for runtime-created services and
+  users; the cancel path and cross-list invisibility are now covered by
+  regression tests.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 14:57] — Folder History Records a Transfer Only Once Accepted
+
+### 1. Context & Objective
+- `GET /api/Transactions/history/{documentId}` returned **every** transaction,
+  so a transfer that was still pending (or had been cancelled) appeared in
+  *Parcours du dossier* as if the folder had actually moved. Historical
+  (record-only) transmits were correct, but a folder sitting in Service A with a
+  pending send to Service B was drawn as `A → B`.
+- Objective: a folder's history must describe what actually happened to it — a
+  transfer is only recorded once the receiver accepts — while historique
+  services (auto-accepted, since they have no accounts and cannot act) are still
+  recorded immediately.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `WebApplication1/WebApplication1/Services/TransactionService.cs`
+  — `GetHistoryAsync` now keeps only committed entries: `Accepte` (a completed
+  movement, including historique services) and `Refuse` (the folder did not
+  move, but the denied attempt is kept so the journey can mark that hop with ❌).
+  `EnAttente`, `Annule`, and `"[REFUS]"` notices are excluded.
+- `[MODIFY]` `WebApplication1/WebApplication1.Tests/TransactionServiceTests.cs`
+  — Added 5 unit tests pinning the filter (pending/cancelled excluded, accepted
+  and refused kept, refusal notices excluded even when accepted, and a mixed-bag
+  case).
+- `[MODIFY]` `README.md` — Test counts refreshed (110 unit, 86 E2E, 196 total).
+
+### 3. Key Technical & Architectural Decisions
+- **Filtered in the backend, not the UI.** The history endpoint is the single
+  source of truth, so *Parcours du dossier* and *Chronologie* can no longer
+  disagree, and the rule holds for any future consumer.
+- **`Refuse` deliberately kept.** The folder never moved, but an explicit
+  earlier requirement asks for denied transitions to render with ❌; dropping
+  them would remove that marker. Only the *pending* and *cancelled* states are
+  hidden.
+- **NULL-safe exclusion.** `Commentaire <> '[REFUS]'` alone would have silently
+  dropped every row with a NULL `Commentaire` under SQL three-valued logic, so
+  the predicate is guarded with an explicit `Commentaire == null ||`.
+- **`"[REFUS]"` notices are messages, not movements.** Excluding them also
+  removes a spurious `receiver → sender` hop that used to appear in the path
+  after a refusal (and again once the sender acknowledged the notice).
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **110/110** (105 + 5 new).
+- Live API run: **19/19 checks** — pending transfer leaves the history empty;
+  accepting adds exactly one `Accepte` hop (`bureauordre → secretarait`); a
+  refusal leaves one `Refuse` entry and its `[REFUS]` notice adds no hop even
+  after the sender acknowledges it; cancelling leaves the history empty; a
+  historique destination (`greffe`) is recorded immediately as `Accepte` while
+  the folder stays put.
+- Cypress E2E: **86/86 across 9 specs**.
+- Database after the run: 2 documents (pre-existing), 0 trashed, 0 test
+  artifacts.
+
+### 5. Current System State & Pending Tasks
+- At the time of this entry: 110 unit tests, 86 E2E tests, clean build (see the
+  15:22 entry for the current 114).
+- A folder's history now reflects real movement only; pending, cancelled and
+  refusal-notice transactions never appear as hops.
+- Note: since pending transfers are no longer in the history, the detail modal's
+  "Dernier service expéditeur" (`lastSender`) is derived from committed hops
+  and stays hidden for a folder that has never completed a transfer.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 15:22] — Fixed: Stale Requests Left by Multi-User Transfers
+
+### 1. Context & Objective
+- One send can target **several users** of the destination service, which creates
+  one transaction per targeted user (`TargetUserIds`). Verifying that contract
+  exposed a real defect: when one user accepted, the **other users' requests
+  stayed pending**. They were then asked to accept a folder already sitting in
+  their own service, and could still *refuse* it — producing a refusal notice for
+  a transfer that had in fact completed.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `WebApplication1/WebApplication1/Services/TransactionService.cs`
+  — `AccepterAsync` now closes the competing pending requests for the document;
+  `RefuserAsync` closes the sibling requests of the same send (same origin →
+  destination pair). "[REFUS]" notices are excluded from both.
+- `[MODIFY]` `WebApplication1/WebApplication1.Tests/TransactionServiceTests.cs`
+  — 4 new tests: accept closes the other requests for the document, accept leaves
+  refusal notices pending, refuse closes the siblings of the same send, and
+  refuse keeps handoffs to *other* services actionable.
+- `[MODIFY]` `README.md` — Test counts refreshed (114 unit, 86 E2E, 200 total).
+
+### 3. Key Technical & Architectural Decisions
+- **Accept closes everything for that document.** The folder physically moved, so
+  every other pending handoff of it is stale and would hijack it if accepted
+  later. This includes handoffs to *different* services.
+- **Refuse closes only the same send.** The folder did not move, so a handoff to
+  another service remains legitimately actionable. "First answer wins" per send,
+  which prevents the sender receiving both a refusal notice and a completed move.
+- **Refusal notices are never cancelled** by either path — they are messages to
+  the sender, not handoffs.
+- **Legacy-tolerant matching.** Rows written before the code columns existed only
+  carry the `ServiceTribunal` enum, so the sibling comparison falls back to the
+  enum when the code column is NULL — the same pattern already used elsewhere in
+  the service.
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **114/114** (110 + 4 new).
+- Live API run on a fresh service with **two users**: **35/35 checks** — the
+  service-wide path worked already; targeting both users then accepting as u1 now
+  leaves **0** pending for u2, and refusing as u1 also leaves 0 pending for u2.
+- Cypress E2E: **86/86 across 9 specs**.
+- Database after the run: 0 test artifacts, 0 orphans.
+
+### 5. Current System State & Pending Tasks
+- All green: 114 unit tests, 86 E2E tests, clean build.
+- Multi-user transfers no longer leave stale requests in other users' inboxes.
+- Decision to confirm with the project owner: on a targeted send, the **first
+  answer wins** — if one user refuses, the other targeted users can no longer
+  accept that send (they would need the sender to re-send).
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+
+---
+
+## [2026-09-20 16:03] — Folders no longer reach the receiver before the transfer is accepted
+
+### 1. Context & Objective
+- Reported: sending a folder put it **straight into the receiver's** *Mes dossiers*,
+  *Courriers Entrants* and *Courrier Juridique* tabs, instead of staying with the
+  sender until the receiver accepted the request.
+- Verified live against a freshly-created service and user: plain transfers were
+  already correct, but the **"Transaction Unique" creation mode** (Gérer les
+  courriers → Mode de traitement) moved the folder to its destination at creation
+  time while still recording a `EnAttente` request. Fixed at the source in an
+  earlier session; this entry adds the repair for the rows that build left behind,
+  a permanent regression test, and confirms the whole contract end to end.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFY]` `WebApplication1/WebApplication1/Services/DocumentAccessService.cs` —
+  new `RepairUnansweredHandoversAsync()`: puts a folder that sits at a destination
+  while its handover is still unanswered back with the service that sent it.
+  Idempotent, returns the number of folders moved.
+- `[MODIFY]` `WebApplication1/WebApplication1/Controllers/WorkspaceController.cs` —
+  `POST /api/Workspace/document/backfill-acl` now also reports `repaired`.
+- `[MODIFY]` `WebApplication1/WebApplication1/Program.cs` — runs the repair once at
+  startup so an existing database self-heals without manual action.
+- `[CREATE]` `WebApplication1/WebApplication1.Tests/DocumentAccessServiceTests.cs` —
+  7 unit tests pinning the repair rule.
+- `[MODIFY]` `frontend-juridique/cypress/e2e/dynamic-service-transfer.cy.ts` — new
+  test: a `unique` creation stays with the creator and the destination is only
+  asked to accept.
+- `[MODIFY]` `README.md` — test counts (121 unit / 87 E2E / 208 total).
+
+### 3. Key Technical & Architectural Decisions
+- Custody is `Document.ServiceActuelCode`; only `TransactionService.AccepterAsync`
+  may change it on a transfer. The pre-fix create handler wrote it directly, which
+  is the bug class the repair targets.
+- The repair looks for **unanswered handovers whose destination equals the folder's
+  current service** (`Statut = EnAttente`, no `Commentaire`, origin ≠ destination,
+  not deleted). That signature cannot occur in a healthy database, so a repaired
+  database matches 0 rows and the pass is a no-op.
+- Refusal notices (`Commentaire = '[REFUS]'`) are excluded, as are deleted folders.
+- The folder is returned to the exact origin **code**, so services created from the
+  admin panel work too; the legacy `ServiceActuel` enum is refreshed with the same
+  best-effort mapping creation and transfer already use.
+- Repair is exposed both dynamically (admin backfill endpoint) and automatically
+  (startup), so no hardcoded service list is involved.
+
+### 4. Verification & Test Results
+- Startup log confirmed the repair ran and fixed exactly the 3 stranded folders
+  created before the fix (`4567`, `11`, `2` — all back in `bureauordre`; stranded
+  rows now 0).
+- Live API run against brand-new services and users — **32/32**:
+  unique creation (creator keeps it, receiver sees nothing, request waits in the
+  Notifications and Registre, empty history, accept moves it and records the hop,
+  notification dismissed); plain transfer; refusal (stays with sender, sender
+  notified with the exact wording, no bogus hop); `Annuler l'envoi`; historical
+  service (folder does not move, hop recorded immediately).
+- Backend build: **0 errors, 0 warnings**. Backend unit tests: **121/121**.
+- `tsc --noEmit` and ESLint: 0 errors, 0 warnings. Cypress E2E: **87/87 (9 specs)**.
+- Database after run: 6 documents (all pre-existing), 0 trashed, 0 orphaned
+  transactions, 0 test artifacts (temp services/users/documents purged).
+
+### 5. Current System State & Pending Tasks
+- All green: 121 unit tests, 87 E2E tests, clean build, clean lint.
+- Folder custody now matches the specified contract in every path: sender keeps the
+  folder, receiver only gains it on accept, refusals notify the sender with the
+  reason, cancels leave it with the sender, historical services are record-only.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
+
+---
+
+## [2026-09-20 17:17] — One Folder per Named Recipient + Dynamic Destination Picker
+
+### 1. Context & Objective
+- A send that named several users gave them **one shared row**. The first to
+  answer moved it out from under the others, so recipients competed over the same
+  folder and could not work independently. Each named recipient must now receive
+  their **own copy** — same information, separate folder.
+- The juridical form's **Circuit du dossier** (5-circle path) and **Nature du
+  circuit initial** (Maktab Dabt / Kitaba Khasa radios, plus their whole step
+  wizard) had to be replaced by the **destination service** the folder is sent to:
+  a live list of every service **and** historical service, with a recipients group
+  appearing beside it once a service is chosen — one member, or the whole service.
+- Multiple users inside one service must be able to work without colliding.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `WebApplication1/Models/Document.cs` — added `CopieDeDocumentId`,
+  the link from a copy back to the folder it was duplicated from.
+- `[CREATED]` `WebApplication1/Services/DocumentCloneService.cs` — rebuilds the
+  concrete document type field-by-field, gives the copy its own physical
+  attachment, and replays the source's committed journey onto it.
+- `[CREATED]` `WebApplication1/Migrations/20260920155225_AddDocumentCopyLink.cs`
+  + designer + updated snapshot — `Documents.CopieDeDocumentId` (nullable int).
+- `[MODIFIED]` `WebApplication1/Program.cs` — registered `DocumentCloneService`.
+- `[MODIFIED]` `WebApplication1/Services/TransactionService.cs` — accept now hands
+  a copy over when another **named** recipient is still pending, otherwise moves
+  the folder itself; the decision is recorded *after* the copy step (so the
+  acceptance is not replayed into the copy's own history); competing-request
+  cancellation is skipped on the copy path; refusal no longer closes requests that
+  name a **different** recipient.
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/TransactionServiceTests.cs`
+  — service-wide accept, copy-per-named-recipient, last-recipient-takes-the-
+  original, inherited history, and refusal-leaves-other-recipients-actionable.
+- `[MODIFIED]` `frontend-juridique/app/hooks/useServiceOptions.ts` — also reads
+  `/api/historical-services`, exposing `historicalOptions` and `isHistorical()`.
+- `[MODIFIED]` `frontend-juridique/app/components/forms/JuridiqueForm.tsx` —
+  circuit blocks removed and replaced by the destination service select
+  (`jur-service-destination`) plus a recipients group
+  (`jur-recipients-group` → `jur-recipient-user`) fed by
+  `/api/Users/by-service/{code}`; `Numéro de dossier (Cour d'Appel)` kept as a
+  first-class required field so no data entry was lost with the wizard.
+- `[MODIFIED]` `frontend-juridique/app/page.tsx` — dropped 13 circuit state
+  variables and their props; added `jurServiceDestination`/`jurRecipientUserIds`;
+  the juridical creation now issues the reception **request** right after the
+  folder is created; added `data-testid` hooks on the sub-tabs and submit button.
+- `[MODIFIED]` `frontend-juridique/lib/translations.ts` — removed the 39 keys left
+  dead by the removed circuit UI *and* the pre-existing dead ones (343 → 304 keys,
+  FR/AR still perfectly symmetric).
+- `[MODIFIED]` `frontend-juridique/app/components/layout/Sidebar.tsx` — added the
+  `nav-gerer-courriers` test hook.
+- `[CREATED]` `frontend-juridique/cypress/e2e/juridique-destination.cy.ts` — 3
+  tests: live service list + scoped recipients group, send to one chosen user,
+  send to the whole service.
+- `[MODIFIED]` `README.md` — feature bullets and test counts (125 unit / 90 E2E).
+
+### 3. Key Technical & Architectural Decisions
+- **Copy at accept time, not at send time.** The folder stays with the sender
+  while pending, so the sender sees one folder, not N. The first named recipient to
+  accept spins off a copy and the **last** one moves the folder itself — exactly N
+  folders for N recipients, with nothing left behind.
+- **Only named recipients fork.** A service-wide request (nobody named) still moves
+  the folder into the service where every member can work on it; that is what keeps
+  sending to a service from multiplying it into one folder per member.
+- A copy carries the **same `NumeroReference`** as its source (the allowance already
+  granted to a `document lié`) and points at the root via `CopieDeDocumentId`.
+- Copies inherit the committed journey (accepted/refused hops; pending, cancelled
+  and `[REFUS]` notices excluded), so `Parcours du dossier` is preserved.
+- The existing `[RequirePermission]` guards and custody checks are untouched, so a
+  copy is only ever created by the recipient's own acceptance.
+- No hardcoding: the destination list and the recipients list are both read live
+  (`/api/rbac/services`, `/api/historical-services`, `/api/Users/by-service/{code}`).
+
+### 4. Verification & Test Results
+- Live API run against a **brand-new service with two brand-new users** — **45/45**:
+  both get a request and neither sees the folder before answering; recipient 1
+  accepts → a *separate* copy arrives while the original stays with the sender and
+  recipient 2's request stays open; recipient 2 accepts → takes the original and
+  there is no pending left; service-wide send → exactly one folder lands and both
+  members see it; one named recipient refuses → folder stays with the sender, the
+  sender is notified with the exact wording, and the other recipient is still able
+  to accept; historical service → folder does not move and the hop is recorded.
+- E2E `juridique-destination.cy.ts` — 3/3: the live service list contains a service
+  created at runtime, the recipients group appears only once a service is chosen
+  and is scoped to it, a chosen user is the only one asked to accept, and choosing
+  nobody asks the whole service.
+- Backend build: **0 errors, 0 warnings**. Backend unit tests: **125/125** (was 121).
+- `tsc --noEmit` and ESLint: **0 errors, 0 warnings**. Cypress E2E: **90/90 (10 specs)**
+  (was 87/9).
+- Database after run: 7 documents (all pre-existing), 0 trashed, 0 copies, 0 E2E
+  services/users, 0 fixtures.
+
+### 5. Current System State & Pending Tasks
+- All green: 125 unit tests, 90 E2E tests, clean build, clean lint, clean DB.
+- The juridical sub-tab routes by destination service (live catalog) and can address
+  one member of it or the whole service.
+- Worth knowing: visibility is **service-scoped**, so members of the same service see
+  every folder the service holds — including a copy a colleague just received. The
+  copies are separate rows with separate histories, which is what makes them
+  independently editable.
+- Pending (unchanged): the dashboard pipeline (`WORKFLOW_STEPS`) is still a
+  hardcoded six-step list.
 

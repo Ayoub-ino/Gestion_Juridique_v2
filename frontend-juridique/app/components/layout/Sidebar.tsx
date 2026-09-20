@@ -26,7 +26,6 @@ interface SidebarProps {
   canSeePermissionsAdmin: boolean;
   canSeeEquipementsAdmin: boolean;
   canSeeHistoriquesAdmin: boolean;
-  canSeeListesAdmin: boolean;
   canOpenDossiers: boolean;
   canTransfer: boolean;
   canViewArchives: boolean;
@@ -52,7 +51,6 @@ export function Sidebar({
   canSeePermissionsAdmin,
   canSeeEquipementsAdmin,
   canSeeHistoriquesAdmin,
-  canSeeListesAdmin,
   canViewArchives,
   canViewTransactions,
   canSearchDossiers,
@@ -104,11 +102,19 @@ export function Sidebar({
         <div>
           <span className={sectionTitleClass}>{cur.gestion}</span>
           <div className="space-y-1">
-            <button onClick={() => setVueActive("mes-entites")} className={navButtonClass(vueActive === "mes-entites")}>
+            <button
+              data-testid="nav-mes-dossiers"
+              onClick={() => setVueActive("mes-entites")}
+              className={navButtonClass(vueActive === "mes-entites")}
+            >
               {cur.mesDocuments}
             </button>
             {canSeeGererCourriers && (
-              <button onClick={() => setVueActive(defaultCourrierView)} className={navButtonClass(isCourrierView)}>
+              <button
+                data-testid="nav-gerer-courriers"
+                onClick={() => setVueActive(defaultCourrierView)}
+                className={navButtonClass(isCourrierView)}
+              >
                 {cur.gererCourriers}
               </button>
             )}
@@ -182,11 +188,6 @@ export function Sidebar({
             {canSeeHistoriquesAdmin && (
               <button onClick={() => setVueActive("admin-services-historiques")} className={navButtonClass(vueActive === "admin-services-historiques")}>
                 {cur.servicesHistoriques}
-              </button>
-            )}
-            {canSeeListesAdmin && (
-              <button onClick={() => setVueActive("admin-listes")} className={navButtonClass(vueActive === "admin-listes")}>
-                {cur.listesDynamiques}
               </button>
             )}
           </div>

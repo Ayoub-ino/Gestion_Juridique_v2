@@ -25,7 +25,9 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 ## ✨ Features
 
 - **Document Management**: Create, edit, transfer, and archive administrative and juridical correspondence
-- **Multi-Service Routing**: Transfer documents between tribunal services with single or multi-user assignment
+- **Multi-Service Routing**: Transfer documents between tribunal services; naming several recipients hands each of them their own independent copy of the folder
+- **Reception Handshake**: A folder stays with the sender until the destination accepts it — a refusal keeps it in place and notifies the sender with the reason given
+- **Dynamic Destination Picker**: The juridical form routes a folder by choosing a live service (plus an optional member of it) — the catalog is read from the database, so new services appear with no restart
 - **Service-Based Custody**: Only the service currently holding a folder can edit, modify, or transfer it
 - **Dynamic Service Catalog**: Services are resolved from the live database — no hardcoded labels
 - **RBAC Permission System**: 18 dynamic permissions controlling both API access and UI visibility
@@ -110,7 +112,7 @@ Gestion_Juridique-main/
 │   │   ├── Data/                       # AppDbContext
 │   │   ├── Migrations/                 # EF Core database migrations
 │   │   └── Program.cs                  # Application entry point
-│   └── WebApplication1.Tests/          # xUnit unit tests (105 tests)
+│   └── WebApplication1.Tests/          # xUnit unit tests (125 tests)
 │
 ├── frontend-juridique/                 # Frontend (Next.js)
 │   ├── app/
@@ -141,10 +143,12 @@ Gestion_Juridique-main/
 │   │   ├── types/                      # api.generated.ts (OpenAPI types)
 │   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   ├── e2e/                        # E2E test specs (80 tests across 8 specs)
+│   │   ├── e2e/                        # E2E test specs (90 tests across 10 specs)
 │   │   │   ├── app.cy.ts               # Core app flows (35 tests)
 │   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
-│   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer UI (6 tests)
+│   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer custody flow (9 tests)
+│   │   │   ├── corbeille-vider.cy.ts   # Trash purge scoping (4 tests)
+│   │   │   ├── juridique-destination.cy.ts  # Destination picker (3 tests)
 │   │   │   ├── repeated-actions.cy.ts  # Regression: repeated clicks (3 tests)
 │   │   │   ├── export.cy.ts            # Excel/Word export (3 tests)
 │   │   │   ├── recherche-dossiers.cy.ts # Search filters (3 tests)
@@ -250,11 +254,11 @@ Open **http://localhost:3000** in your browser.
 ### Run all tests
 
 ```bash
-# Backend unit tests (105 tests)
+# Backend unit tests (125 tests)
 cd WebApplication1/WebApplication1.Tests
 dotnet test
 
-# Frontend E2E tests (77 tests across 7 specs)
+# Frontend E2E tests (90 tests across 10 specs)
 cd frontend-juridique
 CYPRESS_API_URL=http://localhost:5200 npx cypress run
 
@@ -271,16 +275,18 @@ npx eslint .
 
 | Test Suite | Count | Command |
 |---|---|---|
-| Backend unit tests | 105 | `dotnet test` |
+| Backend unit tests | 125 | `dotnet test` |
 | Cypress E2E — app.cy.ts | 35 | `npx cypress run --spec cypress/e2e/app.cy.ts` |
 | Cypress E2E — permission-toggle.cy.ts | 27 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
-| Cypress E2E — dynamic-service-transfer.cy.ts | 6 | `npx cypress run --spec cypress/e2e/dynamic-service-transfer.cy.ts` |
+| Cypress E2E — dynamic-service-transfer.cy.ts | 9 | `npx cypress run --spec cypress/e2e/dynamic-service-transfer.cy.ts` |
 | Cypress E2E — export.cy.ts | 3 | `npx cypress run --spec cypress/e2e/export.cy.ts` |
 | Cypress E2E — repeated-actions.cy.ts | 3 | `npx cypress run --spec cypress/e2e/repeated-actions.cy.ts` |
 | Cypress E2E — admin-boundaries.cy.ts | 2 | `npx cypress run --spec cypress/e2e/admin-boundaries.cy.ts` |
 | Cypress E2E — permission-persistence.cy.ts | 1 | `npx cypress run --spec cypress/e2e/permission-persistence.cy.ts` |
 | Cypress E2E — recherche-dossiers.cy.ts | 3 | `npx cypress run --spec cypress/e2e/recherche-dossiers.cy.ts` |
-| **Total** | **185** | |
+| Cypress E2E — corbeille-vider.cy.ts | 4 | `npx cypress run --spec cypress/e2e/corbeille-vider.cy.ts` |
+| Cypress E2E — juridique-destination.cy.ts | 3 | `npx cypress run --spec cypress/e2e/juridique-destination.cy.ts` |
+| **Total** | **215** | |
 
 ---
 
@@ -387,5 +393,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 105 unit tests, 80 E2E tests ✅
-> All 185 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.
+> Last verified: September 2026 — 125 unit tests, 90 E2E tests ✅
+> All 208 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

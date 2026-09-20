@@ -41,6 +41,19 @@ namespace WebApplication1.Models
 
         // Fichier joint
         public string? FilePath { get; set; }
+
+        /// <summary>
+        /// Set when this row is a working copy of another folder.
+        ///
+        /// A send that names several recipients hands each of them their OWN copy
+        /// so the recipients work independently instead of competing over one row.
+        /// A copy shares its source's NumeroReference — the same allowance already
+        /// granted to a "document lié" — and points back here at the ROOT folder it
+        /// was duplicated from, so the family stays traceable.
+        ///
+        /// Null for every ordinary folder.
+        /// </summary>
+        public int? CopieDeDocumentId { get; set; }
     }
 
 }

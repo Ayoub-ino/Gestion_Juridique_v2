@@ -275,6 +275,189 @@ describe("10. Dynamic Service Transfer & Refusal Notification", () => {
       });
   });
 
+  it("keeps the folder out of every receiver list until it is accepted", () => {
+    let docId = 0;
+    let txId = 0;
+
+    createCourrier()
+      .then(({ id }) => {
+        docId = id;
+        return login("bureauordre", "bureauordre123");
+      })
+      .then((t) =>
+        authed(t, "POST", `${API_URL}/api/Transfer`, {
+          documentId: docId,
+          documentType: "entrant-admin",
+          serviceDestination: serviceCode,
+        }),
+      )
+      .then((res) => {
+        expect(res.status).to.eq(200);
+        txId = res.body.transactionIds[0];
+      })
+      // Every list that feeds the receiver's UI must still be empty of this
+      // folder: Mes dossiers + Courriers Entrants (admin), Courrier Juridique
+      // and Courrier Sortant are all fetched by useDocuments and merged.
+      .then(() => login(loginName, password))
+      .then((t) =>
+        ([
+          ["admin", "/api/CourrierAdmin"],
+          ["juridique", "/api/CourrierJuridique"],
+          ["sortant", "/api/CourrierSortant"],
+        ] as const).reduce(
+          (chain, [label, path]) =>
+            chain.then(() =>
+              authed(t, "GET", `${API_URL}${path}`).then((res) => {
+                const ids = (res.body as { id: number }[]).map((c) => c.id);
+                expect(ids, `${label} list must not expose the folder yet`).to.not.include(
+                  docId,
+                );
+              }),
+            ),
+          cy.wrap(null) as Cypress.Chainable,
+        ),
+      )
+      // The receiver is nonetheless notified and can act from the Registre.
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/Transactions/pending`))
+      .then((res) => {
+        const ids = (res.body as { documentId: number }[]).map((x) => x.documentId);
+        expect(ids, "receiver must be notified of the incoming folder").to.include(docId);
+      })
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/Transactions/all`))
+      .then((res) => {
+        const ids = (res.body as { documentId: number }[]).map((x) => x.documentId);
+        expect(ids, "receiver must see it in the Registre des transactions").to.include(docId);
+      })
+      // Accepting with a refused-transition notice must never re-route anything,
+      // so accepting the real transfer is what moves the folder.
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "PUT", `${API_URL}/api/Transactions/${txId}/accepter`, {}))
+      .then((res) => expect(res.status).to.eq(200))
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const ids = (res.body as { id: number }[]).map((c) => c.id);
+        expect(ids, "folder must reach the receiver after acceptance").to.include(docId);
+      });
+  });
+
+  it("keeps a 'unique' creation with the sender until the destination accepts", () => {
+    let docId = 0;
+
+    login("bureauordre", "bureauordre123")
+      .then((t) => {
+        const reference = nextReference();
+        return authed(t, "POST", `${API_URL}/api/CourrierAdmin`, {
+          NumeroReference: reference,
+          Objet: `Unique mode ${reference}`,
+          Expediteur: "E2E Dynamic",
+          ModeTraitement: "unique",
+          ServiceDestinataire: serviceCode,
+        });
+      })
+      .then((res) => {
+        expect(res.status).to.eq(201);
+        docId = (res.body.courrier?.id ?? res.body.id) as number;
+        createdDocIds.push(docId);
+      })
+      // "Transaction unique" hands the folder over, it does not move it: the
+      // creator's service keeps custody until the destination answers.
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const ids = (res.body as { id: number }[]).map((c) => c.id);
+        expect(ids, "creator must keep the folder").to.include(docId);
+      })
+      .then(() => login(loginName, password))
+      .then((t) =>
+        ([
+          ["admin", "/api/CourrierAdmin"],
+          ["juridique", "/api/CourrierJuridique"],
+          ["sortant", "/api/CourrierSortant"],
+        ] as const).reduce(
+          (chain, [label, path]) =>
+            chain.then(() =>
+              authed(t, "GET", `${API_URL}${path}`).then((res) => {
+                const ids = (res.body as { id: number }[]).map((c) => c.id);
+                expect(ids, `${label} list must not expose the folder yet`).to.not.include(
+                  docId,
+                );
+              }),
+            ),
+          cy.wrap(null) as Cypress.Chainable,
+        ),
+      )
+      // The destination is asked to accept, exactly like a plain transfer.
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/Transactions/pending`))
+      .then((res) => {
+        const ids = (res.body as { documentId: number }[]).map((x) => x.documentId);
+        expect(ids, "destination must be asked to accept").to.include(docId);
+      });
+  });
+
+  it("Annuler l'envoi keeps the folder with the sender and closes the transfer", () => {
+    let docId = 0;
+    let txId = 0;
+
+    createCourrier()
+      .then(({ id }) => {
+        docId = id;
+        return login("bureauordre", "bureauordre123");
+      })
+      .then((t) =>
+        authed(t, "POST", `${API_URL}/api/Transfer`, {
+          documentId: docId,
+          documentType: "entrant-admin",
+          serviceDestination: serviceCode,
+        }),
+      )
+      .then((res) => {
+        expect(res.status).to.eq(200);
+        txId = res.body.transactionIds[0];
+      })
+      // The receiver is offered the transfer before the sender cancels it.
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/Transactions/pending`))
+      .then((res) => {
+        const ids = (res.body as { documentId: number }[]).map((x) => x.documentId);
+        expect(ids, "receiver must be notified before the cancellation").to.include(docId);
+      })
+      // Sender cancels its own pending sending.
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((t) =>
+        authed(t, "PUT", `${API_URL}/api/Transactions/${txId}/annuler-transition`),
+      )
+      .then((res) => expect(res.status).to.eq(200))
+      // The folder stayed with the sender and is still theirs to manage.
+      .then(() => login("bureauordre", "bureauordre123"))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const doc = (res.body as { id: number; serviceActuelCode?: string }[]).find(
+          (c) => c.id === docId,
+        );
+        expect(doc, "folder must stay with the sender after cancellation").to.exist;
+        expect(doc!.serviceActuelCode).to.eq("bureauordre");
+      })
+      // The receiver can no longer accept or refuse it.
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/Transactions/pending`))
+      .then((res) => {
+        const pending = (res.body as { documentId: number }[]).filter(
+          (x) => x.documentId === docId,
+        );
+        expect(pending.length, "cancelled transfer must not stay actionable").to.eq(0);
+      })
+      .then(() => login(loginName, password))
+      .then((t) => authed(t, "GET", `${API_URL}/api/CourrierAdmin`))
+      .then((res) => {
+        const ids = (res.body as { id: number }[]).map((c) => c.id);
+        expect(ids, "receiver must never gain the folder").to.not.include(docId);
+      });
+  });
+
   it("shows every service and the historical services in the transfer modal", () => {
     createCourrier().then(({ reference }) => {
       cy.clearCookies();

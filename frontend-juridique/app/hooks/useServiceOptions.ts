@@ -6,6 +6,10 @@
 // static SERVICE_GROUPS list. The static list is only used as a fallback when
 // the API is unreachable, and the fallback values are legacy enum names which
 // the backend still accepts.
+//
+// "Services historiques" are record-only destinations (they have no accounts),
+// so they are listed separately: routing to one only appends a hop to the
+// folder's journey and leaves the folder where it is.
 
 "use client";
 
@@ -40,6 +44,7 @@ const FALLBACK_GROUP_LABEL = { fr: "Services", ar: "المصالح" };
 
 export function useServiceOptions(token: string | null | undefined, langue: Langue) {
   const [services, setServices] = useState<RbacService[]>([]);
+  const [historical, setHistorical] = useState<ServiceOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,13 +53,31 @@ export function useServiceOptions(token: string | null | undefined, langue: Lang
       return;
     }
     let cancelled = false;
-    api
-      .get<RbacService[]>("/api/rbac/services", token)
-      .then((rows) => {
-        if (!cancelled) setServices(rows.filter((s) => s.isActive));
+    Promise.all([
+      api.get<RbacService[]>("/api/rbac/services", token),
+      // Record-only destinations. Optional: an unreachable endpoint simply
+      // leaves the historical group out instead of breaking the pickers.
+      api
+        .get<Array<{ code: string; nom: string; isActive?: boolean }>>(
+          "/api/historical-services",
+          token
+        )
+        .catch(() => []),
+    ])
+      .then(([rows, histo]) => {
+        if (cancelled) return;
+        setServices(rows.filter((s) => s.isActive));
+        setHistorical(
+          histo
+            .filter((h) => h.isActive !== false)
+            .map((h) => ({ value: h.code, label: h.nom }))
+        );
       })
       .catch(() => {
-        if (!cancelled) setServices([]);
+        if (!cancelled) {
+          setServices([]);
+          setHistorical([]);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -119,5 +142,29 @@ export function useServiceOptions(token: string | null | undefined, langue: Lang
     return grouped;
   }, [services, langue]);
 
-  return { options, groups, loading, isDynamic: services.length > 0 };
+  const historicalOptions = useMemo<ServiceOption[]>(() => {
+    // Never shadow a live service that happens to share a code.
+    const live = new Set(services.map((s) => s.code.toLowerCase()));
+    return historical.filter((h) => !live.has(h.value.toLowerCase()));
+  }, [historical, services]);
+
+  const historicalCodes = useMemo(
+    () => new Set(historicalOptions.map((h) => h.value.toLowerCase())),
+    [historicalOptions]
+  );
+
+  /** True when the code names a record-only (historical) destination. */
+  const isHistorical = useMemo(
+    () => (code: string) => historicalCodes.has(code.toLowerCase()),
+    [historicalCodes]
+  );
+
+  return {
+    options,
+    groups,
+    historicalOptions,
+    isHistorical,
+    loading,
+    isDynamic: services.length > 0,
+  };
 }

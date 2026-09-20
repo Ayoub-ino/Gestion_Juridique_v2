@@ -127,7 +127,15 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> BackfillAcl()
         {
             var backfilled = await _accessService.BackfillAllDocumentAccessAsync();
-            return Ok(new { message = $"{backfilled} documents ont été initialisés avec les accès ACL", count = backfilled });
+            // Folders moved to their destination by an unanswered request are put
+            // back with the service that sent them (see the method's remarks).
+            var repaired = await _accessService.RepairUnansweredHandoversAsync();
+            return Ok(new
+            {
+                message = $"{backfilled} documents ont été initialisés avec les accès ACL",
+                count = backfilled,
+                repaired
+            });
         }
 
         // ============ NOTES ============

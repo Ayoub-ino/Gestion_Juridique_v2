@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { CourrierSimule, Langue, VueActive } from "@/app/types";
 import { ExportFormat } from "@/lib/exportImport";
 import { ExportButtons } from "@/app/components/common/ExportButtons";
+import { confirmAction } from "@/lib/feedback";
 import { useAuth } from "@/context/AuthContext";
 import { SERVICE_GROUPS } from "@/lib/constants";
 
@@ -34,6 +35,17 @@ interface Props {
   canTransfer?: boolean;
   canArchive?: boolean;
   canDelete?: boolean;
+  // Corbeille (trash) — moved here from the Archive tab. A deleted folder lands
+  // in its deleting service's trash where it can be restored or purged.
+  showCorbeille: boolean;
+  setShowCorbeille: (b: boolean) => void;
+  corbeilleDocs: { id: number; reference: string; objet: string; serviceActuel: string }[];
+  onFetchCorbeille: () => void;
+  onRestoreDocument: (id: number) => void;
+  onPermanentDelete?: (id: number) => void;
+  onEmptyCorbeille: () => void;
+  canSeeCorbeille: boolean;
+  canEmptyCorbeille: boolean;
 }
 
 export function MesEntitesView({
@@ -62,6 +74,15 @@ export function MesEntitesView({
   canTransfer = true,
   canArchive = true,
   canDelete = true,
+  showCorbeille,
+  setShowCorbeille,
+  corbeilleDocs,
+  onFetchCorbeille,
+  onRestoreDocument,
+  onPermanentDelete,
+  onEmptyCorbeille,
+  canSeeCorbeille,
+  canEmptyCorbeille,
 }: Props) {
   const { hasPermission } = useAuth();
   const canImport = hasPermission("creer_courrier_admin") || hasPermission("creer_courrier_juridique");
@@ -109,6 +130,99 @@ export function MesEntitesView({
 
   return (
     <div className="space-y-5">
+      {canSeeCorbeille && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="mes-dossiers-tab"
+            onClick={() => { setShowCorbeille(false); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition ${!showCorbeille ? "bg-blue-600 text-white" : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+          >
+            {cur.mesDocuments}
+          </button>
+          <button
+            type="button"
+            data-testid="corbeille-tab"
+            onClick={() => { setShowCorbeille(true); onFetchCorbeille(); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition ${showCorbeille ? "bg-red-600 text-white" : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+          >
+            {cur.corbeille} ({corbeilleDocs.length})
+          </button>
+        </div>
+      )}
+
+      {showCorbeille ? (
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center">
+            <h3 className="font-bold text-slate-900 text-sm">{cur.documentsSupprimes} ({corbeilleDocs.length})</h3>
+            {canEmptyCorbeille && corbeilleDocs.length > 0 && (
+              <button
+                type="button"
+                data-testid="empty-corbeille"
+                onClick={onEmptyCorbeille}
+                className="px-3 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-bold hover:bg-rose-100"
+              >
+                🗑 {cur.viderCorbeille}
+              </button>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-red-50 text-slate-700 border-b border-red-200">
+                <tr>
+                  <th className="p-3 text-start">{cur.tblRef}</th>
+                  <th className="p-3 text-start">{cur.tblTitre}</th>
+                  <th className="p-3 text-start">{cur.serviceActuel}</th>
+                  <th className="p-3 text-center">{cur.tblActions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {corbeilleDocs.length === 0 ? (
+                  <tr><td colSpan={4} className="p-6 text-center text-slate-400">{cur.aucunSupprime}</td></tr>
+                ) : (
+                  corbeilleDocs.map((doc) => (
+                    <tr key={doc.id} className="border-b border-slate-100 hover:bg-red-50/30">
+                      <td className="p-3 font-mono">{doc.reference}</td>
+                      <td className="p-3 font-bold">{doc.objet}</td>
+                      <td className="p-3">{getServiceLabel(doc.serviceActuel, langue)}</td>
+                      <td className="p-3 text-center">
+                        <div className="flex justify-center gap-1">
+                          {hasPermission("restaurer") && (
+                            <button
+                              type="button"
+                              onClick={() => onRestoreDocument(doc.id)}
+                              className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold"
+                            >
+                              {cur.restaurer}
+                            </button>
+                          )}
+                          {hasPermission("supprimer") && onPermanentDelete && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const accepted = await confirmAction(langue === "fr"
+                                  ? "Cette action est irréversible. Voulez-vous vraiment supprimer définitivement cet élément ?"
+                                  : "هذا الإجراء لا يمكن التراجع عنه. هل تريد الحذف نهائياً؟");
+                                if (accepted) {
+                                  onPermanentDelete(doc.id);
+                                }
+                              }}
+                              className="px-2 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 text-[10px] font-bold"
+                            >
+                              {langue === "fr" ? "Supprimer définitivement" : "حذف نهائياً"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
         <div className="flex flex-wrap gap-3 justify-between items-center">
           <button
@@ -294,6 +408,8 @@ export function MesEntitesView({
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

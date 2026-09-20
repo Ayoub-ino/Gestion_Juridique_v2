@@ -8,11 +8,11 @@ import { useEffect, useRef, useState } from "react";
 import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 import { api } from "@/lib/api/client";
-import { notify } from "@/lib/feedback";
 
 interface JuridiqueFormProps {
-  // Nouveaux champs
+  // Champs
   docLie: string;
   setDocLie: (v: string) => void;
   dossierPrincipal: string;
@@ -31,38 +31,13 @@ interface JuridiqueFormProps {
   setTypeDossier: (v: string) => void;
   numeroPremiereInstance: string;
   setNumeroPremiereInstance: (v: string) => void;
+  /** « Numéro de dossier (Cour d'Appel) » — stored as NumeroDossierJuridique. */
+  numeroDossierAppel: string;
+  setNumeroDossierAppel: (v: string) => void;
   juridiqueNotes: string;
   setJuridiqueNotes: (v: string) => void;
   juridiqueFichier: File | null;
   setJuridiqueFichier: (f: File | null) => void;
-
-  // Champs existants
-  circuitJuridique: string;
-  setCircuitJuridique: (v: string) => void;
-  etapeService: number;
-  setEtapeService: (v: number) => void;
-  etapeJalsat: string;
-  setEtapeJalsat: (v: string) => void;
-  etapeTaslim: string;
-  setEtapeTaslim: (v: string) => void;
-  autoriteRetrait: string;
-  setAutoriteRetrait: (v: string) => void;
-  typeException: string;
-  setTypeException: (v: string) => void;
-  numeroDossierAppel: string;
-  setNumeroDossierAppel: (v: string) => void;
-  typeProcedure: string;
-  setTypeProcedure: (v: string) => void;
-  numCourAppel: string;
-  setNumCourAppel: (v: string) => void;
-  conseillerRapporteur: string;
-  setConseillerRapporteur: (v: string) => void;
-  dateAudience: string;
-  setDateAudience: (v: string) => void;
-  statutSousService: string;
-  setStatutSousService: (v: string) => void;
-  commentaireSousService: string;
-  setCommentaireSousService: (v: string) => void;
 
   // Références communes
   reference: string;
@@ -73,15 +48,19 @@ interface JuridiqueFormProps {
   setObjet: (v: string) => void;
   /** Options of the dedicated "tribunaux" list (falls back to a built-in list). */
   tribunalOptions?: { value: string; label: string }[];
-  isJalsatService: boolean;
-  isTaslimService: boolean;
   langue: Langue;
   cur: TranslationKeys;
-  userRole?: string;
+
+  // Destination du dossier (remplace le circuit de traitement)
+  /** RBAC code of the service the folder is sent to. Empty = kept in place. */
+  serviceDestination: string;
+  setServiceDestination: (v: string) => void;
+  /** Named recipients inside that service. Empty = the whole service. */
+  recipientUserIds: number[];
+  setRecipientUserIds: (ids: number[]) => void;
 }
 
 export function JuridiqueForm({
-  // Nouveaux champs
   docLie,
   setDocLie,
   dossierPrincipal,
@@ -100,37 +79,12 @@ export function JuridiqueForm({
   setTypeDossier,
   numeroPremiereInstance,
   setNumeroPremiereInstance,
+  numeroDossierAppel,
+  setNumeroDossierAppel,
   juridiqueNotes,
   setJuridiqueNotes,
   juridiqueFichier,
   setJuridiqueFichier,
-  // Champs existants
-  circuitJuridique,
-  setCircuitJuridique,
-  etapeService,
-  setEtapeService,
-  etapeJalsat,
-  setEtapeJalsat,
-  etapeTaslim,
-  setEtapeTaslim,
-  autoriteRetrait,
-  setAutoriteRetrait,
-  typeException,
-  setTypeException,
-  numeroDossierAppel,
-  setNumeroDossierAppel,
-  typeProcedure,
-  setTypeProcedure,
-  numCourAppel,
-  setNumCourAppel,
-  conseillerRapporteur,
-  setConseillerRapporteur,
-  dateAudience,
-  setDateAudience,
-  statutSousService,
-  setStatutSousService,
-  commentaireSousService,
-  setCommentaireSousService,
   reference,
   setReference,
   tiers,
@@ -138,15 +92,20 @@ export function JuridiqueForm({
   objet,
   setObjet,
   tribunalOptions,
-  isJalsatService,
-  isTaslimService,
   langue,
   cur,
-  userRole
+  serviceDestination,
+  setServiceDestination,
+  recipientUserIds,
+  setRecipientUserIds
 }: JuridiqueFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuth();
   const { getServiceLabel } = useServiceLabels(token, langue);
+
+  // Destination pickers read the LIVE catalog, so a service created (or
+  // archived) from the admin panel shows up — or disappears — immediately.
+  const { groups, historicalOptions, isHistorical } = useServiceOptions(token, langue);
 
   // ── System-assigned values ──
   // N° de bureau = id of the creating user (a service can host several users).
@@ -163,6 +122,12 @@ export function JuridiqueForm({
   const [parentSearchTerm, setParentSearchTerm] = useState("");
   const [showParentDropdown, setShowParentDropdown] = useState(false);
 
+  // Users of the chosen destination service. The list is scoped to that one
+  // service so the sender can address a specific person, or nobody (in which
+  // case the folder goes to the service and every member can work on it).
+  const [serviceUsers, setServiceUsers] = useState<Array<{ id: number; nom: string }>>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
   useEffect(() => {
     if (!token || docLie !== "Oui") return;
     let cancelled = false;
@@ -173,6 +138,37 @@ export function JuridiqueForm({
       .catch(() => { /* dropdown simply stays empty */ });
     return () => { cancelled = true; };
   }, [token, docLie]);
+
+  useEffect(() => {
+    // Record-only destinations have no accounts to address.
+    if (!token || !serviceDestination || isHistorical(serviceDestination)) {
+      setServiceUsers([]);
+      setRecipientUserIds([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingUsers(true);
+    api
+      .get<Array<{ id: number; nom: string }>>(
+        `/api/Users/by-service/${encodeURIComponent(serviceDestination)}`,
+        token
+      )
+      .then((rows) => {
+        if (!cancelled) setServiceUsers(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setServiceUsers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUsers(false);
+      });
+
+    // Changing service invalidates the previously chosen recipients.
+    setRecipientUserIds([]);
+
+    return () => { cancelled = true; };
+  }, [token, serviceDestination, isHistorical, setRecipientUserIds]);
 
   // Options traduites
   // "Tribunal / Source" draws on its own "tribunaux" list rather than reusing
@@ -247,77 +243,22 @@ export function JuridiqueForm({
     }
   };
 
-  // Workflow dynamique (5 cercles) - filtré par rôle
-  const allWorkflowSteps = [
-    { id: 1, label: cur.maktabDabt },
-    { id: 2, label: cur.ouvertureDossier },
-    { id: 3, label: cur.kitabaKhasa },
-    { id: 4, label: cur.jalsatSection },
-    { id: 5, label: cur.taslimSection }
-  ];
-
-  const workflowStepsJuridique = allWorkflowSteps.filter((step) => {
-    if (!userRole) return true;
-    const r = userRole.toLowerCase();
-    if (r === "admin" || r === "greffier" || r === "directeur" || r === "consultant") return true;
-    switch (r) {
-      case "bureauordre": return step.id === 1;
-      case "ouverturedossier": return step.id === 2;
-      case "kitabakhasa": return step.id === 3;
-      case "jalsat": return step.id === 4;
-      case "taslim": return step.id === 5;
-      case "notification": return step.id === 5;
-      case "archive": return step.id === 5;
-      case "expertise": return step.id === 4;
-      case "procedures": return step.id === 4;
-      case "pourvois": return step.id === 4;
-      case "remisecopie": return step.id === 5;
-      case "recouvrement": return step.id === 1;
-      case "caisse": return step.id === 1;
-      case "finances": return step.id === 1;
-      case "stats": return step.id === 1;
-      case "informatique": return step.id === 1;
-      case "enregistrement": return step.id === 2;
-      default: return true;
-    }
-  });
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setJuridiqueFichier(e.target.files[0]);
     }
   };
 
-  // Vérifie si l'utilisateur peut accéder à une étape donnée
-  const canAccessStep = (stepId: number): boolean => {
-    if (!userRole) return true;
-    const r = userRole.toLowerCase();
-    if (r === "admin" || r === "greffier" || r === "directeur" || r === "consultant") return true;
-    switch (r) {
-      case "bureauordre": return stepId === 1;
-      case "ouverturedossier": return stepId === 2;
-      case "enregistrement": return stepId === 2;
-      case "kitabakhasa": return stepId === 3;
-      case "jalsat": return stepId === 4;
-      case "expertise": return stepId === 4;
-      case "procedures": return stepId === 4;
-      case "pourvois": return stepId === 4;
-      case "taslim": return stepId === 5;
-      case "notification": return stepId === 5;
-      case "archive": return stepId === 5;
-      case "remisecopie": return stepId === 5;
-      case "recouvrement": return stepId === 1;
-      case "caisse": return stepId === 1;
-      case "finances": return stepId === 1;
-      case "stats": return stepId === 1;
-      case "informatique": return stepId === 1;
-      default: return true;
-    }
-  };
+  const destinationIsHistorical = isHistorical(serviceDestination);
+  const chosenServiceLabel =
+    groups
+      .flatMap((g) => g.children)
+      .concat(historicalOptions)
+      .find((s) => s.value === serviceDestination)?.label || serviceDestination;
 
   return (
     <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
-      {/* ===== NOUVEAUX CHAMPS ===== */}
+      {/* ===== CHAMPS DU DOSSIER ===== */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
         <h3 className="font-bold text-sm text-slate-800">{cur.juridique}</h3>
 
@@ -551,6 +492,21 @@ export function JuridiqueForm({
             />
           </div>
 
+          <div>
+            <label htmlFor="jur-num-appel" className="block text-xs font-bold text-slate-700 mb-2">
+              {cur.numDossierAppel} <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="jur-num-appel"
+              type="text"
+              value={numeroDossierAppel}
+              onChange={(e) => setNumeroDossierAppel(e.target.value)}
+              placeholder={cur.recherche_exemple}
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              required
+            />
+          </div>
+
           {docLie === "Oui" ? (
             <div>
               <label htmlFor="jur-objet-linked" className="block text-xs font-bold text-slate-700 mb-2">
@@ -638,702 +594,139 @@ export function JuridiqueForm({
         </div>
       </div>
 
-      {/* ===== WORKFLOW DYNAMIQUE (5 CERCLES) ===== */}
-      <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
-        <h3 className="font-bold text-slate-800 text-sm mb-4 text-center">
-          {cur.fluxDossier}
-        </h3>
-        <div className="flex items-center justify-between relative before:absolute before:bg-slate-200 before:h-1 before:w-full before:top-1/2 before:-translate-y-1/2 before:z-0 mb-6 px-4">
-          {workflowStepsJuridique.map((step) => {
-            const isReached = etapeService >= step.id;
-            const isCurrent = etapeService === step.id;
-            return (
-              <div
-                key={step.id}
-                className={`relative z-10 flex flex-col items-center gap-2 ${
-                  isReached ? 'text-blue-600' : 'text-slate-400'
-                }`}
-              >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-colors ${
-                    isReached
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                      : 'bg-white border-slate-300'
-                  }`}
-                >
-                  {step.id}
-                </div>
-                <span className="text-[10px] font-bold bg-white px-2 rounded-full shadow-sm border border-slate-100 text-center leading-tight max-w-[80px]">
-                  {step.label}
-                </span>
-                {isCurrent && (
-                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full">
-                    {cur.serviceActuel}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="text-center text-xs text-slate-500 mt-2">
-          {`${cur.etapeActuelle} : ${workflowStepsJuridique.find(s => s.id === etapeService)?.label || cur.nonCommence}`}
-        </div>
-      </div>
-
-      {/* ===== CIRCUIT DE TRAITEMENT (inchangé) ===== */}
-      <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
-        {/* Circuit de traitement */}
+      {/* ===== DESTINATION DU DOSSIER ===== */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
         <div>
-          <span className="block text-xs font-bold text-slate-800 mb-2">{cur.circuitTraitement}</span>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {[
-              { value: "maktab_dabt", label: cur.maktabDabt },
-              { value: "kitaba_khasa", label: cur.kitabaKhasa }
-            ].map((option) => (
-              <label
-                key={option.value}
-                htmlFor={`jur-circuit-${option.value}`}
-                className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer ${
-                  circuitJuridique === option.value
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-700 border-slate-200"
-                }`}
-              >
-                <input
-                  id={`jur-circuit-${option.value}`}
-                  type="radio"
-                  name="circuitJuridique"
-                  checked={circuitJuridique === option.value}
-                  onChange={() => {
-                    setCircuitJuridique(option.value);
-                    setEtapeService(1);
-                    setEtapeJalsat("");
-                    setEtapeTaslim("");
-                    setAutoriteRetrait("");
-                    setTypeException("");
-                    setNumeroDossierAppel("");
-                    setTypeProcedure("ordinaire");
-                    setNumCourAppel("");
-                    setConseillerRapporteur("");
-                    setDateAudience("");
-                    setStatutSousService("");
-                    setCommentaireSousService("");
-                  }}
-                  required
-                />
-                {option.label}
-              </label>
-            ))}
-          </div>
+          <h3 className="font-bold text-sm text-slate-800">{cur.serviceDest}</h3>
+          <p className="text-[10px] text-slate-400 mt-1">
+            {langue === "fr"
+              ? "Le dossier reste dans votre service jusqu'à ce que le service destinataire accepte la réception."
+              : "يبقى الملف في مصلحتك إلى أن تقبل المصلحة المستقبِلة الاستلام."}
+          </p>
         </div>
 
-        {/* Circuit Maktab Dabt */}
-        {circuitJuridique === "maktab_dabt" && (
-          <div className="space-y-6 p-6 bg-white border border-slate-200 rounded-lg shadow-sm">
-            {/* Indicateur d'étapes (petit) */}
-            <div className="flex items-center justify-between relative before:absolute before:bg-slate-200 before:h-1 before:w-full before:top-1/2 before:-translate-y-1/2 before:z-0 mb-8 px-4">
-              {[
-                { id: 1, label: cur.maktabDabt },
-                { id: 2, label: cur.ouvertureDossier },
-                { id: 3, label: cur.kitabaKhasa },
-                { id: 4, label: cur.jalsatSection },
-                { id: 5, label: cur.taslimSection }
-              ].map(step => (
-                <div
-                  key={step.id}
-                  className={`relative z-10 flex flex-col items-center gap-2 ${
-                    etapeService >= step.id ? 'text-blue-600' : 'text-slate-400'
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 transition-colors ${
-                      etapeService >= step.id
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                        : 'bg-white border-slate-300'
-                    }`}
-                  >
-                    {step.id}
-                  </div>
-                  <span className="text-[10px] font-bold bg-white px-2 rounded-full shadow-sm border border-slate-100">
-                    {step.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Résumé du dossier */}
-            {circuitJuridique && etapeService > 1 && (
-              <div className="bg-slate-100 p-4 rounded-lg border border-slate-300 text-xs">
-                <h4 className="font-bold text-slate-700 mb-2">{cur.resumeDossier}</h4>
-                <div className="grid grid-cols-2 gap-1">
-                  <div><span className="font-semibold">{cur.tblRef} :</span> {reference}</div>
-                  <div><span className="font-semibold">{cur.provenance} :</span> {tiers}</div>
-                  <div className="col-span-2"><span className="font-semibold">{cur.tblTitre} :</span> {objet}</div>
-                  <div><span className="font-semibold">{cur.etapeActuelle} :</span> {
-                    etapeService === 1 && cur.maktabDabt}
-                    {etapeService === 2 && cur.ouvertureDossier}
-                    {etapeService === 3 && cur.kitabaKhasa}
-                    {etapeService === 4 && cur.jalsatSection}
-                    {etapeService === 5 && cur.taslimSection}
-                  </div>
-                  {numeroDossierAppel && <div><span className="font-semibold">{cur.numDossierAppel} :</span> {numeroDossierAppel}</div>}
-                  {numCourAppel && <div><span className="font-semibold">{cur.numCourAppel} :</span> {numCourAppel}</div>}
-                </div>
-              </div>
-            )}
-
-            {/* Contenu des étapes */}
-            <div className="p-5 border border-blue-100 bg-blue-50/40 rounded-xl">
-              {/* Étape 1 : Bureau d'Ordre */}
-              {etapeService === 1 && canAccessStep(1) && (
-                <div className="space-y-5">
-                  <h3 className="font-bold text-slate-800 text-sm text-center">{cur.maktabDabt}</h3>
-                  <div>
-                    <label htmlFor="jur-num-dossier-appel" className="block text-xs font-bold text-slate-700 mb-1">{cur.numDossierAppel}</label>
-                    <input
-                      id="jur-num-dossier-appel"
-                      type="text"
-                      value={numeroDossierAppel}
-                      onChange={(e) => setNumeroDossierAppel(e.target.value)}
-                      placeholder={cur.recherche_exemple}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-xs font-bold text-slate-700 mb-1">{cur.typeProcedure}</span>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {[
-                        { value: "ordinaire", label: cur.ordinaire },
-                        { value: "urgent", label: cur.urgent },
-                        { value: "tres_urgent", label: cur.tresUrgent }
-                      ].map((option) => (
-                        <label
-                          key={option.value}
-                          htmlFor={`jur-procedure-${option.value}`}
-                          className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
-                            typeProcedure === option.value
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-slate-700 border-slate-200"
-                          }`}
-                        >
-                          <input
-                            id={`jur-procedure-${option.value}`}
-                            type="radio"
-                            name="typeProcedure"
-                            checked={typeProcedure === option.value}
-                            onChange={() => setTypeProcedure(option.value)}
-                          />
-                          {option.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!numeroDossierAppel) {
-                        notify(langue === "fr" ? "Veuillez attribuer un numéro de dossier" : "يرجى تحديد رقم الملف");
-                        return;
-                      }
-                      setEtapeService(2);
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-xs transition"
-                  >
-                    {cur.validerEtTransmettre}
-                  </button>
-                </div>
-              )}
-
-              {/* Étape 2 : Ouverture des dossiers */}
-              {etapeService === 2 && canAccessStep(2) && (
-                <div className="space-y-5">
-                  <h3 className="font-bold text-slate-800 text-sm text-center">{cur.ouvertureDossier}</h3>
-                  <div>
-                    <label htmlFor="jur-num-cour-appel" className="block text-xs font-bold text-slate-700 mb-1">{cur.numCourAppel}</label>
-                    <input
-                      id="jur-num-cour-appel"
-                      type="text"
-                      value={numCourAppel}
-                      onChange={(e) => setNumCourAppel(e.target.value)}
-                      placeholder={cur.recherche_exemple}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="jur-conseiller" className="block text-xs font-bold text-slate-700 mb-1">{cur.conseillerRapporteur}</label>
-                    <input
-                      id="jur-conseiller"
-                      type="text"
-                      value={conseillerRapporteur}
-                      onChange={(e) => setConseillerRapporteur(e.target.value)}
-                      placeholder={cur.nomConseiller}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="jur-date-audience" className="block text-xs font-bold text-slate-700 mb-1">{cur.dateAudience}</label>
-                    <input
-                      id="jur-date-audience"
-                      type="date"
-                      value={dateAudience}
-                      onChange={(e) => setDateAudience(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEtapeService(1)}
-                      className="w-1/2 bg-white border border-slate-300 text-slate-700 font-bold p-3 rounded-lg text-xs hover:bg-slate-50 transition"
-                    >
-                      {cur.btnRetour}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!numCourAppel) {
-                          notify(langue === "fr" ? "Veuillez attribuer le numéro de Cour d'Appel" : "يرجى تحديد رقم محكمة الاستئناف");
-                          return;
-                        }
-                        setEtapeService(3);
-                      }}
-                      className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-xs transition"
-                    >
-                      {cur.btnSuivant}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Étape 3 : Secrétariat particulier */}
-              {etapeService === 3 && canAccessStep(3) && (
-                <div className="space-y-5">
-                  <h3 className="font-bold text-slate-800 text-sm text-center">{cur.kitabaKhasa}</h3>
-                  <div>
-                    <span className="block text-xs font-bold text-slate-700 mb-1">{cur.titreKitabaKhasa}</span>
-                    <div className="grid grid-cols-1 gap-2">
-                      {[
-                        { value: "islah_khata2", label: cur.islahKhata2 },
-                        { value: "mous3ada", label: cur.mous3ada },
-                        { value: "ikhtissas_ra2is", label: cur.ikhtissasRa2is }
-                      ].map((option) => (
-                        <label
-                          key={option.value}
-                          htmlFor={`jur-exception-${option.value}`}
-                          className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
-                            typeException === option.value
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-slate-700 border-slate-200"
-                          }`}
-                        >
-                          <input
-                            id={`jur-exception-${option.value}`}
-                            type="radio"
-                            name="typeExceptionStep"
-                            checked={typeException === option.value}
-                            onChange={() => setTypeException(option.value)}
-                          />
-                          {option.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEtapeService(2)}
-                      className="w-1/2 bg-white border border-slate-300 text-slate-700 font-bold p-3 rounded-lg text-xs hover:bg-slate-50 transition"
-                    >
-                      {cur.btnRetour}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!typeException) {
-                          notify(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
-                          return;
-                        }
-                        setEtapeService(4);
-                      }}
-                      className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-xs transition"
-                    >
-                      {cur.btnSuivant}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Étape 4 : Jalsat */}
-              {etapeService === 4 && canAccessStep(4) && (
-                <div className="space-y-6 text-start">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-slate-800 text-sm">{cur.jalsatSection}</h3>
-                    <button
-                      type="button"
-                      onClick={() => setEtapeService(3)}
-                      className="text-[10px] text-blue-600 underline font-bold"
-                    >
-                      {cur.btnRetour}
-                    </button>
-                  </div>
-
-                  {etapeJalsat !== "" && (
-                    <div className="space-y-3 p-3 bg-blue-50/60 border border-blue-200 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-blue-800">
-                          {etapeJalsat === "ijra2_baht" && cur.ijra2Baht}
-                          {etapeJalsat === "moufawad" && cur.moufawad}
-                          {etapeJalsat === "khibra" && cur.khibra}
-                          {etapeJalsat === "moqarir" && cur.moqarir}
-                        </span>
-                        <span
-                          className={`text-[10px] px-2 py-1 rounded font-bold ${
-                            statutSousService === "en_attente"
-                              ? "bg-amber-100 text-amber-700"
-                              : statutSousService === "en_cours"
-                              ? "bg-blue-100 text-blue-700"
-                              : statutSousService === "effectue"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-gray-100 text-gray-500"
-                          }`}
-                        >
-                          {statutSousService === "en_attente" && cur.enAttente}
-                          {statutSousService === "en_cours" && cur.enCours}
-                          {statutSousService === "effectue" && cur.effectue}
-                          {!statutSousService && cur.nonCommence}
-                        </span>
-                      </div>
-
-                      {isJalsatService && (
-                        <>
-                          <div className="flex gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("en_attente")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition"
-                            >
-                              {cur.enAttente}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("en_cours")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                            >
-                              {cur.enCours}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("effectue")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition"
-                            >
-                              {cur.effectue}
-                            </button>
-                          </div>
-                          <textarea
-                            rows={2}
-                            value={commentaireSousService}
-                            onChange={(e) => setCommentaireSousService(e.target.value)}
-                            placeholder={cur.commentaire}
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setEtapeJalsat("")}
-                            className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-bold p-2 rounded-lg text-xs transition"
-                          >
-                            {cur.retourJalsat}
-                          </button>
-                        </>
-                      )}
-
-                      {!isJalsatService && (
-                        <div className="text-xs text-red-500 text-center">{cur.serviceNonAutorise}</div>
-                      )}
-                    </div>
-                  )}
-
-                  {etapeJalsat === "" && (
-                    <div className="grid grid-cols-2 gap-3">
-                      {isJalsatService ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeJalsat("ijra2_baht")}
-                            className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 transition"
-                          >
-                            {cur.ijra2Baht}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeJalsat("moufawad")}
-                            className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 transition"
-                          >
-                            {cur.moufawad}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeJalsat("khibra")}
-                            className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 transition"
-                          >
-                            {cur.khibra}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeJalsat("moqarir")}
-                            className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 transition"
-                          >
-                            {cur.moqarir}
-                          </button>
-                        </>
-                      ) : (
-                        <div className="col-span-2 p-4 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500 text-center">
-                          {cur.serviceNonAutorise}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {etapeJalsat !== "" && statutSousService === "effectue" && isJalsatService && (
-                    <div className="mt-4 pt-4 border-t border-dashed border-slate-300">
-                      <p className="text-xs text-slate-500 mb-2 text-center">
-                        {langue === "fr"
-                          ? "Après achèvement des procédures, transmettre à la Délivrance des copies"
-                          : "بعد الانتهاء من الإجراءات، إحالة إلى مصلحة تسليم النسخ"}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setEtapeService(5)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3 rounded-lg text-xs transition"
-                      >
-                        {cur.versTaslim}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Étape 5 : Taslim */}
-              {etapeService === 5 && canAccessStep(5) && (
-                <div className="space-y-6 text-start">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-slate-800 text-sm">{cur.taslimSection}</h3>
-                    <button
-                      type="button"
-                      onClick={() => setEtapeService(4)}
-                      className="text-[10px] text-blue-600 underline font-bold"
-                    >
-                      {cur.btnRetour}
-                    </button>
-                  </div>
-
-                  {etapeTaslim !== "" && (
-                    <div className="space-y-3 p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-emerald-800">
-                          {etapeTaslim === "tabligh" && cur.tabligh}
-                          {etapeTaslim === "tasfiya" && cur.tasfiya}
-                          {etapeTaslim === "archive" && cur.archiveDef}
-                        </span>
-                        <span
-                          className={`text-[10px] px-2 py-1 rounded font-bold ${
-                            statutSousService === "en_attente"
-                              ? "bg-amber-100 text-amber-700"
-                              : statutSousService === "en_cours"
-                              ? "bg-blue-100 text-blue-700"
-                              : statutSousService === "effectue"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-gray-100 text-gray-500"
-                          }`}
-                        >
-                          {statutSousService === "en_attente" && cur.enAttente}
-                          {statutSousService === "en_cours" && cur.enCours}
-                          {statutSousService === "effectue" && cur.effectue}
-                          {!statutSousService && cur.nonCommence}
-                        </span>
-                      </div>
-
-                      {isTaslimService && etapeTaslim !== "archive" && (
-                        <>
-                          <div className="flex gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("en_attente")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition"
-                            >
-                              {cur.enAttente}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("en_cours")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                            >
-                              {cur.enCours}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStatutSousService("effectue")}
-                              className="px-3 py-1 text-[10px] font-bold rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition"
-                            >
-                              {cur.effectue}
-                            </button>
-                          </div>
-                          <textarea
-                            rows={2}
-                            value={commentaireSousService}
-                            onChange={(e) => setCommentaireSousService(e.target.value)}
-                            placeholder={cur.commentaire}
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setEtapeTaslim("")}
-                            className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-bold p-2 rounded-lg text-xs transition"
-                          >
-                            {cur.retourTaslim}
-                          </button>
-                        </>
-                      )}
-
-                      {etapeTaslim === "archive" && (
-                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-                          <p className="text-xs font-bold text-slate-700 text-center">{cur.retraitSection}</p>
-                          <div className="grid grid-cols-1 gap-2">
-                            {[
-                              { value: "ra2is_kitaba", label: cur.ra2isKitaba },
-                              { value: "mustachar_moqarir", label: cur.mustacharMoqarir },
-                              { value: "ra2is_awal", label: cur.ra2isAwal }
-                            ].map((option) => (
-                              <label
-                                key={option.value}
-                                htmlFor={`jur-autorite-${option.value}`}
-                                className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-bold cursor-pointer ${
-                                  autoriteRetrait === option.value
-                                    ? "bg-blue-600 text-white border-blue-600"
-                                    : "bg-white text-slate-700 border-slate-200"
-                                }`}
-                              >
-                                <input
-                                  id={`jur-autorite-${option.value}`}
-                                  type="radio"
-                                  name="autoriteRetrait"
-                                  checked={autoriteRetrait === option.value}
-                                  onChange={() => setAutoriteRetrait(option.value)}
-                                />
-                                {option.label}
-                              </label>
-                            ))}
-                          </div>
-                          {autoriteRetrait !== "" && (
-                            <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 text-center">
-                              ✅ {cur.retraitEffectue}{" "}
-                              {autoriteRetrait === "ra2is_kitaba" && cur.ra2isKitaba}
-                              {autoriteRetrait === "mustachar_moqarir" && cur.mustacharMoqarir}
-                              {autoriteRetrait === "ra2is_awal" && cur.ra2isAwal}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {!isTaslimService && (
-                        <div className="text-xs text-red-500 text-center">{cur.serviceNonAutorise}</div>
-                      )}
-                    </div>
-                  )}
-
-                  {etapeTaslim === "" && (
-                    <div className="grid grid-cols-3 gap-3">
-                      {isTaslimService ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeTaslim("tabligh")}
-                            className="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 transition"
-                          >
-                            {cur.tabligh}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeTaslim("tasfiya")}
-                            className="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 transition"
-                          >
-                            {cur.tasfiya}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEtapeTaslim("archive")}
-                            className="p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs font-bold text-red-700 transition"
-                          >
-                            {cur.archiveDef}
-                          </button>
-                        </>
-                      ) : (
-                        <div className="col-span-3 p-4 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500 text-center">
-                          {cur.serviceNonAutorise}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Circuit Kitaba Khasa (direct) */}
-        {circuitJuridique === "kitaba_khasa" && (
-          <div className="space-y-4 p-5 bg-amber-50/60 border border-amber-200 rounded-lg">
-            <h3 className="font-bold text-slate-800 text-sm text-center mb-4">{cur.kitabaKhasa}</h3>
-            <div className="space-y-2">
-              <span className="block text-xs font-bold text-amber-900">{cur.titreKitabaKhasa}</span>
-              <div className="grid grid-cols-1 gap-2">
-                {[
-                  { value: "islah_khata2", label: cur.islahKhata2 },
-                  { value: "mous3ada", label: cur.mous3ada },
-                  { value: "ikhtissas_ra2is", label: cur.ikhtissasRa2is }
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    htmlFor={`jur-kitaba-${option.value}`}
-                    className={`flex items-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer ${
-                      typeException === option.value
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-amber-900 border-amber-200"
-                    }`}
-                  >
-                    <input
-                      id={`jur-kitaba-${option.value}`}
-                      type="radio"
-                      name="typeExceptionDirect"
-                      checked={typeException === option.value}
-                      onChange={() => setTypeException(option.value)}
-                      required
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            {typeException !== "" && (
-              <div className="p-3 bg-white border border-amber-300 rounded-lg text-[11px] text-amber-900 font-bold text-center shadow-sm">
-                {langue === "fr"
-                  ? "Transmission immédiate vers le Secrétariat particulier"
-                  : "إجراء إحالة فورية ومباشرة نحو مصلحة الكتابة الخاصة"}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                if (!typeException) {
-                  notify(langue === "fr" ? "Veuillez choisir le type d'exception" : "يرجى اختيار نوع الإجراء");
-                  return;
-                }
-                notify(langue === "fr" ? "Dossier enregistré en Kitaba Khasa" : "تم تسجيل الملف في الكتابة الخاصة");
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-xs transition"
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Choix du service destinataire */}
+          <div>
+            <label htmlFor="jur-service-destination" className="block text-xs font-bold text-slate-700 mb-2">
+              {cur.serviceDest} <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="jur-service-destination"
+              data-testid="jur-service-destination"
+              value={serviceDestination}
+              onChange={(e) => setServiceDestination(e.target.value)}
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              required
             >
-              {cur.btnEnregistrer}
-            </button>
+              <option value="">{cur.choisirService}</option>
+              {groups.map((group) => (
+                <optgroup key={group.key} label={group.label}>
+                  {group.children.map((svc) => (
+                    <option key={svc.value} value={svc.value}>{svc.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+              {historicalOptions.length > 0 && (
+                <optgroup label={cur.servicesHistoriques}>
+                  {historicalOptions.map((svc) => (
+                    <option key={svc.value} value={svc.value}>{svc.label}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {langue === "fr"
+                ? "Liste lue en direct : les services créés ou archivés apparaissent ici sans redémarrage."
+                : "تُقرأ القائمة مباشرة: تظهر المصالح المحدثة أو المؤرشفة هنا دون إعادة التشغيل."}
+            </p>
           </div>
+
+          {/* Utilisateurs du service choisi — apparaît une fois le service choisi */}
+          {serviceDestination && (
+            <div data-testid="jur-recipients-group">
+              {destinationIsHistorical ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
+                  {langue === "fr"
+                    ? "Service historique : le dossier ne bouge pas, l'étape est seulement enregistrée dans son parcours."
+                    : "مصلحة تاريخية: لا يتحرك الملف، وتُسجَّل المرحلة في مساره فقط."}
+                </div>
+              ) : (
+                <>
+                  <span className="block text-xs font-bold text-slate-700 mb-2">
+                    {langue === "fr" ? `Utilisateurs — ${chosenServiceLabel}` : `المستخدمون — ${chosenServiceLabel}`}
+                  </span>
+
+                  {loadingUsers ? (
+                    <p className="text-xs text-slate-400 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      {langue === "fr" ? "Chargement des utilisateurs..." : "جاري تحميل المستخدمين..."}
+                    </p>
+                  ) : serviceUsers.length === 0 ? (
+                    <p className="text-xs text-slate-400 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      {langue === "fr" ? "Aucun utilisateur actif dans ce service" : "لا يوجد مستخدمون نشطون في هذه المصلحة"}
+                    </p>
+                  ) : (
+                    <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-lg bg-white">
+                      <label
+                        htmlFor="jur-recipient-service-wide"
+                        className="flex items-center gap-2 p-2.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          id="jur-recipient-service-wide"
+                          type="radio"
+                          name="jur-recipient-mode"
+                          checked={recipientUserIds.length === 0}
+                          onChange={() => setRecipientUserIds([])}
+                          className="w-3.5 h-3.5 text-blue-600"
+                        />
+                        <span className="text-[11px] font-bold text-slate-600">
+                          {langue === "fr" ? "Tout le service" : "جميع المصلحة"}
+                        </span>
+                      </label>
+                      {serviceUsers.map((u) => (
+                        <label
+                          key={u.id}
+                          htmlFor={`jur-recipient-${u.id}`}
+                          className={`flex items-center gap-2 p-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer transition ${
+                            recipientUserIds.includes(u.id) ? "bg-blue-50" : ""
+                          }`}
+                        >
+                          <input
+                            id={`jur-recipient-${u.id}`}
+                            data-testid="jur-recipient-user"
+                            type="radio"
+                            name="jur-recipient-mode"
+                            checked={recipientUserIds.includes(u.id)}
+                            onChange={() => setRecipientUserIds([u.id])}
+                            className="w-3.5 h-3.5 text-blue-600"
+                          />
+                          <span className="text-xs font-bold text-slate-700">{u.nom}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {recipientUserIds.length === 0
+                      ? (langue === "fr"
+                          ? "Aucun utilisateur choisi : le dossier est envoyé au service entier."
+                          : "لم يتم اختيار أي مستخدم: يُرسل الملف إلى المصلحة بأكملها.")
+                      : (langue === "fr"
+                          ? "Le dossier est envoyé uniquement à l'utilisateur choisi."
+                          : "يُرسل الملف إلى المستخدم المحدد فقط.")}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {!serviceDestination && (
+          <p className="text-xs text-slate-400 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            {langue === "fr"
+              ? "Choisissez le service destinataire pour envoyer le dossier."
+              : "اختر المصلحة المستقبِلة لإرسال الملف."}
+          </p>
         )}
       </div>
     </div>

@@ -7,6 +7,7 @@ using WebApplication1.Data;
 using WebApplication1.Helpers;
 using WebApplication1.Models;
 using WebApplication1.Security;
+using WebApplication1.Services;
 
 namespace WebApplication1.Controllers
 {
@@ -16,10 +17,12 @@ namespace WebApplication1.Controllers
     public class DocumentsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly DocumentAccessService _accessService;
 
-        public DocumentsController(AppDbContext context)
+        public DocumentsController(AppDbContext context, DocumentAccessService accessService)
         {
             _context = context;
+            _accessService = accessService;
         }
 
         /// <summary>
@@ -95,31 +98,42 @@ namespace WebApplication1.Controllers
             return Ok(new { message = $"{documents.Count} document(s) supprimé(s)" });
         }
 
-        // LISTE DES CORBEILLE (docs supprimés)
-        [HttpGet("corbeille")]
-        [RequirePermission("voir_corbeille")]
-        public async Task<IActionResult> GetCorbeille()
+        /// <summary>
+        /// Trash query, scoped to the caller. The trash belongs to the service
+        /// that deleted the document: a user only sees what their own service
+        /// put there. Admin-like roles keep the global view.
+        /// Shared by the corbeille listing and "empty trash" so the visible
+        /// rows and the purged rows can never drift apart.
+        /// </summary>
+        private IQueryable<Document> ScopedCorbeilleQuery(
+            bool isAdminLike, string? serviceCode, ServiceTribunal? serviceEnum)
         {
-            var scope = await ResolveScopeAsync();
-
             var query = _context.Documents.Where(d => d.EstSupprime == true);
 
-            // The trash belongs to the service that deleted the document: a user
-            // only sees what their own service put in the archive. Admin-like
-            // roles keep the global view.
-            if (!scope.IsAdminLike && !string.IsNullOrEmpty(scope.ServiceCode))
+            if (!isAdminLike && !string.IsNullOrEmpty(serviceCode))
             {
-                var code = scope.ServiceCode;
-                if (scope.ServiceEnum is { } serviceEnum)
+                var code = serviceCode;
+                if (serviceEnum is { } se)
                 {
                     query = query.Where(d => d.ServiceActuelCode == code
-                        || (d.ServiceActuelCode == null && d.ServiceActuel == serviceEnum));
+                        || (d.ServiceActuelCode == null && d.ServiceActuel == se));
                 }
                 else
                 {
                     query = query.Where(d => d.ServiceActuelCode == code);
                 }
             }
+
+            return query;
+        }
+
+        // LISTE DES CORBEILLE (docs supprimés)
+        [HttpGet("corbeille")]
+        [RequirePermission("voir_corbeille")]
+        public async Task<IActionResult> GetCorbeille()
+        {
+            var scope = await ResolveScopeAsync();
+            var query = ScopedCorbeilleQuery(scope.IsAdminLike, scope.ServiceCode, scope.ServiceEnum);
 
             var docs = await query
                 .OrderByDescending(d => d.DateCreation)
@@ -134,6 +148,51 @@ namespace WebApplication1.Controllers
                 })
                 .ToListAsync();
             return Ok(docs);
+        }
+
+        /// <summary>
+        /// Hard-deletes the given documents together with everything attached to
+        /// them: transaction history, ACL rows and the physical file on disk.
+        /// Returns the number of purged documents.
+        /// </summary>
+        private async Task<int> PurgeDocumentsAsync(List<Document> documents)
+        {
+            foreach (var doc in documents)
+            {
+                var transactions = await _context.Transactions.Where(t => t.DocumentId == doc.Id).ToListAsync();
+                _context.Transactions.RemoveRange(transactions);
+
+                var accesses = await _context.DocumentAccesses.Where(da => da.DocumentId == doc.Id).ToListAsync();
+                _context.DocumentAccesses.RemoveRange(accesses);
+
+                if (!string.IsNullOrEmpty(doc.FilePath))
+                {
+                    var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", doc.FilePath.TrimStart('/'));
+                    if (System.IO.File.Exists(fullPath))
+                    {
+                        System.IO.File.Delete(fullPath);
+                    }
+                }
+
+                _context.Documents.Remove(doc);
+            }
+
+            await _context.SaveChangesAsync();
+            return documents.Count;
+        }
+
+        // EMPTY TRASH - Vider la corbeille (suppression définitive de tout ce
+        // qu'elle contient, limité au périmètre de l'appelant)
+        [HttpDelete("corbeille")]
+        [RequirePermission("supprimer")]
+        public async Task<IActionResult> EmptyCorbeille()
+        {
+            var scope = await ResolveScopeAsync();
+            var documents = await ScopedCorbeilleQuery(scope.IsAdminLike, scope.ServiceCode, scope.ServiceEnum)
+                .ToListAsync();
+
+            var count = await PurgeDocumentsAsync(documents);
+            return Ok(new { message = $"{count} document(s) supprimé(s) définitivement", count });
         }
 
         // GET: api/Documents (sans supprimés)
@@ -154,7 +213,16 @@ namespace WebApplication1.Controllers
             if (document == null)
                 return NotFound();
 
+            // ── CUSTODY CHECK: only the current service holder can archive ──
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && int.TryParse(userIdClaim, out var userId))
+            {
+                if (!_accessService.IsUserCustodian(document, userId))
+                    return StatusCode(403, new { error = "Vous n'êtes pas le détenteur actuel de ce document." });
+            }
+
             document.ServiceActuel = ServiceTribunal.Archive;
+            document.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive);
             document.StatutActuel = StatutDossier.Archive;
             await _context.SaveChangesAsync();
             return Ok(new { message = "Document archivé avec succès" });
@@ -172,6 +240,7 @@ namespace WebApplication1.Controllers
             foreach (var doc in documents)
             {
                 doc.ServiceActuel = ServiceTribunal.Archive;
+                doc.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive);
                 doc.StatutActuel = StatutDossier.Archive;
             }
 
@@ -219,27 +288,7 @@ namespace WebApplication1.Controllers
             if (!document.EstSupprime)
                 return BadRequest(new { error = "Ce document n'est pas archivé. Supprimez-le d'abord." });
 
-            // Delete linked transactions first
-            var transactions = await _context.Transactions.Where(t => t.DocumentId == id).ToListAsync();
-            _context.Transactions.RemoveRange(transactions);
-
-            // Delete linked document accesses
-            var accesses = await _context.DocumentAccesses.Where(da => da.DocumentId == id).ToListAsync();
-            _context.DocumentAccesses.RemoveRange(accesses);
-
-            // Delete physical file if exists
-            if (!string.IsNullOrEmpty(document.FilePath))
-            {
-                var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", document.FilePath.TrimStart('/'));
-                if (System.IO.File.Exists(fullPath))
-                {
-                    System.IO.File.Delete(fullPath);
-                }
-            }
-
-            // Hard delete the document
-            _context.Documents.Remove(document);
-            await _context.SaveChangesAsync();
+            await PurgeDocumentsAsync(new List<Document> { document });
 
             return Ok(new { message = "Document supprimé définitivement" });
         }
@@ -256,31 +305,8 @@ namespace WebApplication1.Controllers
                 .Where(d => ids.Contains(d.Id) && d.EstSupprime)
                 .ToListAsync();
 
-            foreach (var doc in documents)
-            {
-                // Delete linked transactions
-                var transactions = await _context.Transactions.Where(t => t.DocumentId == doc.Id).ToListAsync();
-                _context.Transactions.RemoveRange(transactions);
-
-                // Delete linked document accesses
-                var accesses = await _context.DocumentAccesses.Where(da => da.DocumentId == doc.Id).ToListAsync();
-                _context.DocumentAccesses.RemoveRange(accesses);
-
-                // Delete physical file if exists
-                if (!string.IsNullOrEmpty(doc.FilePath))
-                {
-                    var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", doc.FilePath.TrimStart('/'));
-                    if (System.IO.File.Exists(fullPath))
-                    {
-                        System.IO.File.Delete(fullPath);
-                    }
-                }
-
-                _context.Documents.Remove(doc);
-            }
-
-            await _context.SaveChangesAsync();
-            return Ok(new { message = $"{documents.Count} document(s) supprimé(s) définitivement" });
+            var count = await PurgeDocumentsAsync(documents);
+            return Ok(new { message = $"{count} document(s) supprimé(s) définitivement" });
         }
     }
 

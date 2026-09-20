@@ -34,12 +34,14 @@ WHERE NOT EXISTS (SELECT 1 FROM Permissions p WHERE p.[Key] = v.[Key]);
 -- ----------------------------------------------------------------------------
 
 -- bureauordre : + creer_courrier_admin, supprimer, ajouter_notes,
---                voir_corbeille, restaurer (so a deleted folder lands in
---                the deleter's own archive before any permanent delete)
+--                archiver, voir_corbeille, restaurer (so a deleted folder
+--                lands in the deleter's own archive before any permanent
+--                delete, and any custodian can move a folder to the archive
+--                state)
 INSERT INTO ServicePermissions (ServiceId, PermissionKey, Enabled)
 SELECT s.Id, v.[Key], 1
 FROM RbacServices s
-CROSS APPLY (VALUES ('creer_courrier_admin'), ('supprimer'), ('ajouter_notes'), ('voir_corbeille'), ('restaurer')) v([Key])
+CROSS APPLY (VALUES ('creer_courrier_admin'), ('supprimer'), ('ajouter_notes'), ('archiver'), ('voir_corbeille'), ('restaurer')) v([Key])
 WHERE s.Code = 'bureauordre'
   AND NOT EXISTS (SELECT 1 FROM ServicePermissions sp WHERE sp.ServiceId = s.Id AND sp.PermissionKey = v.[Key]);
 
@@ -107,7 +109,7 @@ UPDATE sp SET sp.Enabled = 1
 FROM ServicePermissions sp
 INNER JOIN RbacServices s ON s.Id = sp.ServiceId
 WHERE (
-       (s.Code = 'bureauordre'            AND sp.PermissionKey IN ('creer_courrier_admin','supprimer','ajouter_notes','voir_corbeille','restaurer'))
+       (s.Code = 'bureauordre'            AND sp.PermissionKey IN ('creer_courrier_admin','supprimer','ajouter_notes','archiver','voir_corbeille','restaurer'))
     OR (s.Code = 'fathmilafat'            AND sp.PermissionKey IN ('creer_courrier_juridique','transferer_juridique','ajouter_notes'))
     OR (s.Code = 'seances&procedures'     AND sp.PermissionKey IN ('transferer_juridique','ajouter_notes'))
     OR (s.Code = 'khibra'                 AND sp.PermissionKey = 'transferer_juridique')

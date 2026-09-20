@@ -689,7 +689,6 @@ describe("9. Permission Toggle Lifecycle", () => {
       cy.contains(/Utilisateurs|المستخدمون/).should("not.exist");
       cy.contains(/Permissions\.\.\.|الصلاحيات/).should("not.exist");
       cy.contains(/Équipements|المعدات/).should("not.exist");
-      cy.contains(/Listes dynamiques|اللوائح الديناميكية/).should("not.exist");
       cy.contains(/Services\.\.\.|المصالح/).should("not.exist");
     });
   });
@@ -709,7 +708,6 @@ describe("9. Permission Toggle Lifecycle", () => {
       cy.contains(/Utilisateurs|المستخدمون/).should("exist");
       cy.contains(/Permissions\.\.\.|الصلاحيات/).should("exist");
       cy.contains(/Équipements|المعدات/).should("exist");
-      cy.contains(/Listes dynamiques|اللوائح الديناميكية/).should("exist");
       cy.contains(/Services\.\.\.|المصالح/).should("exist");
     });
   });

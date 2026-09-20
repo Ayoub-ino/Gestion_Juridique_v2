@@ -56,7 +56,6 @@ describe("Admin role boundaries", () => {
       cy.contains(/Permissions|الصلاحيات/).should("exist");
       cy.contains(/Équipements|المعدات/).should("exist");
       cy.contains(/Services Historiques|المصالح التاريخية/).should("exist");
-      cy.contains(/Listes dynamiques|اللوائح الديناميكية/).should("exist");
 
       // …but the personal transfer screens are not offered to an admin
       cy.contains(/Registre des transactions|سجل المعاملات/).should("not.exist");

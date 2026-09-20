@@ -8,7 +8,6 @@ export type VueActive =
   | "mes-dossiers-en-cours"
   | "transactions"
   | "archives"
-  | "admin-listes"
   | "recherche-dossiers"
   | "entrant-admin"
   | "entrant-juridique"

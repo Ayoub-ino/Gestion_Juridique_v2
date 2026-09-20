@@ -195,7 +195,8 @@ namespace WebApplication1.Services
                         // Creer, Modifier, Transférer + courriers admin + suppression + notes
                         // "voir_corbeille" + "restaurer" + "archives_view" let whoever deletes a
                         // folder find it again in their own archive before any permanent delete.
-                        ["bureauordre"] = new() { "creer_modifier", "creer_courrier_admin", "supprimer", "voir_corbeille", "restaurer", "archives_view", "transferer", "consulter", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
+                        // "archiver" lets any custodian move a folder to the archive state.
+                        ["bureauordre"] = new() { "creer_modifier", "creer_courrier_admin", "supprimer", "archiver", "voir_corbeille", "restaurer", "archives_view", "transferer", "consulter", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
                         // Creer, Modifier, Transférer + dossiers juridiques + mouvements + notes
                         ["fathmilafat"] = new() { "creer_modifier", "creer_courrier_juridique", "transferer", "transferer_juridique", "consulter", "ouvrir_dossier", "accepter", "refuser", "annuler_transfert", "dashboard", "mes_entites", "transactions", "recherche_avancee", "export_excel", "export_word", "voir_historique", "voir_workspace", "telecharger_fichiers", "ajouter_notes", "profil" },
                         // Modifier, Transférer (no creation)

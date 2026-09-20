@@ -18,7 +18,6 @@ const GestionUtilisateurs = lazy(() => import("@/app/components/admin/GestionUti
 const GestionServices = lazy(() => import("@/app/components/admin/GestionServices").then(m => ({ default: m.GestionServices })));
 const GestionPermissions = lazy(() => import("@/app/components/admin/GestionPermissions").then(m => ({ default: m.GestionPermissions })));
 const GestionEquipements = lazy(() => import("@/app/components/admin/GestionEquipements").then(m => ({ default: m.GestionEquipements })));
-const GestionListes = lazy(() => import("@/app/components/admin/GestionListes").then(m => ({ default: m.GestionListes })));
 const NotificationsPage = lazy(() => import("@/app/components/pages/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
 const TransactionsPage = lazy(() => import("@/app/components/pages/TransactionsPage").then(m => ({ default: m.TransactionsPage })));
 const ProfilPage = lazy(() => import("@/app/components/pages/ProfilPage").then(m => ({ default: m.ProfilPage })));
@@ -99,19 +98,11 @@ export default function Home() {
   const [serviceDestinataire, setServiceDestinataire] = useState("");
   const [servicesDiffusion, setServicesDiffusion] = useState<string[]>([]);
 
-  const [circuitJuridique, setCircuitJuridique] = useState("");
-  const [etapeService, setEtapeService] = useState<number>(1);
-  const [etapeJalsat, setEtapeJalsat] = useState("");
-  const [etapeTaslim, setEtapeTaslim] = useState("");
-  const [autoriteRetrait, setAutoriteRetrait] = useState("");
-  const [typeException, setTypeException] = useState("");
+  // Destination du dossier juridique : the circuit pickers were replaced by a
+  // live destination service (+ one optional named recipient inside it).
+  const [jurServiceDestination, setJurServiceDestination] = useState("");
+  const [jurRecipientUserIds, setJurRecipientUserIds] = useState<number[]>([]);
   const [numeroDossierAppel, setNumeroDossierAppel] = useState("");
-  const [typeProcedure, setTypeProcedure] = useState("ordinaire");
-  const [numCourAppel, setNumCourAppel] = useState("");
-  const [conseillerRapporteur, setConseillerRapporteur] = useState("");
-  const [dateAudience, setDateAudience] = useState("");
-  const [statutSousService, setStatutSousService] = useState("");
-  const [commentaireSousService, setCommentaireSousService] = useState("");
 
   const [docLie, setDocLie] = useState("");
   const [dossierPrincipal, setDossierPrincipal] = useState("");
@@ -216,8 +207,7 @@ export default function Home() {
   const canSeePermissionsAdmin = isAdmin || hasPermission("gerer_permissions");
   const canSeeEquipementsAdmin = isAdmin || isGreffier || hasPermission("gerer_equipements");
   const canSeeHistoriquesAdmin = isAdmin || hasPermission("gerer_services");
-  const canSeeListesAdmin = isAdmin || isGreffier || hasPermission("gerer_listes");
-  const canSeeAdminSection = canManageUsers || canSeeServicesAdmin || canSeePermissionsAdmin || canSeeEquipementsAdmin || canSeeListesAdmin;
+  const canSeeAdminSection = canManageUsers || canSeeServicesAdmin || canSeePermissionsAdmin || canSeeEquipementsAdmin;
   const userService = user?.service || "";
 
   // Enhanced permission-based gates with admin override support
@@ -233,8 +223,6 @@ export default function Home() {
   const canArchive = hasPermission("archiver");
   const canRetrait = hasPermission("retrait_archive");
 
-  const isJalsatService = userService === "JalsatWaIjra2at" || isAdmin;
-  const isTaslimService = userService === "TaslimNusakh" || isAdmin;
   const canSeeEntrantAdmin = canCreateEntrantAdmin;
   const canSeeEntrantJuridique = canCreateEntrantJuridique;
   const canSeeSortantNormal = true; // tous les services voient les sortants
@@ -264,7 +252,7 @@ export default function Home() {
       "admin-permissions": canSeePermissionsAdmin,
       "admin-equipements": canSeeEquipementsAdmin,
       "admin-services-historiques": canSeeHistoriquesAdmin,
-      "admin-listes": canSeeListesAdmin,
+
       "entrant-admin": canSeeEntrantAdmin,
       "entrant-juridique": canSeeEntrantJuridique,
       "recherche-dossiers": canSearchDossiers,
@@ -278,7 +266,7 @@ export default function Home() {
     if (vueActive === "notifications" && isAdminLike) {
       setVueActive("dashboard");
     }
-  }, [vueActive, isAdminLike, canManageUsers, canSeeServicesAdmin, canSeePermissionsAdmin, canSeeEquipementsAdmin, canSeeHistoriquesAdmin, canSeeListesAdmin, canSeeEntrantAdmin, canSeeEntrantJuridique, canSearchDossiers, canViewTransactions, canViewArchives]);
+  }, [vueActive, isAdminLike, canManageUsers, canSeeServicesAdmin, canSeePermissionsAdmin, canSeeEquipementsAdmin, canSeeHistoriquesAdmin, canSeeEntrantAdmin, canSeeEntrantJuridique, canSearchDossiers, canViewTransactions, canViewArchives]);
 
   // Trigger notification refresh when user navigates to notifications view
   useEffect(() => {
@@ -552,6 +540,23 @@ export default function Home() {
       await api.delete(`/api/Documents/${id}/permanent`, token);
       await fetchCorbeille();
       notify(langue === "fr" ? "Document supprimé définitivement" : "تم الحذف نهائياً");
+    } catch (e) {
+      notify(getErrorMessage(e));
+    }
+  };
+
+  // Empties the whole trash in one call. The backend scopes the purge to the
+  // caller's own service (admin-like roles purge globally), so this can never
+  // reach another service's deleted folders.
+  const emptyCorbeille = async () => {
+    if (!token) return;
+    if (corbeilleDocs.length === 0) return;
+    if (!await confirmAction(cur.viderCorbeilleConfirm)) return;
+    try {
+      await api.delete("/api/Documents/corbeille", token);
+      await fetchCorbeille();
+      await refetch();
+      notify(cur.corbeilleVidee);
     } catch (e) {
       notify(getErrorMessage(e));
     }
@@ -892,17 +897,14 @@ export default function Home() {
         };
       } else if (vueActive === "entrant-juridique") {
         endpoint = "/api/CourrierJuridique";
+        // The folder is created inside the sender's service. The destination
+        // service (which replaced the old circuit pickers) is applied as a
+        // reception REQUEST just below, once the backend has returned its id.
         body = {
           reference: numeroOrdreFinal,
           objet: objet,
           provenance: tiers,
-          circuit: circuitJuridique,
-          typeCircuit: circuitJuridique === "kitaba_khasa" ? "exception" : "classique",
-          motifException: circuitJuridique === "kitaba_khasa" ? typeException : null,
-          jalsatTransaction: circuitJuridique === "maktab_dabt" ? etapeJalsat : null,
-          taslimTransaction: circuitJuridique === "maktab_dabt" ? etapeTaslim : null,
-          autoriteRetrait: (circuitJuridique === "maktab_dabt" && etapeTaslim === "archive") ? autoriteRetrait : null,
-          etapeService: etapeService,
+          etapeService: 1,
           numeroDossierAppel: numeroDossierAppel,
           dossierLie: docLie === "Oui",
           parentReference: docLie === "Oui" ? parentDossier || null : null,
@@ -911,11 +913,6 @@ export default function Home() {
           linkedDocumentType: docLie === "Oui" ? linkedDocumentType || null : null,
           demandeur: tiers || "",
           etatGlobal: etat || "En cours",
-          etapeJalsatActuelle: etapeJalsat || "ijra2_baht",
-          typeProcedure: typeProcedure,
-          numCourAppel: numCourAppel,
-          conseillerRapporteur: conseillerRapporteur,
-          dateAudience: dateAudience,
         };
       } else if (vueActive === "sortant-normal") {
         endpoint = "/api/CourrierSortant";
@@ -961,6 +958,46 @@ export default function Home() {
         }
       }
 
+      // ── ENVOI VERS LE SERVICE DESTINATAIRE ──
+      // A reception REQUEST is sent, not a move: the folder stays in the sender's
+      // service until the destination accepts it from its Notifications or its
+      // Registre des transactions.
+      if (docId && vueActive === "entrant-juridique" && jurServiceDestination) {
+        try {
+          let historicalDestination = false;
+          try {
+            const histServices = await api.get<{ code: string }[]>("/api/historical-services", token);
+            historicalDestination = histServices.some(
+              (s) => s.code.toLowerCase() === jurServiceDestination.toLowerCase()
+            );
+          } catch { /* treat an unknown destination as a live service */ }
+
+          await api.post(
+            "/api/Transfer",
+            {
+              documentId: docId,
+              documentType: "entrant-juridique",
+              serviceDestination: jurServiceDestination,
+              message: juridiqueNotes || null,
+              doitRevenir: false,
+              targetUserId: jurRecipientUserIds[0] ?? null,
+              targetUserIds: jurRecipientUserIds.length > 0 ? jurRecipientUserIds : null,
+              isHistoricalService: historicalDestination,
+            },
+            token
+          );
+        } catch (transferErr) {
+          // The folder itself was created and stays in the sender's service, so
+          // only the handover failed — say so rather than implying data loss.
+          notify(
+            langue === "fr"
+              ? "Dossier créé, mais l'envoi vers le service destinataire a échoué."
+              : "تم إنشاء الملف، لكن فشل الإرسال إلى المصلحة المستقبِلة."
+          );
+          console.warn("Transfer error:", transferErr);
+        }
+      }
+
       // Wait 500ms for DB to commit, then refetch
       await new Promise(r => setTimeout(r, 500));
       await refetch();
@@ -1000,22 +1037,12 @@ export default function Home() {
     setNotes("");
     setFichier(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setCircuitJuridique("");
-    setEtapeService(1);
-    setEtapeJalsat("");
-    setEtapeTaslim("");
-    setAutoriteRetrait("");
-    setTypeException("");
+    setJurServiceDestination("");
+    setJurRecipientUserIds([]);
     setModeTraitement("");
     setServiceDestinataire("");
     setServicesDiffusion([]);
     setNumeroDossierAppel("");
-    setTypeProcedure("ordinaire");
-    setNumCourAppel("");
-    setConseillerRapporteur("");
-    setDateAudience("");
-    setStatutSousService("");
-    setCommentaireSousService("");
     setDocLie("");
     setDossierPrincipal("");
     setSourceDocLie("");
@@ -1265,7 +1292,6 @@ export default function Home() {
         canSeePermissionsAdmin={canSeePermissionsAdmin}
         canSeeEquipementsAdmin={canSeeEquipementsAdmin}
         canSeeHistoriquesAdmin={canSeeHistoriquesAdmin}
-        canSeeListesAdmin={canSeeListesAdmin}
         canOpenDossiers={canOpenDossiers}
         canTransfer={canTransfer}
         canViewArchives={canViewArchives}
@@ -1282,7 +1308,6 @@ export default function Home() {
               {vueActive === "mes-entites" && cur.mesDocuments}
               {vueActive === "transactions" && cur.registreTransactions}
               {vueActive === "archives" && cur.archivesJuridiques}
-              {vueActive === "admin-listes" && cur.gestionListes}
               {vueActive === "recherche-dossiers" && cur.rechercheDossiers}
               {isCourrierView && cur.gererCourriers}
                 {vueActive === "admin-utilisateurs" && cur.utilisateurs}
@@ -1307,6 +1332,7 @@ export default function Home() {
                   key={tab.view}
                   type="button"
                   role="tab"
+                  data-testid={`courrier-tab-${tab.view}`}
                   aria-selected={vueActive === tab.view}
                   onClick={() => setVueActive(tab.view)}
                   className={`px-10 py-3 rounded-lg text-xs font-bold border transition ${
@@ -1389,6 +1415,15 @@ export default function Home() {
               canTransfer={canTransfer}
               canArchive={canArchive}
               canDelete={canDelete}
+              showCorbeille={showCorbeille}
+              setShowCorbeille={setShowCorbeille}
+              corbeilleDocs={corbeilleDocs}
+              onFetchCorbeille={fetchCorbeille}
+              onRestoreDocument={restoreDocument}
+              onPermanentDelete={permanentDeleteDocument}
+              onEmptyCorbeille={emptyCorbeille}
+              canSeeCorbeille={hasPermission("voir_corbeille") || isGreffier}
+              canEmptyCorbeille={hasPermission("supprimer")}
             />
           )}
 
@@ -1426,18 +1461,11 @@ export default function Home() {
             <ArchivesView
               langue={langue}
               cur={cur}
-              showCorbeille={showCorbeille}
-              setShowCorbeille={setShowCorbeille}
-              corbeilleDocs={corbeilleDocs}
-              onFetchCorbeille={fetchCorbeille}
-              onRestoreDocument={restoreDocument}
-              onPermanentDelete={permanentDeleteDocument}
               filteredGeneral={filteredGeneral}
               docsArchives={docsArchives}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onRegisterRetrait={registerRetrait}
-              canSeeCorbeille={hasPermission("voir_corbeille") || isGreffier}
               getServiceLabel={getServiceLabel}
             />
           )}
@@ -1511,27 +1539,14 @@ export default function Home() {
                     numeroPremiereInstance={numeroPremiereInstance} setNumeroPremiereInstance={setNumeroPremiereInstance}
                     juridiqueNotes={juridiqueNotes} setJuridiqueNotes={setJuridiqueNotes}
                     juridiqueFichier={juridiqueFichier} setJuridiqueFichier={setJuridiqueFichier}
-                    circuitJuridique={circuitJuridique} setCircuitJuridique={setCircuitJuridique}
-                    etapeService={etapeService} setEtapeService={setEtapeService}
-                    etapeJalsat={etapeJalsat} setEtapeJalsat={setEtapeJalsat}
-                    etapeTaslim={etapeTaslim} setEtapeTaslim={setEtapeTaslim}
-                    autoriteRetrait={autoriteRetrait} setAutoriteRetrait={setAutoriteRetrait}
-                    typeException={typeException} setTypeException={setTypeException}
                     numeroDossierAppel={numeroDossierAppel} setNumeroDossierAppel={setNumeroDossierAppel}
-                    typeProcedure={typeProcedure} setTypeProcedure={setTypeProcedure}
-                    numCourAppel={numCourAppel} setNumCourAppel={setNumCourAppel}
-                    conseillerRapporteur={conseillerRapporteur} setConseillerRapporteur={setConseillerRapporteur}
-                    dateAudience={dateAudience} setDateAudience={setDateAudience}
-                    statutSousService={statutSousService} setStatutSousService={setStatutSousService}
-                    commentaireSousService={commentaireSousService} setCommentaireSousService={setCommentaireSousService}
                     reference={reference} setReference={setReference}
                     tiers={tiers} setTiers={setTiers}
                     objet={objet} setObjet={setObjet}
                     tribunalOptions={tribunalOptions}
-                    isJalsatService={isJalsatService}
-                    isTaslimService={isTaslimService}
+                    serviceDestination={jurServiceDestination} setServiceDestination={setJurServiceDestination}
+                    recipientUserIds={jurRecipientUserIds} setRecipientUserIds={setJurRecipientUserIds}
                     langue={langue} cur={cur}
-                    userRole={role}
                   />
                 )}
 
@@ -1555,6 +1570,7 @@ export default function Home() {
                 <div className="pt-4 border-t border-slate-200 flex justify-end">
                   <button
                     type="submit"
+                    data-testid="submit-courrier"
                     disabled={!!isSubmitting}
                     className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-8 py-4 rounded-xl transition shadow-md disabled:opacity-50"
                   >
@@ -1607,9 +1623,7 @@ export default function Home() {
             <GestionServicesHistoriques langue={langue} cur={cur} token={token} />
           )}
 
-          {vueActive === "admin-listes" && canSeeListesAdmin && (
-            <GestionListes langue={langue} cur={cur} token={token} onExport={(f) => exportAdminData(f, "listes")} />
-          )}
+
 
           {vueActive === "notifications" && (
             <NotificationsPage langue={langue} cur={cur} token={token} onExport={exportNotifications} refreshTrigger={notificationRefreshTrigger} />
