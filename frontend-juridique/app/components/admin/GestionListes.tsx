@@ -9,11 +9,25 @@ import { api } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/utils";
 import { confirmAction, notify } from "@/lib/feedback";
 
+interface ListCategory {
+  key: string;
+  fr: string;
+  ar: string;
+}
+
 interface Props {
   langue: Langue;
   cur: TranslationKeys;
   token: string | null;
   onExport?: (format: ExportFormat) => void;
+  /**
+   * Restricts the panel to a subset of the catalogue. Used to embed just the
+   * equipment lists inside « Gestion des équipements », where they are part of
+   * the register's own configuration rather than a separate administration page.
+   */
+  categories?: ListCategory[];
+  /** Fired after any create/update/delete, so an embedding screen can refresh. */
+  onListsChanged?: () => void;
 }
 
 interface ListItemData {
@@ -26,7 +40,7 @@ interface ListItemData {
   isActive: boolean;
 }
 
-const LIST_CATEGORIES = [
+export const LIST_CATEGORIES = [
   { key: "types_equipement", fr: "Types d'équipement", ar: "أنواع المعدات" },
   { key: "etats_equipement", fr: "États d'équipement", ar: "حالات المعدات" },
   { key: "types_juridique", fr: "Types judiciaires", ar: "الأنواع القضائية" },
@@ -39,9 +53,10 @@ const LIST_CATEGORIES = [
   { key: "sources_doc_lie", fr: "Sources de documents liés", ar: "مصادر الوثائق المرتبطة" },
 ];
 
-export function GestionListes({ langue, cur, token, onExport }: Props) {
+export function GestionListes({ langue, cur, token, onExport, categories, onListsChanged }: Props) {
+  const available = categories && categories.length > 0 ? categories : LIST_CATEGORIES;
   const [items, setItems] = useState<ListItemData[]>([]);
-  const [activeCategory, setActiveCategory] = useState("types_equipement");
+  const [activeCategory, setActiveCategory] = useState(available[0].key);
   const [searchTerm, setSearchTerm] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -74,6 +89,7 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
       setEditingId(null);
       setForm({ code: "", valueFr: "", valueAr: "", displayOrder: 1, isActive: true });
       fetchItems();
+      onListsChanged?.();
     } catch (err) {
       notify(getErrorMessage(err) || (langue === "fr" ? "Erreur" : "خطأ"));
     }
@@ -84,6 +100,7 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
     try {
       await api.delete(`/api/ListItems/${id}`, token);
       fetchItems();
+      onListsChanged?.();
     } catch (err) { console.warn(err); }
   };
 
@@ -91,16 +108,17 @@ export function GestionListes({ langue, cur, token, onExport }: Props) {
     try {
       await api.put(`/api/ListItems/${item.id}`, { ...item, isActive: !item.isActive }, token);
       fetchItems();
+      onListsChanged?.();
     } catch (err) { console.warn(err); }
   };
 
-  const currentCategory = LIST_CATEGORIES.find(c => c.key === activeCategory);
+  const currentCategory = available.find(c => c.key === activeCategory);
 
   return (
     <div className="space-y-5">
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
-          {LIST_CATEGORIES.map(cat => (
+          {available.map(cat => (
             <button key={cat.key} type="button" onClick={() => { setActiveCategory(cat.key); setShowForm(false); setEditingId(null); }}
               className={`px-3 py-2 rounded-lg border text-[11px] font-bold transition ${
                 activeCategory === cat.key ? "bg-blue-700 text-white border-blue-700" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"

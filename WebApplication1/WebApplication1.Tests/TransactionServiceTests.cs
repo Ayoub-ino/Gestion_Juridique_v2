@@ -34,7 +34,7 @@ namespace WebApplication1.Tests
         /// these tests never do, so a stub web root is enough.
         /// </summary>
         private static TransactionService CreateService(AppDbContext ctx) =>
-            new(ctx, new DocumentAccessService(ctx), new DocumentCloneService(ctx, new TestEnv()));
+            new(ctx, new DocumentAccessService(ctx, new SubstitutionService(ctx)), new DocumentCloneService(ctx, new TestEnv()));
 
         private sealed class TestEnv : IWebHostEnvironment
         {

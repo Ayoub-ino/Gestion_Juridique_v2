@@ -330,7 +330,7 @@ namespace WebApplication1.Tests
         public void IsServiceCustodian_MatchingService_ReturnsTrue()
         {
             using var context = CreateContext();
-            var accessService = new DocumentAccessService(context);
+            var accessService = new DocumentAccessService(context, new SubstitutionService(context));
 
             var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
             Assert.True(accessService.IsServiceCustodian(doc, "bureauordre"));
@@ -340,7 +340,7 @@ namespace WebApplication1.Tests
         public void IsServiceCustodian_NonMatchingService_ReturnsFalse()
         {
             using var context = CreateContext();
-            var accessService = new DocumentAccessService(context);
+            var accessService = new DocumentAccessService(context, new SubstitutionService(context));
 
             var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
             Assert.False(accessService.IsServiceCustodian(doc, "fathmilafat"));
@@ -350,7 +350,7 @@ namespace WebApplication1.Tests
         public void IsServiceCustodian_EnumName_MapsCorrectly()
         {
             using var context = CreateContext();
-            var accessService = new DocumentAccessService(context);
+            var accessService = new DocumentAccessService(context, new SubstitutionService(context));
 
             // OuvertureDossier maps to fathmilafat in RBAC
             var doc = new DossierJuridique { ServiceActuel = ServiceTribunal.OuvertureDossier };
@@ -361,7 +361,7 @@ namespace WebApplication1.Tests
         public void IsServiceCustodian_EmptyServiceCode_ReturnsFalse()
         {
             using var context = CreateContext();
-            var accessService = new DocumentAccessService(context);
+            var accessService = new DocumentAccessService(context, new SubstitutionService(context));
 
             var doc = new CourrierAdministratif { ServiceActuel = ServiceTribunal.BureauOrdre };
             Assert.False(accessService.IsServiceCustodian(doc, ""));

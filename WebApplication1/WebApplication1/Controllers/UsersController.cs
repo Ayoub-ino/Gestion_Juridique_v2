@@ -232,6 +232,18 @@ namespace WebApplication1.Controllers
                 tx.UtilisateurId = null;
             }
 
+            // Absence delegations are meaningless without both parties, and the
+            // trace would otherwise point at a user that no longer exists.
+            var delegations = await _context.Substitutes
+                .Where(s => s.UserId == id || s.SubstituteUserId == id)
+                .ToListAsync();
+            _context.Substitutes.RemoveRange(delegations);
+
+            var delegatedActions = await _context.SubstitutionActions
+                .Where(a => a.EffectueParUserId == id || a.PourUserId == id)
+                .ToListAsync();
+            _context.SubstitutionActions.RemoveRange(delegatedActions);
+
             _context.Utilisateurs.Remove(user);
             await _context.SaveChangesAsync();
             return Ok(new { message = "Utilisateur supprimé définitivement" });

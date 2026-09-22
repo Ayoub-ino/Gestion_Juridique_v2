@@ -29,6 +29,8 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 - **Reception Handshake**: A folder stays with the sender until the destination accepts it — a refusal keeps it in place and notifies the sender with the reason given
 - **Dynamic Destination Picker**: The juridical form routes a folder by choosing a live service (plus an optional member of it) — the catalog is read from the database, so new services appear with no restart
 - **Service-Based Custody**: Only the service currently holding a folder can edit, modify, or transfer it
+- **Absence Delegation**: An agent designates a substitute from *Mon profil*. The scope is narrow — the substitute reaches only the folders entrusted to that agent, never their colleagues' folders in the same service — and every action taken is traced (who acted, for whom). The delegation is closed on revocation with a date stamp, and only one can be active at a time
+- **Archive Withdrawal Register**: Exceptional withdrawals of an archived folder are recorded with the requesting authority (chef du greffe, conseiller rapporteur, premier président), the reason, an optional return date and the agent who filed it — the folder itself stays in the archive
 - **Dynamic Service Catalog**: Services are resolved from the live database — no hardcoded labels
 - **RBAC Permission System**: 18 dynamic permissions controlling both API access and UI visibility
 - **Admin Override Layer**: Admin user has disabled-by-default permissions to prevent routine operations
@@ -36,6 +38,7 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 - **Service Soft-Delete**: Archive/restore services without data loss; permanent delete with safety guards
 - **Bilingual Interface**: Full French/Arabic support with RTL layout and proper Arabic terminology
 - **Transaction Lifecycle**: Full sender → receiver workflow with accept, refuse, cancel, and notification sync
+- **Equipment Register**: « Gestion des équipements » collects exactly five things per item — Série (unique), Informations supplémentaires, Type, État and Service. Type and État are drawn from the managed lists (`types_equipement` / `etats_equipement`, with French and Arabic labels) and Service from the live catalog, so renaming a list entry or adding a service needs no code change. The treatment is a two-state charge cycle: an item is created chargé, and décharger stamps its discharge date while charger clears it. Those two lists are edited from the register itself, next to the data they describe, and the register imports spreadsheets (with header detection, column mapping and per-line error reporting) and exports what the filters select, with codes resolved to labels. Both are gated on `gerer_equipements` — the permission that opens the register — rather than the global export permissions
 - **Import/Export**: Excel and Word document import/export with self-seeding E2E tests
 - **Dashboard & Analytics**: Real-time document statistics and a workflow pipeline built from the live service catalog — adding, renaming or archiving a service changes the stages immediately
 - **Dark/Light Theme**: Toggle between themes with persistent preference
@@ -112,7 +115,7 @@ Gestion_Juridique-main/
 │   │   ├── Data/                       # AppDbContext
 │   │   ├── Migrations/                 # EF Core database migrations
 │   │   └── Program.cs                  # Application entry point
-│   └── WebApplication1.Tests/          # xUnit unit tests (125 tests)
+│   └── WebApplication1.Tests/          # xUnit unit tests (145 tests)
 │
 ├── frontend-juridique/                 # Frontend (Next.js)
 │   ├── app/
@@ -143,7 +146,7 @@ Gestion_Juridique-main/
 │   │   ├── types/                      # api.generated.ts (OpenAPI types)
 │   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   ├── e2e/                        # E2E test specs (94 tests across 11 specs)
+│   │   ├── e2e/                        # E2E test specs (112 tests across 13 specs)
 │   │   │   ├── app.cy.ts               # Core app flows (35 tests)
 │   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
 │   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer custody flow (9 tests)
@@ -154,6 +157,7 @@ Gestion_Juridique-main/
 │   │   │   ├── export.cy.ts            # Excel/Word export (3 tests)
 │   │   │   ├── recherche-dossiers.cy.ts # Search filters (3 tests)
 │   │   │   ├── admin-boundaries.cy.ts  # Admin role isolation (2 tests)
+│   │   │   ├── equipment-register.cy.ts # Equipment fields, charge, lists, import/export (14 tests)
 │   │   │   └── permission-persistence.cy.ts  # Permission reload (1 test)
 │   │   └── support/                    # dbCleanup.ts (fixture purge), commands.ts
 │   └── public/                         # Static assets
@@ -255,11 +259,11 @@ Open **http://localhost:3000** in your browser.
 ### Run all tests
 
 ```bash
-# Backend unit tests (125 tests)
+# Backend unit tests (145 tests)
 cd WebApplication1/WebApplication1.Tests
 dotnet test
 
-# Frontend E2E tests (94 tests across 11 specs)
+# Frontend E2E tests (112 tests across 13 specs)
 cd frontend-juridique
 CYPRESS_API_URL=http://localhost:5200 npx cypress run
 
@@ -276,7 +280,7 @@ npx eslint .
 
 | Test Suite | Count | Command |
 |---|---|---|
-| Backend unit tests | 125 | `dotnet test` |
+| Backend unit tests | 145 | `dotnet test` |
 | Cypress E2E — app.cy.ts | 35 | `npx cypress run --spec cypress/e2e/app.cy.ts` |
 | Cypress E2E — permission-toggle.cy.ts | 27 | `npx cypress run --spec cypress/e2e/permission-toggle.cy.ts` |
 | Cypress E2E — dynamic-service-transfer.cy.ts | 9 | `npx cypress run --spec cypress/e2e/dynamic-service-transfer.cy.ts` |
@@ -288,7 +292,9 @@ npx eslint .
 | Cypress E2E — corbeille-vider.cy.ts | 4 | `npx cypress run --spec cypress/e2e/corbeille-vider.cy.ts` |
 | Cypress E2E — juridique-destination.cy.ts | 3 | `npx cypress run --spec cypress/e2e/juridique-destination.cy.ts` |
 | Cypress E2E — workflow-pipeline.cy.ts | 4 | `npx cypress run --spec cypress/e2e/workflow-pipeline.cy.ts` |
-| **Total** | **219** | |
+| Cypress E2E — delegation-and-retrait.cy.ts | 4 | `npx cypress run --spec cypress/e2e/delegation-and-retrait.cy.ts` |
+| Cypress E2E — equipment-register.cy.ts | 14 | `npx cypress run --spec cypress/e2e/equipment-register.cy.ts` |
+| **Total** | **257** | |
 
 ---
 
@@ -395,5 +401,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 125 unit tests, 94 E2E tests ✅
-> All 208 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.
+> Last verified: September 2026 — 145 unit tests, 98 E2E tests ✅
+> All 243 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

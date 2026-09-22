@@ -85,14 +85,15 @@ export interface ServicePermission {
 export interface EquipmentItem {
   id: number;
   serial: string;
-  code: string;
+  /** Code of a row in the "types_equipement" managed list. */
   type: string;
+  /** Code of a row in the "etats_equipement" managed list. */
   etat: string;
   service: string;
   estCharge: boolean;
   dateDechargement?: string;
-  numeroInventaire?: string;
-  bureau?: string;
+  /** Informations supplémentaires — optional free text. */
+  additionalInfo?: string;
 }
 
 export interface UserItem {

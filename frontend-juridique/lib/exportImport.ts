@@ -332,3 +332,80 @@ export function importFromFile(file: File): Promise<ImportResult> {
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Raw sheets
+// ---------------------------------------------------------------------------
+//
+// `importFromFile` above knows the document template — institutional preamble,
+// header row seventh, and so on. Registers such as « Gestion des équipements »
+// use ordinary sheets instead, where the header row's position is not fixed
+// (our own export carries the preamble, the template does not). So these two
+// helpers stay deliberately dumb: one returns the grid as-is and lets the
+// caller locate its header, the other writes a grid out.
+
+/** Reads the first worksheet as a grid of trimmed strings, rows in order. */
+export function readSheetRows(file: File): Promise<string[][]> {
+  return new Promise((resolve, reject) => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+
+    if (ext === "csv" || ext === "txt") {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = (e.target?.result as string) ?? "";
+        resolve(
+          text
+            .split(/\r?\n/)
+            .map((line) => parseCSVLine(line, line.includes(";") ? ";" : ",")),
+        );
+      };
+      reader.onerror = () => reject(new Error("READ_FAILED"));
+      reader.readAsText(file, "UTF-8");
+      return;
+    }
+
+    if (ext === "xlsx" || ext === "xls") {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const XLSX = await import("xlsx");
+          const wb = XLSX.read(new Uint8Array(e.target?.result as ArrayBuffer), { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          if (!ws) {
+            resolve([]);
+            return;
+          }
+          // `header: 1` keeps every row as an array — no header interpretation.
+          const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: false });
+          resolve(
+            grid.map((row) => row.map((cell) => String(cell ?? "").trim())),
+          );
+        } catch {
+          reject(new Error("READ_FAILED"));
+        }
+      };
+      reader.onerror = () => reject(new Error("READ_FAILED"));
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+
+    reject(new Error("UNSUPPORTED_FORMAT"));
+  });
+}
+
+/** Writes a grid to a single-sheet .xlsx and downloads it. */
+export async function downloadSheet(
+  rows: (string | number)[][],
+  filename: string,
+  sheetName = "Modele",
+): Promise<void> {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const width = Math.max(...rows.map((r) => r.length), 1);
+  ws["!cols"] = Array.from({ length: width }, () => ({ wch: 26 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const name = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  downloadBuffer(out, name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}

@@ -16,6 +16,14 @@ namespace WebApplication1.Models
 
         public string EffectuePar { get; set; } = string.Empty;
 
+        // Authority that requested the exceptional withdrawal:
+        // chef_greffe | conseiller_rapporteur | premier_president.
+        public string AutoriteDemandeuse { get; set; } = string.Empty;
+
+        // Agent who actually recorded the withdrawal (captured server-side, so the
+        // register always shows who entered the entry even if the form field is changed).
+        public string SaisiPar { get; set; } = string.Empty;
+
         [Required]
         public string MotifRetrait { get; set; } = string.Empty;
 

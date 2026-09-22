@@ -54,6 +54,17 @@ namespace WebApplication1.Models
         /// Null for every ordinary folder.
         /// </summary>
         public int? CopieDeDocumentId { get; set; }
+
+        /// <summary>
+        /// The agent currently responsible for this folder.
+        ///
+        /// Set to the creating user, then reassigned to whoever accepts a handover.
+        /// It is what makes an absence delegation *narrow*: a substitute reaches the
+        /// folders entrusted to the agent they replace, not the agent's whole service.
+        /// Null on legacy rows that predate the column; the startup backfill resolves
+        /// them from <see cref="NumeroBureauOrdre"/> ("{userId}/{year}").
+        /// </summary>
+        public int? GestionnaireUserId { get; set; }
     }
 
 }

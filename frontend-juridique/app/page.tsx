@@ -667,7 +667,6 @@ export default function Home() {
       let url = "";
       if (type === "utilisateurs") url = "/api/Auth/users";
       else if (type === "services") url = "/api/Services";
-      else if (type === "equipements") url = "/api/Equipment";
       else if (type === "listes") url = "/api/ListItem";
       else if (type === "notifications") url = "/api/Transactions";
       if (!url) return;
@@ -1579,7 +1578,7 @@ export default function Home() {
           )}
 
           {vueActive === "admin-equipements" && canSeeEquipementsAdmin && (
-            <GestionEquipements langue={langue} cur={cur} token={token} onExport={(f) => exportAdminData(f, "equipements")} />
+            <GestionEquipements langue={langue} cur={cur} token={token} />
           )}
 
           {vueActive === "admin-services-historiques" && canSeeHistoriquesAdmin && (

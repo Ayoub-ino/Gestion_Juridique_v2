@@ -157,7 +157,11 @@ export function Sidebar({
 
         <div>
           <span className={sectionTitleClass}>{cur.monCompte}</span>
-          <button onClick={() => setVueActive("profil")} className={navButtonClass(vueActive === "profil")}>
+          <button
+            onClick={() => setVueActive("profil")}
+            className={navButtonClass(vueActive === "profil")}
+            data-testid="nav-profil"
+          >
             {cur.monProfil}
           </button>
         </div>
@@ -181,7 +185,7 @@ export function Sidebar({
               </button>
             )}
             {canSeeEquipementsAdmin && (
-              <button onClick={() => setVueActive("admin-equipements")} className={navButtonClass(vueActive === "admin-equipements")}>
+              <button data-testid="nav-equipements" onClick={() => setVueActive("admin-equipements")} className={navButtonClass(vueActive === "admin-equipements")}>
                 {cur.equipements}
               </button>
             )}

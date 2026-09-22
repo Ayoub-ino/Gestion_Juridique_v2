@@ -65,7 +65,7 @@ namespace WebApplication1.Tests
         public async Task RepairUnansweredHandovers_MovesStrandedFolderBackToSender()
         {
             var (ctx, doc) = CreateStranded();
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
 
             var repaired = await service.RepairUnansweredHandoversAsync();
 
@@ -79,7 +79,7 @@ namespace WebApplication1.Tests
         public async Task RepairUnansweredHandovers_LeavesAnsweredHandoversAlone()
         {
             var (ctx, doc) = CreateStranded(StatutTransaction.Accepte);
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
 
             var repaired = await service.RepairUnansweredHandoversAsync();
 
@@ -91,7 +91,7 @@ namespace WebApplication1.Tests
         public async Task RepairUnansweredHandovers_LeavesRefusalNoticesAlone()
         {
             var (ctx, doc) = CreateStranded(commentaire: "[REFUS]");
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
 
             var repaired = await service.RepairUnansweredHandoversAsync();
 
@@ -122,7 +122,7 @@ namespace WebApplication1.Tests
             });
             await ctx.SaveChangesAsync();
 
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
             var repaired = await service.RepairUnansweredHandoversAsync();
 
             Assert.Equal(0, repaired);
@@ -133,7 +133,7 @@ namespace WebApplication1.Tests
         public async Task RepairUnansweredHandovers_IgnoresDeletedFolders()
         {
             var (ctx, _) = CreateStranded(deleted: true);
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
 
             var repaired = await service.RepairUnansweredHandoversAsync();
 
@@ -144,7 +144,7 @@ namespace WebApplication1.Tests
         public async Task RepairUnansweredHandovers_IsIdempotent()
         {
             var (ctx, doc) = CreateStranded();
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
 
             Assert.Equal(1, await service.RepairUnansweredHandoversAsync());
             Assert.Equal(0, await service.RepairUnansweredHandoversAsync());
@@ -175,7 +175,7 @@ namespace WebApplication1.Tests
             });
             await ctx.SaveChangesAsync();
 
-            var service = new DocumentAccessService(ctx);
+            var service = new DocumentAccessService(ctx, new SubstitutionService(ctx));
             var repaired = await service.RepairUnansweredHandoversAsync();
 
             Assert.Equal(1, repaired);

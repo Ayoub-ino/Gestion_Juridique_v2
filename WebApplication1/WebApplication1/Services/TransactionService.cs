@@ -270,10 +270,13 @@ namespace WebApplication1.Services
                     copyHandedOver = true;
                 }
 
-                // Move the folder to the receiver's service.
+                // Move the folder to the receiver's service, and entrust it to the
+                // agent who accepted it: the sender's substitute must not keep reaching
+                // it once it has left the sender's hands.
                 document.ServiceActuel = transaction.ServiceDestination;
                 document.ServiceActuelCode = destCode;
                 document.StatutActuel = StatutDossier.EnCours;
+                document.GestionnaireUserId = userId;
 
                 // Grant the receiver's service edit access (was withheld during the pending phase).
                 await _accessService.GrantEditorAsync(document.Id, destCode, userId);

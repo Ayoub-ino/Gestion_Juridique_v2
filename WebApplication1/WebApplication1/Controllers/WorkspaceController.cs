@@ -16,11 +16,13 @@ namespace WebApplication1.Controllers
     {
         private readonly WorkspaceService _service;
         private readonly DocumentAccessService _accessService;
+        private readonly SubstitutionService _substitutions;
 
-        public WorkspaceController(WorkspaceService service, DocumentAccessService accessService)
+        public WorkspaceController(WorkspaceService service, DocumentAccessService accessService, SubstitutionService substitutions)
         {
             _service = service;
             _accessService = accessService;
+            _substitutions = substitutions;
         }
 
         private IActionResult Map(ServiceResult result) =>
@@ -70,7 +72,16 @@ namespace WebApplication1.Controllers
             }
 
             var (userName, userService) = await ResolveUserAsync();
-            return Map(await _service.UpdateDocumentAsync(id, dto, userName, userService));
+            var result = await _service.UpdateDocumentAsync(id, dto, userName, userService);
+
+            // Trace the change when the caller is covering an absent agent, so the
+            // register shows who modified the folder in place of whom.
+            if (result.Success)
+            {
+                await _substitutions.LogDelegatedActionAsync(userId, "Modification", id);
+            }
+
+            return Map(result);
         }
 
         // ============ DOCUMENT ACCESS (ACL) ============

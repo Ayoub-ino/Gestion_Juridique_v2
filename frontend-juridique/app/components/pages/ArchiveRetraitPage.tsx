@@ -11,6 +11,8 @@ interface Retrait {
   documentId: number;
   reference: string;
   effectuePar: string;
+  autoriteDemandeuse: string;
+  saisiPar: string;
   motifRetrait: string;
   notes: string;
   dateRetrait: string;
@@ -18,6 +20,14 @@ interface Retrait {
   estAnnule: boolean;
   serviceArchives: string;
 }
+
+// Legal functions entitled to request an exceptional withdrawal, served by the
+// backend catalogue (/api/Retrait/authorities) so the list is never duplicated here.
+const AUTORITE_LABELS: Record<string, { fr: string; ar: string }> = {
+  chef_greffe: { fr: "Chef du greffe", ar: "رئيس كتابة الضبط" },
+  conseiller_rapporteur: { fr: "Conseiller rapporteur", ar: "المستشار المقرر" },
+  premier_president: { fr: "Premier président", ar: "الرئيس الأول" },
+};
 
 interface ArchiveRetraitPageProps {
   langue: "fr" | "ar";
@@ -39,6 +49,8 @@ export function ArchiveRetraitPage({
   const { hasPermission } = useAuth();
   const canRetrait = hasPermission("retrait_archive");
   const [effectuePar, setEffectuePar] = useState(userNom || "");
+  const [autorites, setAutorites] = useState<string[]>([]);
+  const [autoriteDemandeuse, setAutoriteDemandeuse] = useState("");
   const [motifRetrait, setMotifRetrait] = useState("");
   const [dateRetour, setDateRetour] = useState("");
   const [dateRetrait, setDateRetrait] = useState(new Date().toISOString().split("T")[0]);
@@ -53,13 +65,30 @@ export function ArchiveRetraitPage({
     } catch { /* Retrait endpoint may not exist yet */ }
   }, [selectedDoc, token]);
 
+  const fetchAutorites = useCallback(async () => {
+    try {
+      setAutorites(await api.get<string[]>("/api/Retrait/authorities", token));
+    } catch { /* catalogue unavailable: the select stays empty */ }
+  }, [token]);
+
   useEffect(() => {
     fetchRetraits();
-  }, [fetchRetraits]);
+    fetchAutorites();
+  }, [fetchRetraits, fetchAutorites]);
+
+  const autoriteLabel = (code: string) => {
+    const entry = AUTORITE_LABELS[code];
+    if (!entry) return code || "-";
+    return langue === "fr" ? entry.fr : entry.ar;
+  };
 
   const handleSave = async () => {
     if (!canRetrait) { notify(langue === "fr" ? "Action non autorisée" : "إجراء غير مصرح به"); return; }
     if (!selectedDoc || !token) return;
+    if (!autoriteDemandeuse) {
+      notify(langue === "fr" ? "L'autorité demandeuse est obligatoire" : "السلطة الطالبة مطلوبة");
+      return;
+    }
     if (!motifRetrait.trim()) {
       notify(langue === "fr" ? "Le motif du retrait est obligatoire" : "سبب الإخراج مطلوب");
       return;
@@ -72,6 +101,7 @@ export function ArchiveRetraitPage({
           documentId: selectedDoc.id,
           reference: selectedDoc.reference,
           effectuePar,
+          autoriteDemandeuse,
           motifRetrait,
           notes,
           dateRetrait: dateRetrait || new Date().toISOString(),
@@ -81,6 +111,7 @@ export function ArchiveRetraitPage({
         token
       );
       notify(langue === "fr" ? "Retrait enregistré" : "تم تسجيل الإخراج");
+      setAutoriteDemandeuse("");
       setMotifRetrait("");
       setNotes("");
       setDateRetour("");
@@ -134,7 +165,23 @@ export function ArchiveRetraitPage({
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="retrait-autorite" className="block text-xs font-bold text-slate-700 mb-1">
+                {langue === "fr" ? "* Autorité demandeuse" : "* السلطة الطالبة"}
+              </label>
+              <select
+                id="retrait-autorite"
+                value={autoriteDemandeuse}
+                onChange={(e) => setAutoriteDemandeuse(e.target.value)}
+                className="w-full p-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+              >
+                <option value="">-- {langue === "fr" ? "Choisir" : "اختر"} --</option>
+                {autorites.map((code) => (
+                  <option key={code} value={code}>{autoriteLabel(code)}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label htmlFor="retrait-effectue-par" className="block text-xs font-bold text-slate-700 mb-1">
                 {langue === "fr" ? "Effectué par" : "تنفيذ"}
@@ -223,6 +270,8 @@ export function ArchiveRetraitPage({
                   <th className="p-3 text-start">{langue === "fr" ? "Notes" : "ملاحظات"}</th>
                   <th className="p-3 text-start">{langue === "fr" ? "Date de retour" : "تاريخ الإرجاع"}</th>
                   <th className="p-3 text-start">{langue === "fr" ? "Effectué par" : "تنفيذ"}</th>
+                  <th className="p-3 text-start">{langue === "fr" ? "Saisi par" : "سُجِّل من طرف"}</th>
+                  <th className="p-3 text-start">{langue === "fr" ? "Autorité demandeuse" : "السلطة الطالبة"}</th>
                   <th className="p-3 text-start">{langue === "fr" ? "Motif du retrait" : "سبب الإخراج"}</th>
                   <th className="p-3 text-start">{langue === "fr" ? "Date du retrait" : "تاريخ الإخراج"}</th>
                 </tr>
@@ -230,7 +279,7 @@ export function ArchiveRetraitPage({
               <tbody>
                 {retraits.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
+                    <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
                       {langue === "fr" ? "Aucun retrait enregistré" : "لا توجد إخراجات مسجلة"}
                     </td>
                   </tr>
@@ -262,6 +311,8 @@ export function ArchiveRetraitPage({
                       <td className="p-3">{r.notes || "-"}</td>
                       <td className="p-3">{r.dateRetour ? new Date(r.dateRetour).toLocaleDateString() : "-"}</td>
                       <td className="p-3">{r.effectuePar}</td>
+                      <td className="p-3">{r.saisiPar || "-"}</td>
+                      <td className="p-3">{autoriteLabel(r.autoriteDemandeuse)}</td>
                       <td className="p-3">{r.motifRetrait}</td>
                       <td className="p-3">{new Date(r.dateRetrait).toLocaleDateString()}</td>
                     </tr>

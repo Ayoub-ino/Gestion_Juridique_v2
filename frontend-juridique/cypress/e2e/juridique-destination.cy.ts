@@ -22,7 +22,6 @@ describe("Juridique destination picker", () => {
 
   let adminToken = "";
   let serviceId = 0;
-  let userOneId = 0;
 
   /** Documents created through the UI, removed in `after`. */
   const createdReferences: string[] = [];
@@ -125,7 +124,6 @@ describe("Juridique destination picker", () => {
       })
       .then((res) => {
         expect(res.status).to.eq(200);
-        userOneId = res.body.id;
         return authed(adminToken, "POST", `${API_URL}/api/Users`, {
           Login: loginTwo,
           Password: password,

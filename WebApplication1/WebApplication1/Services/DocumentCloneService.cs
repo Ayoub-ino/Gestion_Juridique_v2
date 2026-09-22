@@ -52,6 +52,9 @@ namespace WebApplication1.Services
             copy.ServiceActuel = source.ServiceActuel;
             copy.ServiceActuelCode = source.ServiceActuelCode;
             copy.StatutActuel = source.StatutActuel;
+            // The copy is handed to whoever accepts it, so it starts out entrusted to
+            // the same agent as the folder it was duplicated from.
+            copy.GestionnaireUserId = source.GestionnaireUserId;
 
             // Own physical file, so editing/removing one copy never touches another.
             copy.FilePath = DuplicateAttachment(source.FilePath);

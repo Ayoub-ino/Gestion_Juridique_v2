@@ -22,6 +22,7 @@ namespace WebApplication1.Controllers
         private readonly AppDbContext _context;
         private readonly DocumentAccessService _accessService;
         private readonly ServiceCatalog _serviceCatalog;
+        private readonly WebApplication1.Services.SubstitutionService _substitutions;
 
         private static readonly Dictionary<ServiceTribunal, List<ServiceTribunal>> ParentChildren = new()
         {
@@ -29,11 +30,12 @@ namespace WebApplication1.Controllers
             { ServiceTribunal.TaslimNusakh, new() { ServiceTribunal.Tabligh, ServiceTribunal.TasfiyatSawa2ir, ServiceTribunal.Archive } },
         };
 
-        public TransferController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog)
+        public TransferController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog, WebApplication1.Services.SubstitutionService substitutions)
         {
             _context = context;
             _accessService = accessService;
             _serviceCatalog = serviceCatalog;
+            _substitutions = substitutions;
         }
 
         [HttpPost]
@@ -191,6 +193,9 @@ namespace WebApplication1.Controllers
             await _accessService.GrantEditorAsync(document.Id, sourceCode, userId);
 
             // Historical services receive no access (they have no accounts to use it).
+
+            // Trace the handover when the caller is covering an absent agent.
+            await _substitutions.LogDelegatedActionAsync(userId, "Transfert", document.Id);
 
             return Ok(new
             {

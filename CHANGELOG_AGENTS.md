@@ -1431,3 +1431,444 @@ Targeted live API verification:
   services are intentionally part of the pipeline, since a document can still
   reside in them.
 
+
+---
+
+## [2026-09-22 01:47] - Absence Delegation ("Mon profil") & Archive Withdrawal Register
+
+### 1. Context & Objective
+Audit of two described features against the running system. Both had real gaps:
+
+**Absence delegation.** The profile page could store a delegation and list it, but
+nothing in the system ever read it. `Substitutes` was a write-only table, so a
+designated substitute could not reach the absent agent's folders at all — "traiter
+temporairement ses dossiers" did not work. Saving or revoking one also required
+`gerer_substituts`, which is seeded `DefaultEnabled = false` and granted to no
+service, so the two buttons on the page returned 403 for exactly the users they
+were built for (swallowed by a `console.warn`). Nothing recorded who acted in
+place of whom. Creating a second delegation left the first one active, and the
+POST accepted any `userId` from the body, letting a user act for someone else.
+
+**Archive withdrawal.** A withdrawal could be filed with no requesting authority
+and with an `effectuePar` value typed by the client. The three entitled functions
+(chef du greffe, conseiller rapporteur, premier président) did not exist in the
+model, and there was no record of the agent who actually filed the entry.
+
+### 2. Files Modified / Created / Deleted
+- `[CREATED]` `WebApplication1/Models/SubstitutionAction.cs` — audit row: who acted
+  (`EffectueParUserId`), for whom (`PourUserId`), the action, the folder and its
+  reference, and when.
+- `[CREATED]` `WebApplication1/Services/SubstitutionService.cs` — resolves active
+  delegations, the effective service scope of a user (own service + every covered
+  agent's), their legacy enum counterparts, and writes the delegated-action trace.
+- `[CREATED]` `WebApplication1/Helpers/RetraitAuthorities.cs` — the three entitled
+  functions as stable codes (`chef_greffe`, `conseiller_rapporteur`,
+  `premier_president`), with validation.
+- `[CREATED]` `WebApplication1/WebApplication1.Tests/SubstitutionServiceTests.cs` —
+  14 tests (scope, revocation, custody/ACL through a delegation, the trace, the
+  authority catalogue).
+- `[MODIFIED]` `WebApplication1/Services/DocumentAccessService.cs` — takes a
+  `SubstitutionService`; `UserHasAccessAsync` and `IsUserCustodian` now check every
+  service the caller effectively holds, so a substitute has custody of the covered
+  agent's folder and loses it on revocation.
+- `[MODIFIED]` `WebApplication1/Controllers/DocumentsController.cs` — `ResolveScopeAsync`
+  returns the effective service codes/enums instead of a single one;
+  `ScopedCorbeilleQuery` filters on the set; archival is traced.
+- `[MODIFIED]` `WebApplication1/Controllers/CourrierAdminController.cs`,
+  `CourrierJuridiqueController.cs`, `CourrierSortantController.cs` — the listing
+  scope is the union of the caller's own service and every covered service.
+- `[MODIFIED]` `WebApplication1/Controllers/SubstitutesController.cs` — rewritten:
+  self-service for own delegation (no `gerer_substituts` needed), 403 when acting
+  for someone else, self-substitution and inactive accounts refused, previous
+  delegation closed when a new one is created, revocation stamps the date, plus
+  `GET covering/{userId}` and `GET actions/{userId}` (the trace).
+- `[MODIFIED]` `WebApplication1/Controllers/RetraitController.cs` — `GET authorities`
+  serves the catalogue; creation validates the authority and the reason, and
+  captures `SaisiPar` server-side from the token.
+- `[MODIFIED]` `WebApplication1/Models/Retrait.cs` — added `AutoriteDemandeuse` and
+  `SaisiPar`.
+- `[MODIFIED]` `WebApplication1/Controllers/UsersController.cs` — permanent delete
+  now also drops the user's delegations and delegated-action rows, so removing a
+  user no longer leaves orphans that point at a user that no longer exists.
+- `[MODIFIED]` `WebApplication1/Controllers/WorkspaceController.cs` and
+  `TransferController.cs` — a successful modification/transfer is traced when the
+  caller is covering someone.
+- `[MODIFIED]` `WebApplication1/data/AppDbContext.cs`, `Program.cs` — registered the
+  new entity and service.
+- `[CREATED]` `WebApplication1/Migrations/20260922010253_AddSubstitutionAuditAndRetraitAuthority.cs`
+  — `SubstitutionActions` table + the two `Retraits` columns.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/ProfilPage.tsx` — "Vous
+  remplacez actuellement", the "Traçabilité — qui a agi à la place de qui" table,
+  and save/revoke failures now surface instead of being swallowed.
+- `[MODIFIED]` `frontend-juridique/app/components/pages/ArchiveRetraitPage.tsx` —
+  "Autorité demandeuse" select fed by `/api/Retrait/authorities`, plus "Autorité
+  demandeuse" and "Saisi par" columns in the history table.
+- `[MODIFIED]` `frontend-juridique/app/components/layout/Sidebar.tsx` — added
+  `data-testid="nav-profil"`.
+- `[CREATED]` `frontend-juridique/cypress/e2e/delegation-and-retrait.cy.ts` — 4 tests.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/juridique-destination.cy.ts` — dropped
+  an unused local.
+- `[MODIFIED]` `frontend-juridique/cypress/support/dbCleanup.ts` — `e2edlg` prefix
+  registered so the new spec's fixtures are reclaimed.
+- `[MODIFIED]` `README.md` — features, test counts, test table.
+
+### 3. Key Technical & Architectural Decisions
+- **Delegation scope = the absent agent's service.** Confirmed with the user: while
+  a delegation is active the substitute covers the *service* of the agent they
+  replace, consistent with the existing service-scoped visibility model. This is
+  implemented as a single notion of "effective service codes" threaded through the
+  ACL checks, the custody check and the four listing controllers, so a substitute is
+  treated exactly like the agent they replace — and strictly loses it on revocation.
+- **Traceability is a first-class row, not a log line.** `SubstitutionActions`
+  records the pair (who acted, for whom) per covered agent, and the reference is
+  resolved server-side from the folder so the trace is readable.
+- **Only one active delegation per agent.** Creating a new one closes the previous
+  and stamps its revocation date, matching the "clôture + date de révocation"
+  wording of the register.
+- **Self-service by default, administration by permission.** `gerer_substituts` is
+  no longer required on POST/DELETE; the controller authorises the agent concerned,
+  and only falls back to the permission when acting for somebody else. This was the
+  actual cause of the buttons appearing broken.
+- **The authority catalogue is a legal enumeration, not organisation data**, so it
+  is a backend constant served through `GET /api/Retrait/authorities` rather than a
+  duplicated frontend list — the form and the validation cannot drift.
+- **Withdrawal does not move the folder.** Per the user: once archived a folder
+  stays archived; the register merely records the exceptional withdrawal and the
+  authority that requested it.
+- **Permanent user delete cascades the delegation rows explicitly** (there is no
+  FK), closing an orphan-record gap the new trace made visible.
+
+### 4. Verification & Test Results
+- **Live API run (fresh services and users created at runtime) — 31/31.** Covered:
+  the authorities catalogue; rejection of a missing/unknown authority and a missing
+  reason; the recording agent taken from the token while `effectuePar` keeps what
+  was typed; the folder staying in the archive after a return; the substitute being
+  blind to the folder before the delegation and seeing it after; modifying it
+  successfully; the trace naming both parties; a second delegation closing the
+  first; revocation removing the scope (403 after) and stamping the date; double
+  revocation refused; the agent keeping access to their own folder.
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **139/139** (was 125; 14 new).
+- `tsc --noEmit`: 0 errors. `eslint`: 0 errors, 0 warnings.
+- Cypress E2E: **98/98 across 12 specs** (4 new; the previous 94 unchanged).
+- Database after the run: 8 documents (all pre-existing), 0 test services, 0 test
+  users, 0 delegations, 0 delegated actions, 1 pre-existing withdrawal, no
+  orphans.
+- **Pre-existing drift found and corrected:** `secretarait` had `supprimer`
+  enabled in the database although the seed withholds it, which made
+  `app.cy.ts → "secretarait (no supprimer) cannot delete"` get a 404 instead of a
+  403. Restored to the seeded intent; the spec then passed 35/35. Not a regression
+  from this change.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200`, web on `:3000`.
+- A delegation is now functional end to end and traceable; a withdrawal requires
+  one of the three entitled authorities and records who filed it.
+- **Deliberate limitation:** a delegation covers the absent agent's *whole
+  service*, not only folders individually entrusted to them — the project has no
+  per-user document ownership to key on. Revisit if per-user custody is ever
+  introduced.
+- `getEffectiveServiceCodes` issues a lookup per covered agent; fine for the
+  handful of delegations expected, worth caching if that ever grows.
+
+---
+
+## [2026-09-22 02:12] - Narrowed the Absence Delegation to the Folders Entrusted to the Agent
+
+### 1. Context & Objective
+- The delegation introduced in the previous entry granted the substitute the
+  absent agent's **whole service**: any colleague's folder in that service became
+  reachable, which is broader than "traiter temporairement ses dossiers".
+- Objective: a substitute may reach **only the folders entrusted to the agent they
+  replace**, and nothing else — colleagues' folders in the same service stay out of
+  reach.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `WebApplication1/Models/Document.cs` — added
+  `GestionnaireUserId` (the agent currently responsible for the folder).
+- `[CREATED]` `WebApplication1/Migrations/20260922015740_AddDocumentCustodianUserId.cs`
+  — nullable `Documents.GestionnaireUserId`.
+- `[MODIFIED]` `WebApplication1/Controllers/CourrierAdminController.cs`,
+  `CourrierJuridiqueController.cs`, `CourrierSortantController.cs` — the creating
+  agent becomes the folder's entrusted agent.
+- `[MODIFIED]` `WebApplication1/Services/TransactionService.cs` — accepting a
+  handover re-entrusts the folder to the accepting agent, so a sender's substitute
+  loses reach the moment the folder leaves the sender's hands.
+- `[MODIFIED]` `WebApplication1/Services/DocumentCloneService.cs` — a copy starts
+  entrusted like the folder it was duplicated from.
+- `[MODIFIED]` `WebApplication1/Services/SubstitutionService.cs` — replaced
+  `GetEffectiveServiceCodes`/`GetEffectiveServiceEnums` (which widened to covered
+  services) with `GetOwnServiceCode`/`GetOwnServiceEnum` (own service only), plus a
+  shared `BuildScopePredicate<T>` and `BackfillDocumentCustodiansAsync`.
+- `[MODIFIED]` `WebApplication1/Services/DocumentAccessService.cs` —
+  `IsUserCustodian` and `UserHasAccessAsync` now grant a substitute access **per
+  document**, and only while the folder is both entrusted to the covered agent and
+  still held by that agent's service.
+- `[MODIFIED]` `WebApplication1/Controllers/DocumentsController.cs` — `Scope`
+  record (own service + covered agent ids) replaces the effective-service list.
+- `[MODIFIED]` `WebApplication1/Controllers/CourrierAdminController.cs`,
+  `CourrierJuridiqueController.cs`, `CourrierSortantController.cs` — listings scope
+  on "own service OR entrusted to a covered agent".
+- `[MODIFIED]` `WebApplication1/Program.cs` — the legacy attribution runs at
+  startup beside the existing handover repair.
+- `[MODIFIED]` `WebApplication1/WebApplication1.Tests/SubstitutionServiceTests.cs`
+  — rewritten for the narrow semantics (19 tests).
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/delegation-and-retrait.cy.ts` — a
+  second agent added to the same service, and assertions that the substitute
+  neither sees nor can modify that colleague's folder.
+- `[MODIFIED]` `README.md` — feature description and test counts.
+
+### 3. Key Technical & Architectural Decisions
+- **Entitlement is per document, not per service.** `Document.GestionnaireUserId`
+  is the single source of truth: set to the creating agent, reassigned to whoever
+  accepts a handover. A delegation therefore reads as "the folders entrusted to this
+  agent", which is the wording the requirement actually uses.
+- **The service condition is kept as well.** A substitute is granted access only
+  while the folder is still held by the covered agent's service, so a folder that
+  has moved on is out of reach even before its custodian is reassigned.
+- **Legacy rows are attributed at startup** from `NumeroBureauOrdre`, which has
+  always encoded the creator as "{userId}/{year}" — so existing folders work with
+  no manual step, and the pass is idempotent (0 rows once resolved).
+- **One shared predicate** (`BuildScopePredicate<T>`) drives all four listings
+  (including the trash), so the visible rows and the guarded rows cannot drift.
+- **Folders with no resolvable entrusting agent expose nothing** through a
+  delegation — failing closed rather than open.
+
+### 4. Verification & Test Results
+- **Live API run (fresh service with two agents, plus a third service for the
+  substitute) — 11/11.** The decisive checks: the substitute sees the folder
+  entrusted to the absent agent; the substitute does **not** see the colleague's
+  folder in that same service; the substitute can modify the entrusted folder but
+  is refused (403) on the colleague's; revocation withdraws the reach; the absent
+  agent keeps both folders.
+- **Legacy attribution:** the startup pass attributed all 8 existing folders to
+  their creator (`GestionnaireUserId` = the agent whose id `NumeroBureauOrdre`
+  encodes).
+- Backend build: **0 errors, 0 warnings**.
+- Backend unit tests: **145/145** (was 139; the delegation suite was rewritten and
+  extended, covering the colleague case explicitly).
+- `tsc --noEmit`: 0 errors. `eslint`: 0 errors, 0 warnings.
+- Cypress E2E: **98/98 across 12 specs**.
+- Database after the runs: 8 documents (all pre-existing, all attributed), 0 test
+  services, 0 test users, 0 delegations, 0 delegated actions, no orphans.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200`, web on `:3000`.
+- A delegation now reaches exactly the folders entrusted to the agent it replaces.
+- **Note for future work:** `GestionnaireUserId` is the hook for any future
+  per-user custody feature; the backfill only understands the "{userId}/{year}"
+  layout, so an import path that writes another shape into `NumeroBureauOrdre`
+  would leave those rows unattributed (they then expose nothing through a
+  delegation, which is the safe default).
+
+---
+
+## [2026-09-22 02:36] - Equipment Register Aligned with the Reference Project
+
+### 1. Context & Objective
+- Align « Gestion des équipements » with the reference project
+  (`Stage-de-projet-license-dans-cour-d-appele-administratif-de-fes-main`): the
+  **fields that are entered** and the **treatment** must behave identically.
+- The reference collects exactly five things — `Série` (unique), `Informations
+  supplémentaires`, `Type`, `État`, `Service` — where `Type` and `État` are
+  drop-downs fed by managed lists and `Service` comes from the live service
+  catalogue. Its treatment is Charger / Décharger with a discharge date.
+- Our register instead carried three extra free-text fields (`Code`,
+  `NumeroInventaire`, `Bureau`), had `Type`/`État` as unconstrained text inputs,
+  and drove the charge state with a single `toggle-charge` switch.
+- Per user decision: remove the three extra fields outright, and make
+  `Type`/`État` managed lists like the reference.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `WebApplication1/WebApplication1/Models/Equipment.cs` - dropped
+  `Code`, `NumeroInventaire`, `Bureau`; added `AdditionalInfo`; documented that
+  the charge state is never part of entry.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Controllers/EquipmentController.cs`
+  - removed `toggle-charge`; added `POST {id}/charger`, `POST {id}/decharger`
+    (optional date, defaults to now) and `GET /api/Equipment/lists`; shared
+    `ValidateAsync` entry-rule check; `Update` no longer touches the charge state.
+- `[MODIFIED]` `WebApplication1/WebApplication1/data/AppDbContext.cs` - removed
+  the now-dead unique index on `NumeroInventaire`.
+- `[MODIFIED]` `WebApplication1/WebApplication1/Services/SeederService.cs` - added
+  step 8: insert-if-missing seed of `types_equipement` and `etats_equipement`
+  (4 entries each, FR + AR, numeric codes).
+- `[CREATED]` `WebApplication1/WebApplication1/Migrations/20260922022154_AlignEquipmentFieldsWithReference.cs`
+  (+ `.Designer.cs`, snapshot update) - drops the three columns, adds
+  `AdditionalInfo`.
+- `[MODIFIED]` `frontend-juridique/app/components/admin/GestionEquipements.tsx` -
+  rewritten to the reference field set and treatment.
+- `[MODIFIED]` `frontend-juridique/app/types/index.ts` - `EquipmentItem` reshaped.
+- `[MODIFIED]` `frontend-juridique/lib/translations.ts` - added
+  `informationsSupplementaires`, `dateDecharge`, `uniquementDecharges`,
+  `reinitialiser`, `equipementCharge`, `equipementDecharge` (FR + AR); removed the
+  now-unused `bureau` key.
+- `[MODIFIED]` `frontend-juridique/app/components/layout/Sidebar.tsx` - added
+  `data-testid="nav-equipements"`.
+- `[MODIFIED]` `frontend-juridique/lib/types/api.generated.ts` - regenerated.
+- `[CREATED]` `frontend-juridique/cypress/e2e/equipment-register.cy.ts` - 10 tests.
+- `[MODIFIED]` `README.md` - equipment feature bullet, spec counts (108/13, total 253).
+
+### 3. Key Technical & Architectural Decisions
+- **EF inferred a rename; it was overridden.** Scaffolding produced
+  `RenameColumn Bureau -> AdditionalInfo`, which would have carried a "Bureau"
+  value into a field that means something else. The migration was edited to drop
+  `Bureau` and add `AdditionalInfo` empty instead.
+- **Both lists number their rows "1".."4".** A label lookup keyed on the code
+  alone would therefore be ambiguous between `types_equipement` and
+  `etats_equipement`; every resolution is scoped to its list name (the shared
+  `useListItems.getLabel` is deliberately not used for these two fields).
+- **Legacy values keep displaying.** The reference's fields are stricter than
+  what the old form stored, so `labelFor` falls back to the raw stored code, and
+  `withCurrent` injects the current value as an option when it is absent from the
+  list — an edit can never silently blank a pre-existing value.
+- **No hardcoded service list.** The `Service` select reads the live RBAC catalog
+  via `useServiceLabels().rbacMap`; the previous `SERVICE_GROUPS` usage in this
+  component is gone.
+- **Uniqueness is app-level, deliberately.** A DB unique index on `Serial` would
+  hard-fail startup on a database that already contains duplicates; the entry
+  rule is enforced in `ValidateAsync` (on create *and* on edit, the latter
+  excluding the row's own id) instead.
+- **The charge state is not editable.** `Update` intentionally ignores it, so
+  editing an item cannot re-charge it; only charger/décharger change it.
+- **An explicit `{}` body is sent** on charger/décharger: the discharge endpoint
+  accepts an optional date, and an empty body would be rejected before it could
+  default to now.
+
+### 4. Verification & Test Results
+- Live API run against the running backend: **36/36** — the five entry fields
+  persist, retired fields are absent from the payload, a new item is charged with
+  no discharge date, décharger stamps the date, charger clears it, an explicit
+  date is honoured, duplicate serial → 409, missing type/service/blank serial →
+  400, editing onto another serial → 409, editing keeps the charge state, and the
+  register is restored to baseline afterwards.
+- Backend build: 0 errors, 0 warnings. `dotnet test`: **145/145**.
+- `tsc --noEmit`: 0 errors. `eslint`: 0 errors, 0 warnings.
+- Cypress E2E: **108/108 across 13 specs** (10 new in `equipment-register.cy.ts`,
+  the previous 98 unchanged — the existing equipment references were nav-label
+  assertions only, so none needed updating).
+- Database after the runs: 1 equipment row (the pre-existing one), 4 + 4 list
+  entries, no test leftovers.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200`, web on `:3000`.
+- Migration applied: the `Equipment` table is now `Id, Serial, Type, Etat,
+  Service, EstCharge, DateDechargement, DateCreation, AdditionalInfo`.
+- **Data note:** the one pre-existing equipment row still holds free-text values
+  from the old form (`Type = "achine"`, `Etat = "nouveau"`) that are not valid
+  list codes. It keeps displaying and stays editable, but those two fields should
+  be re-selected from the new drop-downs when the row is next touched.
+- **List ownership:** `types_equipement` / `etats_equipement` are managed from
+  « Listes dynamiques »; the seeded four are starting points, not fixed values.
+
+---
+
+## [2026-09-22 03:15] - Equipment Import/Export, In-Register List Management & Legacy Row Repair
+
+### 1. Context & Objective
+- Follow-up to the equipment alignment: add the Excel import/export the reference
+  project has, make the two equipment lists editable without a separate
+  administration page, and repair the one pre-existing row whose Type/État were
+  free text from the retired form.
+- Two findings made this more than an addition:
+  1. **`GestionListes` was dead code** — mounted nowhere. It still existed, but
+     the admin's « Listes dynamiques » tab had been removed, so the equipment
+     lists had *no* management UI at all, and the register could not be
+     configured. Reviving it scoped to these two lists was better than writing a
+     second editor.
+  2. **The register's export was unreachable.** No service has
+     `gerer_equipements`, so only the admin reaches the tab — and the admin's
+     `export_excel` / `export_word` are overridden **off** by design. The export
+     buttons therefore rendered nothing for the only role that can open the
+     screen.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `frontend-juridique/app/components/admin/GestionListes.tsx` -
+  added optional `categories` (restrict the panel to a subset) and
+  `onListsChanged` (let an embedding screen refresh); exported `LIST_CATEGORIES`.
+- `[CREATED]` `frontend-juridique/app/components/admin/EquipmentImport.tsx` -
+  header detection, column mapping, label/code resolution, per-line errors;
+  exports the shared `Option` type.
+- `[MODIFIED]` `frontend-juridique/lib/exportImport.ts` - added two generic
+  helpers, `readSheetRows` (grid as-is, no header interpretation) and
+  `downloadSheet`. `importFromFile` is left alone: it is shaped for the document
+  template, whose header row sits below a six-line preamble.
+- `[MODIFIED]` `frontend-juridique/app/hooks/useListItems.ts` - added `reload()`.
+- `[MODIFIED]` `frontend-juridique/app/components/common/ExportButtons.tsx` -
+  added optional `permissionKeys` so a self-gated screen can name its own
+  permission; added `data-testid`s.
+- `[MODIFIED]` `frontend-juridique/app/components/admin/GestionEquipements.tsx` -
+  export now resolves Type/État/Service labels and exports what the filters
+  select; import panel; embedded list manager; dropped the `onExport` prop.
+- `[MODIFIED]` `frontend-juridique/app/page.tsx` - dropped the now-unused
+  `onExport` prop and the dead `equipements` branch of `exportAdminData`.
+- `[MODIFIED]` `frontend-juridique/lib/translations.ts` - 16 new equipment
+  import/list keys (FR + AR) plus a function key `importTermine`.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/equipment-register.cy.ts` - 10 → 14
+  tests (list lifecycle; import; export pipeline; list-manager scoping).
+- `[MODIFIED]` `README.md` - counts and the equipment feature description.
+- `[DATA]` `Equipment` row id 1 - corrected in place (see §4).
+
+### 3. Key Technical & Architectural Decisions
+- **Export is gated on `gerer_equipements`, not on `export_excel`.** The global
+  export permissions are deliberately overridden off for the admin, which would
+  have left the buttons permanently invisible: nobody else can open the register.
+  Exporting the stock list is part of managing it, and this grants nothing new —
+  `gerer_equipements` is already required to see the screen at all. Made explicit
+  via `ExportButtons permissionKeys` rather than by bypassing the component, and
+  **reversible in one line** if the admin-only export restriction is preferred.
+- **Import writes stay on the screen's own permission.** Each row is POSTed to
+  the existing `/api/Equipment`, whose `[RequirePermission("gerer_equipements")]`
+  is the real gate — the mapping panel is convenience, not authority.
+- **Imports run sequentially.** The register's uniqueness rule is enforced by the
+  backend in `ValidateAsync`; parallel POSTs would race it on duplicate serials.
+- **The sheet's header row is detected, not assumed.** Our own export carries the
+  institutional preamble while the downloadable template starts at row 1, so the
+  reader returns the raw grid and the component scores the first rows to find the
+  header (≥2 recognised labels), with a manual override. Columns are then mapped
+  automatically and remappable.
+- **Both list values are accepted.** A cell resolves as a code *or* as a label in
+  either language, so a file built from the template (labels) and one built from
+  our export (labels, same thing) both import; an unresolvable value is a
+  reported line error, never a silent skip.
+- **CSV values are quoted** in the spec, so a label containing a separator cannot
+  break the fixture.
+- **EF inferred a rename; overridden.** (Unchanged from the previous entry.) The
+  migration drops `Bureau` and adds `AdditionalInfo` empty.
+- **The spec no longer pins the list sizes to exactly 4** — it asserts the seeded
+  entries are present, so an administrator adding a Type does not fail the suite.
+
+### 4. Verification & Test Results
+- **Legacy row repaired** (`Equipment` id 1), through the API so it passed
+  validation — before → after:
+  - `Type`: `"achine"` → `"4"` (Autre)
+  - `Etat`: `"nouveau"` → `"1"` (Neuf)
+  - `Service`: `"BureauOrdre"` → `"bureauordre"` (the live catalogue code)
+  - `AdditionalInfo`: `null` → `"Ancien type saisi : achine"` — the original text
+    is preserved rather than discarded, and the field is editable in one click.
+- Backend build: 0 errors, 0 warnings. `dotnet test`: **145/145**.
+- `tsc --noEmit`: 0 errors. `eslint`: 0 errors, 0 warnings.
+- Cypress E2E: **112/112 across 13 specs** — including `equipment-register.cy.ts`
+  at 14/14 (the full list lifecycle add→rename→deactivate→delete; a CSV import
+  asserting 1 imported + 1 rejected with its line number; the export pipeline
+  producing a blob; and the list manager scoped to the two equipment lists only).
+  The previously green suites are unchanged: `app.cy.ts` 35, `permission-toggle`
+  27, `dynamic-service-transfer` 9, `delegation-and-retrait` 4,
+  `workflow-pipeline` 4, and the rest.
+- Database after the runs: 1 equipment row (the repaired one), 4 + 4 list
+  entries, **0** leftover `verif*` test entries, 8 documents untouched.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200`, web on `:3000`.
+- The register is now self-contained: entry, treatment, lists, import, export.
+- **Pending / worth knowing:**
+  - The equipment export permission choice (§3) is the one judgement call here
+    that changes a security-relevant default; flip `permissionKeys` in
+    `GestionEquipements.tsx` back to the global permissions if the admin-only
+    export restriction should stand.
+  - `GestionListes` is now reachable, but only through the equipment register and
+    only for the two equipment lists. The other eight categories in
+    `LIST_CATEGORIES` still have no screen — they were orphaned when the admin tab
+    was removed. Reviving them is a separate decision.
+  - Import reads `.xlsx`, `.xls` and `.csv`; `.doc`/`.docx` are not supported for
+    this register (they are for documents, via `importFromFile`).
+

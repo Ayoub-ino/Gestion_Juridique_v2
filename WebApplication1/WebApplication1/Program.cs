@@ -72,6 +72,7 @@ builder.Services.AddScoped<WebApplication1.Services.TransactionService>();
 builder.Services.AddScoped<WebApplication1.Services.WorkspaceService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentAccessService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentCloneService>();
+builder.Services.AddScoped<WebApplication1.Services.SubstitutionService>();
 
 var app = builder.Build();
 
@@ -122,6 +123,14 @@ using (var scope = app.Services.CreateScope())
     var repairedHandovers = await accessService.RepairUnansweredHandoversAsync();
     if (repairedHandovers > 0)
         Console.WriteLine($"{repairedHandovers} dossier(s) remis au service expediteur (transferts sans reponse).");
+
+    // Folders created before Document.GestionnaireUserId existed are attributed to
+    // the agent whose id their N° de bureau already encodes, so an absence
+    // delegation reaches existing folders too. Idempotent: 0 rows once resolved.
+    var substitutionService = scope.ServiceProvider.GetRequiredService<SubstitutionService>();
+    var attributedFolders = await substitutionService.BackfillDocumentCustodiansAsync();
+    if (attributedFolders > 0)
+        Console.WriteLine($"{attributedFolders} dossier(s) attribues a leur agent responsable.");
 }
 
 app.Run();

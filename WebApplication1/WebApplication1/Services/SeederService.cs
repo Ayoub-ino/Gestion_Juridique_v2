@@ -402,6 +402,41 @@ namespace WebApplication1.Services
                     _context.SaveChanges();
                     Console.WriteLine($"Tribunaux créés ({tribunaux.Count}).");
                 }
+
+                // --- 8. Seed the equipment lists (Type / État of « Gestion des équipements ») ---
+                // Same insert-if-missing contract as above: these are starting
+                // points the administrator renames or extends from
+                // « Listes dynamiques », never values forced back onto them.
+                // Codes stay numeric so the register's stored codes stay stable
+                // when a label is reworded.
+                _context.ChangeTracker.Clear();
+                if (!_context.ListItems.Any(li => li.ListName == "types_equipement"))
+                {
+                    var typesEquipement = new List<ListItem>
+                    {
+                        new ListItem { ListName = "types_equipement", Code = "1", ValueFr = "Ordinateur", ValueAr = "حاسوب", DisplayOrder = 10 },
+                        new ListItem { ListName = "types_equipement", Code = "2", ValueFr = "Imprimante", ValueAr = "طابعة", DisplayOrder = 20 },
+                        new ListItem { ListName = "types_equipement", Code = "3", ValueFr = "Mobilier", ValueAr = "أثاث", DisplayOrder = 30 },
+                        new ListItem { ListName = "types_equipement", Code = "4", ValueFr = "Autre", ValueAr = "أخرى", DisplayOrder = 40 }
+                    };
+                    _context.ListItems.AddRange(typesEquipement);
+                    _context.SaveChanges();
+                    Console.WriteLine($"Types d'équipement créés ({typesEquipement.Count}).");
+                }
+
+                if (!_context.ListItems.Any(li => li.ListName == "etats_equipement"))
+                {
+                    var etatsEquipement = new List<ListItem>
+                    {
+                        new ListItem { ListName = "etats_equipement", Code = "1", ValueFr = "Neuf", ValueAr = "جديد", DisplayOrder = 10 },
+                        new ListItem { ListName = "etats_equipement", Code = "2", ValueFr = "Bon état", ValueAr = "حالة جيدة", DisplayOrder = 20 },
+                        new ListItem { ListName = "etats_equipement", Code = "3", ValueFr = "En panne", ValueAr = "معطل", DisplayOrder = 30 },
+                        new ListItem { ListName = "etats_equipement", Code = "4", ValueFr = "Réformé", ValueAr = "مستبعد", DisplayOrder = 40 }
+                    };
+                    _context.ListItems.AddRange(etatsEquipement);
+                    _context.SaveChanges();
+                    Console.WriteLine($"États d'équipement créés ({etatsEquipement.Count}).");
+                }
         }
     }
 }

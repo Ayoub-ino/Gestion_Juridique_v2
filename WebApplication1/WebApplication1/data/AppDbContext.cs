@@ -20,6 +20,7 @@ namespace WebApplication1.Data
         public DbSet<Equipment> Equipment { get; set; }
         public DbSet<ListItem> ListItems { get; set; }
         public DbSet<Substitute> Substitutes { get; set; }
+        public DbSet<SubstitutionAction> SubstitutionActions { get; set; }
         public DbSet<Retrait> Retraits { get; set; }
         public DbSet<DocumentNote> DocumentNotes { get; set; }
         public DbSet<DocumentModification> DocumentModifications { get; set; }
@@ -68,12 +69,6 @@ namespace WebApplication1.Data
                 .WithMany()
                 .HasForeignKey(u => u.ServiceId)
                 .OnDelete(DeleteBehavior.SetNull);
-
-            // Equipment: unique NumeroInventaire
-            modelBuilder.Entity<Equipment>()
-                .HasIndex(e => e.NumeroInventaire)
-                .IsUnique()
-                .HasFilter("[NumeroInventaire] IS NOT NULL");
 
             // Transaction: TargetUserId FK
             modelBuilder.Entity<Transaction>()

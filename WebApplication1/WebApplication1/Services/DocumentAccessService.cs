@@ -13,10 +13,12 @@ namespace WebApplication1.Services
     public class DocumentAccessService
     {
         private readonly AppDbContext _context;
+        private readonly SubstitutionService _substitutions;
 
-        public DocumentAccessService(AppDbContext context)
+        public DocumentAccessService(AppDbContext context, SubstitutionService substitutions)
         {
             _context = context;
+            _substitutions = substitutions;
         }
 
         /// <summary>
@@ -81,10 +83,44 @@ namespace WebApplication1.Services
             // Admin-like roles bypass ACL (they can modify any document)
             if (IsAdminLike(user)) return true;
 
-            var serviceCode = NormalizeServiceCode(user.Service ?? "");
-            if (string.IsNullOrEmpty(serviceCode)) return false;
+            var ownCode = NormalizeServiceCode(user.Service ?? "");
+            if (!string.IsNullOrEmpty(ownCode)
+                && await HasAccessAsync(documentId, ownCode, requiredLevel))
+            {
+                return true;
+            }
 
-            return await HasAccessAsync(documentId, serviceCode, requiredLevel);
+            // A substitute is checked against the absent agent's service — but only
+            // for the folder that agent is actually entrusted with, so a delegation
+            // never widens into "everything my colleague's service holds".
+            var custodianCode = await ResolveCoveredAgentServiceCodeAsync(documentId, userId);
+            if (custodianCode != null
+                && await HasAccessAsync(documentId, custodianCode, requiredLevel))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// When the given user is substituting for the agent entrusted with
+        /// <paramref name="documentId"/>, returns that agent's service code.
+        /// Null when no delegation gives the caller a claim on this document.
+        /// </summary>
+        private async Task<string?> ResolveCoveredAgentServiceCodeAsync(int documentId, int userId)
+        {
+            var custodianUserId = await _context.Documents
+                .Where(d => d.Id == documentId)
+                .Select(d => d.GestionnaireUserId)
+                .FirstOrDefaultAsync();
+
+            if (custodianUserId is not int custodian) return null;
+            if (!_substitutions.IsSubstitutingFor(userId, custodian)) return null;
+
+            var covered = await _context.Utilisateurs.FindAsync(custodian);
+            var code = NormalizeServiceCode(covered?.Service ?? "");
+            return string.IsNullOrEmpty(code) ? null : code;
         }
 
         /// <summary>
@@ -375,11 +411,19 @@ namespace WebApplication1.Services
             // Admin-like roles bypass custody (system managers)
             if (IsAdminLike(user)) return true;
 
-            var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
-            if (string.IsNullOrEmpty(userServiceCode)) return false;
-
             var custodyServiceCode = ServiceMapper.ResolveDocumentServiceCode(document);
-            return userServiceCode == custodyServiceCode;
+            if (string.IsNullOrEmpty(custodyServiceCode)) return false;
+
+            // The caller's own service holds the folder.
+            if (NormalizeServiceCode(user.Service ?? "") == custodyServiceCode) return true;
+
+            // A substitute may act only on the folders entrusted to the agent they
+            // replace, and only while those folders still sit in that agent's service.
+            if (document.GestionnaireUserId is not int custodian) return false;
+            if (!_substitutions.IsSubstitutingFor(userId, custodian)) return false;
+
+            var covered = _context.Utilisateurs.Find(custodian);
+            return NormalizeServiceCode(covered?.Service ?? "") == custodyServiceCode;
         }
 
         /// <summary>

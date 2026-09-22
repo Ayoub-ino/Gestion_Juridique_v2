@@ -117,6 +117,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/Auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/CourrierAdmin": {
         parameters: {
             query?: never;
@@ -666,7 +699,24 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -816,6 +866,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/Documents/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Documents/permanent-delete-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": (number | string)[];
+                    "text/json": (number | string)[];
+                    "application/*+json": (number | string)[];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/Equipment": {
         parameters: {
             query?: never;
@@ -951,7 +1075,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/Equipment/{id}/toggle-charge": {
+    "/api/Equipment/lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Equipment/{id}/charger": {
         parameters: {
             query?: never;
             header?: never;
@@ -959,7 +1116,8 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: {
+        put?: never;
+        post: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -979,7 +1137,47 @@ export interface paths {
                 };
             };
         };
-        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Equipment/{id}/decharger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["DechargerDto"];
+                    "text/json": null | components["schemas"]["DechargerDto"];
+                    "application/*+json": null | components["schemas"]["DechargerDto"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1110,6 +1308,41 @@ export interface paths {
         trace?: never;
     };
     "/api/FileUpload/{storedName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    storedName: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/FileUpload/download/{storedName}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1691,7 +1924,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    includeInactive?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1817,6 +2052,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rbac/services/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rbac/services/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/Retrait/document/{documentId}": {
         parameters: {
             query?: never;
@@ -1902,6 +2207,39 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Retrait/authorities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2250,6 +2588,76 @@ export interface paths {
         trace?: never;
     };
     "/api/Substitutes/history/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Substitutes/covering/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Substitutes/actions/{userId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2881,6 +3289,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/Users/actifs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/Users/{id}": {
         parameters: {
             query?: never;
@@ -2995,6 +3436,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/Users/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/Workspace/document/{id}": {
         parameters: {
             query?: never;
@@ -3049,6 +3525,135 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Workspace/document/{id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["GrantAccessDto"];
+                    "text/json": components["schemas"]["GrantAccessDto"];
+                    "application/*+json": components["schemas"]["GrantAccessDto"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Workspace/document/{id}/access/{serviceCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number | string;
+                    serviceCode: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/Workspace/document/backfill-acl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3224,7 +3829,7 @@ export interface components {
             donneesJson?: null | string;
         };
         AddNoteDto: {
-            contenu?: string;
+            contenu: string;
         };
         AdminPermissionUpdateDto: {
             permissionKey?: string;
@@ -3240,14 +3845,22 @@ export interface components {
             commentaire?: null | string;
         };
         CourrierAdminDto: {
-            numeroOrdre?: string;
-            expediteur?: string;
-            objet?: string;
+            numeroReference?: null | string;
+            numeroOrdre?: null | string;
+            objet: string;
+            numeroBureauOrdre?: null | string;
+            expediteur?: null | string;
+            source?: null | string;
+            /** Format: date-time */
+            dateArrivee?: null | string;
+            /** Format: date-time */
+            dateMessage?: null | string;
+            etat?: null | string;
+            notes?: null | string;
             /** Format: date-time */
             dateReception?: null | string;
             typeCircuit?: null | string;
             filePath?: null | string;
-            numeroReference?: null | string;
             transmissible?: boolean;
             modeTraitement?: null | string;
             serviceDestinataire?: null | string;
@@ -3263,6 +3876,7 @@ export interface components {
             /** Format: date-time */
             dateCreation?: string;
             serviceActuel?: null | string;
+            serviceActuelCode?: null | string;
             statutActuel?: null | string;
             filePath?: null | string;
             source?: null | string;
@@ -3273,7 +3887,7 @@ export interface components {
         };
         CreateDossierJuridiqueDto: {
             reference?: null | string;
-            objet?: null | string;
+            objet: null | string;
             provenance?: null | string;
             circuit?: null | string;
             typeCircuit?: null | string;
@@ -3292,19 +3906,22 @@ export interface components {
             numCourAppel?: null | string;
             conseillerRapporteur?: null | string;
             dateAudience?: null | string;
+            numeroPremiereInstance?: null | string;
+            typeDossier?: null | string;
+            linkedDocumentType?: null | string;
+            dossierLie?: boolean;
+            parentReference?: null | string;
         };
         CreateEquipmentDto: {
             serial?: string;
-            code?: string;
             type?: string;
             etat?: string;
             service?: string;
-            numeroInventaire?: null | string;
-            bureau?: null | string;
+            additionalInfo?: null | string;
         };
         CreateHistoricalServiceDto: {
-            nom?: string;
-            code?: string;
+            nom: string;
+            code: string;
             description?: null | string;
             /** Format: int32 */
             parentId?: null | number | string;
@@ -3316,6 +3933,7 @@ export interface components {
             documentId?: number | string;
             reference?: string;
             effectuePar?: string;
+            autoriteDemandeuse?: string;
             motifRetrait?: string;
             notes?: string;
             /** Format: date-time */
@@ -3325,20 +3943,24 @@ export interface components {
             serviceArchives?: string;
         };
         CreateServiceDto: {
-            nom?: string;
-            code?: string;
+            nom: string;
+            code: string;
             description?: null | string;
             /** Format: int32 */
             parentId?: null | number | string;
         };
         CreateUserDto: {
-            login?: string;
+            login: string;
             password?: string;
-            nom?: string;
+            nom: string;
             role?: null | string;
             service?: null | string;
             /** Format: int32 */
             serviceId?: null | number | string;
+        };
+        DechargerDto: {
+            /** Format: date-time */
+            dateDechargement?: null | string;
         };
         Document: {
             /** Format: int32 */
@@ -3348,12 +3970,18 @@ export interface components {
             /** Format: date-time */
             dateCreation?: string;
             serviceActuel?: components["schemas"]["ServiceTribunal"];
+            serviceActuelCode?: null | string;
             statutActuel?: components["schemas"]["StatutDossier"];
             transactions?: components["schemas"]["Transaction"][];
             numeroBureauOrdre?: string;
             objet?: string;
+            notes?: null | string;
             estSupprime?: boolean;
             filePath?: null | string;
+            /** Format: int32 */
+            copieDeDocumentId?: null | number | string;
+            /** Format: int32 */
+            gestionnaireUserId?: null | number | string;
         };
         ExcelImportRequest: {
             docType?: string;
@@ -3372,6 +4000,10 @@ export interface components {
             errorDetails?: string[];
             message?: string;
         };
+        GrantAccessDto: {
+            serviceCode?: string;
+            accessLevel?: string;
+        };
         /** Format: binary */
         IFormFile: string;
         ListItem: {
@@ -3386,8 +4018,8 @@ export interface components {
             isActive?: boolean;
         };
         LoginDto: {
-            login?: string;
-            password?: string;
+            login: string;
+            password: string;
         };
         MoveDto: {
             action?: string;
@@ -3408,6 +4040,9 @@ export interface components {
             parent?: null | components["schemas"]["Service"];
             children?: components["schemas"]["Service"][];
             servicePermissions?: components["schemas"]["ServicePermission"][];
+            isActive?: boolean;
+            /** Format: date-time */
+            deletedAt?: null | string;
         };
         ServiceInfo: {
             /** Format: int32 */
@@ -3432,14 +4067,15 @@ export interface components {
         ServiceTribunal: number;
         SortantDto: {
             destinataire?: string;
-            reference?: string;
-            objet?: string;
+            reference?: null | string;
+            objet: string;
             typeSortant?: string;
             /** Format: date-time */
             dateEnvoi?: null | string;
             numeroEnvoi?: null | string;
             tribunalOrigine?: null | string;
             tribunalDestination?: null | string;
+            notes?: null | string;
         };
         StatutDossier: number;
         StatutTransaction: number;
@@ -3477,16 +4113,21 @@ export interface components {
             targetUserId?: null | number | string;
             targetUser?: null | components["schemas"]["Utilisateur"];
             statutPrecedent?: null | components["schemas"]["StatutDossier"];
+            historicalServiceCode?: null | string;
+            serviceOrigineCode?: null | string;
+            serviceDestinationCode?: null | string;
         };
         TransferDto: {
             /** Format: int32 */
             documentId?: number | string;
-            documentType?: string;
-            serviceDestination?: string;
+            documentType: string;
+            serviceDestination: string;
             message?: null | string;
             doitRevenir?: boolean;
             /** Format: int32 */
             targetUserId?: null | number | string;
+            targetUserIds?: null | (number | string)[];
+            isHistoricalService?: null | boolean;
         };
         UpdateDocumentDto: {
             numeroOrdre?: null | string;
@@ -3505,16 +4146,14 @@ export interface components {
             destinataireExterne?: null | string;
             tribunalOrigine?: null | string;
             tribunalDestination?: null | string;
+            notes?: null | string;
         };
         UpdateEquipmentDto: {
             serial?: null | string;
-            code?: null | string;
             type?: null | string;
             etat?: null | string;
             service?: null | string;
-            numeroInventaire?: null | string;
-            bureau?: null | string;
-            estCharge?: null | boolean;
+            additionalInfo?: null | string;
         };
         UpdateHistoricalServiceDto: {
             nom?: null | string;

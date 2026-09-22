@@ -32,6 +32,7 @@ const TEST_REFERENCE_PREFIXES = [
 /** Service codes (and the logins of the users they own) created by the specs. */
 const TEST_SERVICE_CODE_PREFIXES = [
   "e2edyn",
+  "e2edlg",
   "test-archive-",
   "test-perm-delete-",
   "test-filter-",

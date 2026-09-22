@@ -19,11 +19,13 @@ namespace WebApplication1.Controllers
     {
         private readonly AppDbContext _context;
         private readonly WebApplication1.Services.DocumentAccessService _accessService;
+        private readonly WebApplication1.Services.SubstitutionService _substitutions;
 
-        public CourrierSortantController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService)
+        public CourrierSortantController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService, WebApplication1.Services.SubstitutionService substitutions)
         {
             _context = context;
             _accessService = accessService;
+            _substitutions = substitutions;
         }
 
         [HttpPost]
@@ -80,6 +82,8 @@ namespace WebApplication1.Controllers
                     StatutActuel = StatutDossier.Nouveau,
                     // N° de bureau — creator user id + year (system-assigned)
                     NumeroBureauOrdre = numeroBureauOrdre,
+                    // Entrusted to the agent who created it (see Document.GestionnaireUserId).
+                    GestionnaireUserId = userId,
                     DestinataireExterne = dto.Destinataire,
                     TypeSortant = dto.TypeSortant ?? "normal",
                     DateEnvoi = dto.DateEnvoi ?? DateTime.Now,
@@ -125,12 +129,12 @@ namespace WebApplication1.Controllers
                     // Scope by the dynamic RBAC service code so services created from the
                     // admin panel work without code changes. Legacy rows (no code stored)
                     // still match through their ServiceTribunal enum value.
-                    var userServiceCode = ServiceMapper.NormalizeServiceCode(user.Service);
-                    var hasLegacyEnum = ServiceMapper.TryMapToServiceEnum(user.Service, out var userServiceEnum);
-                    query = hasLegacyEnum
-                        ? query.Where(c => c.ServiceActuelCode == userServiceCode
-                            || (c.ServiceActuelCode == null && c.ServiceActuel == userServiceEnum))
-                        : query.Where(c => c.ServiceActuelCode == userServiceCode);
+                    // The caller's own service, plus the folders entrusted to any
+                    // agent they are substituting for — never a whole covered service.
+                    query = query.Where(SubstitutionService.BuildScopePredicate<CourrierSortant>(
+                        _substitutions.GetOwnServiceCode(userId),
+                        _substitutions.GetOwnServiceEnum(userId),
+                        _substitutions.GetCoveredUserIds(userId)));
                 }
             }
 

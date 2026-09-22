@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api/client";
 
 export interface ListItem {
@@ -16,6 +16,11 @@ export interface ListItem {
 export function useListItems(token: string | null, listName?: string) {
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  // Bumped by `reload` — lets a screen that edits the lists pull the new values
+  // into its own drop-downs without a page refresh.
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
     if (!token) return;
@@ -27,7 +32,7 @@ export function useListItems(token: string | null, listName?: string) {
       .then((data) => setItems(data.filter((i) => i.isActive)))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [token, listName]);
+  }, [token, listName, reloadKey]);
 
   const getLabel = (code: string, langue: "fr" | "ar") => {
     const item = items.find((i) => i.code === code);
@@ -45,5 +50,5 @@ export function useListItems(token: string | null, listName?: string) {
       }));
   };
 
-  return { items, loading, getLabel, getOptions };
+  return { items, loading, getLabel, getOptions, reload };
 }

@@ -18,11 +18,13 @@ namespace WebApplication1.Controllers
     {
         private readonly AppDbContext _context;
         private readonly DocumentAccessService _accessService;
+        private readonly SubstitutionService _substitutions;
 
-        public DocumentsController(AppDbContext context, DocumentAccessService accessService)
+        public DocumentsController(AppDbContext context, DocumentAccessService accessService, SubstitutionService substitutions)
         {
             _context = context;
             _accessService = accessService;
+            _substitutions = substitutions;
         }
 
         /// <summary>
@@ -32,24 +34,40 @@ namespace WebApplication1.Controllers
         /// This mirrors the service scoping already applied by the listing
         /// controllers, so a user's trash only contains what they deleted.
         /// </summary>
-        private async Task<(bool IsAdminLike, string? ServiceCode, ServiceTribunal? ServiceEnum)> ResolveScopeAsync()
+        private async Task<Scope> ResolveScopeAsync()
         {
             var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (!ServiceMapper.TryParseUserId(userIdStr, out var userId))
-                return (false, null, null);
+                return Scope.None;
 
             var user = await _context.Utilisateurs.FindAsync(userId);
-            if (user == null) return (false, null, null);
+            if (user == null) return Scope.None;
 
             var role = user.Role ?? "";
-            var isAdminLike = role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant";
+            if (role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant")
+                return Scope.Admin;
 
-            var code = ServiceMapper.NormalizeServiceCode(user.Service);
-            ServiceTribunal? serviceEnum = ServiceMapper.TryMapToServiceEnum(user.Service ?? "", out var mapped)
-                ? mapped
-                : null;
+            // The caller's own service, plus the folders entrusted to any agent they
+            // are substituting for — never the whole service of the absent agent.
+            return new Scope(
+                false,
+                _substitutions.GetOwnServiceCode(userId),
+                _substitutions.GetOwnServiceEnum(userId),
+                _substitutions.GetCoveredUserIds(userId));
+        }
 
-            return (isAdminLike, code, serviceEnum);
+        /// <summary>Visibility scope of a non-administrator caller.</summary>
+        private readonly record struct Scope(
+            bool IsAdminLike,
+            string? OwnServiceCode,
+            ServiceTribunal? OwnServiceEnum,
+            List<int> CoveredUserIds)
+        {
+            public static readonly Scope None =
+                new(false, null, null, new List<int>());
+
+            public static readonly Scope Admin =
+                new(true, null, null, new List<int>());
         }
 
         // SOFT DELETE - Suppression logique
@@ -105,23 +123,15 @@ namespace WebApplication1.Controllers
         /// Shared by the corbeille listing and "empty trash" so the visible
         /// rows and the purged rows can never drift apart.
         /// </summary>
-        private IQueryable<Document> ScopedCorbeilleQuery(
-            bool isAdminLike, string? serviceCode, ServiceTribunal? serviceEnum)
+        private IQueryable<Document> ScopedCorbeilleQuery(Scope scope)
         {
             var query = _context.Documents.Where(d => d.EstSupprime == true);
 
-            if (!isAdminLike && !string.IsNullOrEmpty(serviceCode))
+            if (!scope.IsAdminLike
+                && (scope.OwnServiceCode != null || scope.CoveredUserIds.Count > 0))
             {
-                var code = serviceCode;
-                if (serviceEnum is { } se)
-                {
-                    query = query.Where(d => d.ServiceActuelCode == code
-                        || (d.ServiceActuelCode == null && d.ServiceActuel == se));
-                }
-                else
-                {
-                    query = query.Where(d => d.ServiceActuelCode == code);
-                }
+                query = query.Where(SubstitutionService.BuildScopePredicate<Document>(
+                    scope.OwnServiceCode, scope.OwnServiceEnum, scope.CoveredUserIds));
             }
 
             return query;
@@ -133,7 +143,7 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> GetCorbeille()
         {
             var scope = await ResolveScopeAsync();
-            var query = ScopedCorbeilleQuery(scope.IsAdminLike, scope.ServiceCode, scope.ServiceEnum);
+            var query = ScopedCorbeilleQuery(scope);
 
             var docs = await query
                 .OrderByDescending(d => d.DateCreation)
@@ -188,7 +198,7 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> EmptyCorbeille()
         {
             var scope = await ResolveScopeAsync();
-            var documents = await ScopedCorbeilleQuery(scope.IsAdminLike, scope.ServiceCode, scope.ServiceEnum)
+            var documents = await ScopedCorbeilleQuery(scope)
                 .ToListAsync();
 
             var count = await PurgeDocumentsAsync(documents);
@@ -225,6 +235,10 @@ namespace WebApplication1.Controllers
             document.ServiceActuelCode = DocumentAccessService.ServiceTribunalToRbacCode(ServiceTribunal.Archive);
             document.StatutActuel = StatutDossier.Archive;
             await _context.SaveChangesAsync();
+
+            if (ServiceMapper.TryParseUserId(userIdClaim, out var archivedBy))
+                await _substitutions.LogDelegatedActionAsync(archivedBy, "Archivage", document.Id, document.NumeroReference);
+
             return Ok(new { message = "Document archivé avec succès" });
         }
 

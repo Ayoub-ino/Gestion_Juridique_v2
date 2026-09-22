@@ -21,12 +21,14 @@ namespace WebApplication1.Controllers
         private readonly AppDbContext _context;
         private readonly DocumentAccessService _accessService;
         private readonly ServiceCatalog _serviceCatalog;
+        private readonly WebApplication1.Services.SubstitutionService _substitutions;
 
-        public CourrierAdminController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog)
+        public CourrierAdminController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog, WebApplication1.Services.SubstitutionService substitutions)
         {
             _context = context;
             _accessService = accessService;
             _serviceCatalog = serviceCatalog;
+            _substitutions = substitutions;
         }
 
         // ========== 1. LISTER LES COURRIERS ADMIN ==========
@@ -51,12 +53,12 @@ namespace WebApplication1.Controllers
                 // Scope by the dynamic RBAC service code so services created from the
                 // admin panel work without code changes. Legacy rows (no code stored)
                 // still match through their ServiceTribunal enum value.
-                var userServiceCode = ServiceMapper.NormalizeServiceCode(userService);
-                var hasLegacyEnum = ServiceMapper.TryMapToServiceEnum(userService, out var userServiceEnum);
-                query = hasLegacyEnum
-                    ? query.Where(c => c.ServiceActuelCode == userServiceCode
-                        || (c.ServiceActuelCode == null && c.ServiceActuel == userServiceEnum))
-                    : query.Where(c => c.ServiceActuelCode == userServiceCode);
+                // The caller's own service, plus the folders entrusted to any agent
+                // they are substituting for — never a whole covered service.
+                query = query.Where(SubstitutionService.BuildScopePredicate<CourrierAdministratif>(
+                    _substitutions.GetOwnServiceCode(userId),
+                    _substitutions.GetOwnServiceEnum(userId),
+                    _substitutions.GetCoveredUserIds(userId)));
             }
 
             var courriers = await query
@@ -147,6 +149,9 @@ namespace WebApplication1.Controllers
                     ServiceActuelCode = creatorServiceCode,
                     StatutActuel = StatutDossier.Nouveau,
                     NumeroBureauOrdre = numeroBureauOrdre,
+                    // Entrusted to the agent who created it; a substitute only reaches
+                    // the folders entrusted to the agent they replace.
+                    GestionnaireUserId = creatorUserId,
                     Transmissible = dto.Transmissible,
                     Source = dto.Source,
                     DateMessage = dto.DateMessage,
