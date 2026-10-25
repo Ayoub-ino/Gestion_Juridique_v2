@@ -7,13 +7,19 @@
 //   Notes (full width)
 // `Service` (creator's originating service) and `N° Bureau d'ordre`
 // (creator user id + year) are system-assigned and rendered read-only.
+//
+// Which of those fields is shown, its label, and whether it is required all come
+// from « Gestion des champs » (see useCourrierFields) — never from this file.
 
 "use client";
 
 import type { TranslationKeys } from "@/lib/translations";
+
 import { useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { useCourrierFields } from "@/app/hooks/useCourrierFields";
+import { CustomFieldInputs } from "@/app/components/forms/CustomFieldInputs";
 
 interface SortantFormProps {
   destinataire: string;
@@ -28,6 +34,9 @@ interface SortantFormProps {
   fichier: File | null;
   setFichier: (f: File | null) => void;
   langue: "fr" | "ar";
+  /** Values of the fields the administrator added. */
+  customValues: Record<string, string>;
+  onCustomChange: (key: string, value: string) => void;
 }
 
 export function SortantForm({
@@ -42,11 +51,16 @@ export function SortantForm({
   setNotes,
   fichier,
   setFichier,
-  langue
+  langue,
+  customValues,
+  onCustomChange
 }: SortantFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuth();
   const { getServiceLabel } = useServiceLabels(token, langue);
+
+  // Field set, order, labels and required flags — read from the database.
+  const F = useCourrierFields(token, "sortant", langue);
 
   // ── System-assigned values ──
   const annee = new Date().getFullYear();
@@ -70,113 +84,141 @@ export function SortantForm({
     <div className="space-y-4">
       {/* ===== LIGNE 1 : N° bureau · Service · Destinataire · Objet · Date ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-        <div>
-          <label htmlFor="sortant-bo" className={labelClass}>{cur.numeroBureau}</label>
-          <input
-            id="sortant-bo"
-            type="text"
-            value={user?.id ?? ""}
-            readOnly
-            aria-readonly="true"
-            placeholder="15"
-            className={readonlyClass}
-          />
-          <p className="text-[10px] text-slate-400 mt-1 text-end">
-            {annee} / {cur.autoYearSuffix}
-          </p>
-        </div>
+        {F.show("numeroBureau") && (
+          <div>
+            <label htmlFor="sortant-bo" className={labelClass}>{F.label("numeroBureau", cur.numeroBureau)}</label>
+            <input
+              id="sortant-bo"
+              type="text"
+              value={user?.id ?? ""}
+              readOnly
+              aria-readonly="true"
+              placeholder="15"
+              className={readonlyClass}
+            />
+            <p className="text-[10px] text-slate-400 mt-1 text-end">
+              {annee} / {cur.autoYearSuffix}
+            </p>
+          </div>
+        )}
 
-        <div>
-          <label htmlFor="sortant-service" className={labelClass}>
-            {cur.service} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="sortant-service"
-            type="text"
-            value={serviceLabel}
-            readOnly
-            aria-readonly="true"
-            className={readonlyClass}
-          />
-        </div>
+        {F.show("service") && (
+          <div>
+            <label htmlFor="sortant-service" className={labelClass}>
+              {F.label("service", cur.service)}{" "}
+              {F.required("service") && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="sortant-service"
+              type="text"
+              value={serviceLabel}
+              readOnly
+              aria-readonly="true"
+              className={readonlyClass}
+            />
+          </div>
+        )}
 
-        <div>
-          <label htmlFor="sortant-destinataire" className={labelClass}>{cur.destinataireLabel}</label>
-          <input
-            id="sortant-destinataire"
-            type="text"
-            value={destinataire}
-            onChange={(e) => setDestinataire(e.target.value)}
-            placeholder={`-- ${cur.choisirService} --`}
-            className={fieldClass}
-          />
-        </div>
+        {F.show("destinataire") && (
+          <div>
+            <label htmlFor="sortant-destinataire" className={labelClass}>
+              {F.label("destinataire", cur.destinataireLabel)}{" "}
+              {F.required("destinataire") && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="sortant-destinataire"
+              type="text"
+              value={destinataire}
+              onChange={(e) => setDestinataire(e.target.value)}
+              placeholder={`-- ${cur.choisirService} --`}
+              required={F.required("destinataire")}
+              className={fieldClass}
+            />
+          </div>
+        )}
 
-        <div>
-          <label htmlFor="sortant-objet" className={labelClass}>
-            {cur.objetLabel} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="sortant-objet"
-            type="text"
-            value={objet}
-            onChange={(e) => setObjet(e.target.value)}
-            className={fieldClass}
-            required
-          />
-        </div>
+        {F.show("objet") && (
+          <div>
+            <label htmlFor="sortant-objet" className={labelClass}>
+              {F.label("objet", cur.objetLabel)}{" "}
+              {F.required("objet") && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="sortant-objet"
+              type="text"
+              value={objet}
+              onChange={(e) => setObjet(e.target.value)}
+              className={fieldClass}
+              required={F.required("objet")}
+            />
+          </div>
+        )}
 
-        <div>
-          <label htmlFor="sortant-date-envoi" className={labelClass}>
-            {cur.tblDate} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="sortant-date-envoi"
-            type="date"
-            value={dateEnvoi}
-            onChange={(e) => setDateEnvoi(e.target.value)}
-            className={fieldClass}
-            required
-          />
-        </div>
+        {F.show("dateEnvoi") && (
+          <div>
+            <label htmlFor="sortant-date-envoi" className={labelClass}>
+              {F.label("dateEnvoi", cur.tblDate)}{" "}
+              {F.required("dateEnvoi") && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="sortant-date-envoi"
+              type="date"
+              value={dateEnvoi}
+              onChange={(e) => setDateEnvoi(e.target.value)}
+              className={fieldClass}
+              required={F.required("dateEnvoi")}
+            />
+          </div>
+        )}
       </div>
 
       {/* ===== LIGNE 2 : Document PDF / Word (pleine largeur) ===== */}
-      <div>
-        <label htmlFor="sortant-fichier" className={labelClass}>{cur.documentPdfWord}</label>
-        <div className="flex items-center gap-3">
-          <div
-            className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
-            title={fichier?.name}
-          >
-            {fichier ? fichier.name : cur.aucunFichier}
+      {F.show("document") && (
+        <div>
+          <label htmlFor="sortant-fichier" className={labelClass}>{F.label("document", cur.documentPdfWord)}</label>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
+              title={fichier?.name}
+            >
+              {fichier ? fichier.name : cur.aucunFichier}
+            </div>
+            <label className="cursor-pointer whitespace-nowrap border border-slate-300 rounded-lg px-6 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition">
+              {cur.choisirFichier}
+              <input
+                id="sortant-fichier"
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
           </div>
-          <label className="cursor-pointer whitespace-nowrap border border-slate-300 rounded-lg px-6 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition">
-            {cur.choisirFichier}
-            <input
-              id="sortant-fichier"
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-          </label>
         </div>
-      </div>
+      )}
 
       {/* ===== LIGNE 3 : Notes (pleine largeur) ===== */}
-      <div>
-        <label htmlFor="sortant-notes" className={labelClass}>{cur.notes}</label>
-        <textarea
-          id="sortant-notes"
-          rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder={cur.commentaire}
-          className={fieldClass}
-        />
-      </div>
+      {F.show("notes") && (
+        <div>
+          <label htmlFor="sortant-notes" className={labelClass}>{F.label("notes", cur.notes)}</label>
+          <textarea
+            id="sortant-notes"
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={cur.commentaire}
+            className={fieldClass}
+          />
+        </div>
+      )}
+
+      <CustomFieldInputs
+        fields={F.customFields}
+        values={customValues}
+        onChange={onCustomChange}
+        langue={langue}
+      />
     </div>
   );
 }

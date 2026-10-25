@@ -28,6 +28,9 @@ describe("Absence delegation and archive withdrawal", () => {
   // The `E2E-` prefix lets the fixture purge recognise the folders too.
   const reference = `E2E-DLG-${stamp}`;
   const colleagueReference = `E2E-DLG-COL-${stamp}`;
+  // A delegation is bounded: the API refuses one with no end, so every invite
+  // carries a period end a week out.
+  const periodEnd = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
 
   let adminToken = "";
   // Held across the chain: threading a token through `.then` is fragile, because
@@ -45,8 +48,8 @@ describe("Absence delegation and archive withdrawal", () => {
   let colleagueId = 0;
   let substituteId = 0;
   let documentId = 0;
-  let colleagueDocumentId = 0;
   let delegationId = 0;
+  let invitationId = 0;
   let retraitId = 0;
 
   const login = (user: string, pass: string) =>
@@ -67,18 +70,53 @@ describe("Absence delegation and archive withdrawal", () => {
     method: Cypress.HttpMethod,
     url: string,
     body?: unknown,
+    extraHeaders: Record<string, string> = {},
   ) =>
     cy.request({
       method,
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
       url,
       body: body as Record<string, unknown> | undefined,
       failOnStatusCode: false,
     });
 
-  /** Folders currently visible to the token (service-scoped on the backend). */
-  const visibleRefs = (token: string) =>
-    authed(token, "GET", `${API_URL}/api/CourrierAdmin`).then((r) => {
+  /**
+   * Finds the invitation the absent agent just sent, as long as the colleague
+   * has not answered it, and leaves its id in `invitationId`.
+   *
+   * Naming a substitute no longer starts the delegation — it sends an invitation
+   * the colleague has to accept — so the tests below have to pick the pending row
+   * up before they can use the delegation. The id is carried in a variable rather
+   * than returned, because a `Chainable` returned from a `.then` is not unwrapped
+   * by the type system (see the note on the token variables above).
+   */
+  const rememberPendingInvitation = (absentUserId: number) =>
+    authed(absentToken, "GET", `${API_URL}/api/Substitutes/history/${absentUserId}`).then(
+      (r) => {
+        expect(r.status, "delegation history readable").to.eq(200);
+        const pending = (r.body as Array<{ id: number; statut: string }>).find(
+          (s) => s.statut === "EnAttente",
+        );
+        expect(pending, "the invitation awaits an answer").to.exist;
+        invitationId = pending!.id;
+      },
+    );
+
+  /**
+   * Folders currently visible to the token (service-scoped on the backend).
+   *
+   * With `asUserId` the request carries the replacement-workspace header, so the
+   * backend answers as the agent being replaced — the only place their folders
+   * exist for the substitute.
+   */
+  const visibleRefs = (token: string, asUserId?: number) =>
+    authed(
+      token,
+      "GET",
+      `${API_URL}/api/CourrierAdmin`,
+      undefined,
+      asUserId ? { "X-Delegation-User-Id": String(asUserId) } : {},
+    ).then((r) => {
       expect(r.status).to.eq(200);
       return (r.body as Array<{ numeroReference: string }>).map((d) => d.numeroReference);
     });
@@ -200,17 +238,26 @@ describe("Absence delegation and archive withdrawal", () => {
     authed(subToken, "POST", `${API_URL}/api/Substitutes`, {
       userId: absentId,
       substituteUserId: substituteId,
+      dateFin: periodEnd,
     })
       .then((r) => {
         expect(r.status, "cannot act for another agent").to.eq(403);
-        // ...but managing their OWN absence is self-service.
+        // ...but managing their OWN absence is self-service. Naming a colleague
+        // is an invitation; it starts only once they accept it.
         return authed(absentToken, "POST", `${API_URL}/api/Substitutes`, {
           userId: absentId,
           substituteUserId: substituteId,
+          dateFin: periodEnd,
         });
       })
       .then((r) => {
-        expect(r.status, "own substitute is allowed").to.eq(200);
+        expect(r.status, "own substitute is allowed").to.eq(201);
+        return rememberPendingInvitation(absentId);
+      })
+      // Only the invited colleague can answer it, and answering starts it.
+      .then(() => authed(subToken, "POST", `${API_URL}/api/Substitutes/${invitationId}/accepter`))
+      .then((r) => {
+        expect(r.status, "the invited colleague accepts").to.eq(200);
         return authed(absentToken, "GET", `${API_URL}/api/Substitutes/history/${absentId}`);
       })
       .then((r) => {
@@ -223,7 +270,7 @@ describe("Absence delegation and archive withdrawal", () => {
       });
   });
 
-  it("gives the substitute the absent agent's scope and traces what they do", () => {
+  it("keeps the two accounts' folders apart and traces what the substitute does", () => {
     // Start from a clean delegation state so this test does not depend on the
     // order the previous one left it in.
     authed(absentToken, "GET", `${API_URL}/api/Substitutes/history/${absentId}`)
@@ -259,8 +306,7 @@ describe("Absence delegation and archive withdrawal", () => {
         });
       })
       .then((r) => {
-        expect(r.status).to.eq(201);
-        colleagueDocumentId = (r.body.courrier?.id ?? r.body.id) as number;
+        expect(r.status, "the colleague's folder is created").to.eq(201);
       })
       // Before covering anyone, the substitute must not see either folder.
       .then(() => visibleRefs(subToken))
@@ -272,40 +318,56 @@ describe("Absence delegation and archive withdrawal", () => {
         return authed(absentToken, "POST", `${API_URL}/api/Substitutes`, {
           userId: absentId,
           substituteUserId: substituteId,
+          dateFin: periodEnd,
         });
       })
       .then((r) => {
-        expect(r.status).to.eq(200);
-        return authed(absentToken, "GET", `${API_URL}/api/Substitutes/history/${absentId}`);
+        expect(r.status, "a fresh delegation is invited").to.eq(201);
+        return rememberPendingInvitation(absentId);
       })
-      .then((h) => {
-        delegationId = (h.body as Array<{ id: number; isActive: boolean }>).find(
-          (s) => s.isActive,
-        )!.id;
-        // Now the substitute sees the covered agent's folder and can modify it.
+      .then(() => {
+        delegationId = invitationId;
+        return authed(subToken, "POST", `${API_URL}/api/Substitutes/${delegationId}/accepter`);
+      })
+      .then((r) => {
+        expect(r.status, "the colleague accepts").to.eq(200);
+        // Accepting must not merge the two accounts. The agent being replaced has
+        // their own service and their own folders; those never join the
+        // substitute's listing.
         return visibleRefs(subToken);
       })
       .then((refs) => {
-        expect(refs, "the entrusted folder is visible while covering").to.include(reference);
-        // The whole point of the narrow scope: a delegation does NOT widen into
-        // everything the absent agent's service happens to hold.
+        expect(refs, "the replaced agent's folders are not merged in").to.not.include(
+          reference,
+        );
         expect(refs, "a colleague's folder stays out of reach").to.not.include(
           colleagueReference,
         );
+        // They exist only inside the replacement workspace, where the backend
+        // answers as the absent agent.
+        return visibleRefs(subToken, absentId);
+      })
+      .then((refs) => {
+        expect(refs, "the workspace shows the absent agent's folders").to.include(reference);
+        expect(refs, "the workspace is that agent's own view").to.include(
+          colleagueReference,
+        );
+        // Outside the workspace the substitute cannot touch the folder at all.
         return authed(
           subToken,
           "PUT",
-          `${API_URL}/api/Workspace/document/${colleagueDocumentId}`,
-          { objet: "tentative interdite" },
+          `${API_URL}/api/Workspace/document/${documentId}`,
+          { objet: "hors espace de remplacement" },
         );
       })
       .then((r) => {
-        expect(r.status, "cannot modify a colleague's folder").to.eq(403);
+        expect(r.status, "no custody in the substitute's own session").to.eq(403);
         return authed(
           subToken,
           "PUT",
           `${API_URL}/api/Workspace/document/${documentId}`,
           { objet: `Modifie par le remplacant ${stamp}` },
+          { "X-Delegation-User-Id": String(absentId) },
         );
       })
       .then((r) => {
@@ -325,19 +387,23 @@ describe("Absence delegation and archive withdrawal", () => {
       })
       .then((r) => {
         expect(r.status).to.eq(200);
-        return visibleRefs(subToken);
-      })
-      .then((refs) => {
-        expect(refs, "hidden again after revocation").to.not.include(reference);
+        // The workspace header stops being honoured the moment the delegation ends.
         return authed(
           subToken,
           "PUT",
           `${API_URL}/api/Workspace/document/${documentId}`,
           { objet: "apres revocation" },
+          { "X-Delegation-User-Id": String(absentId) },
         );
       })
       .then((r) => {
-        expect(r.status, "revoked substitute can no longer modify").to.eq(403);
+        expect(r.status, "revoked substitute can no longer work as the agent").to.eq(403);
+        return visibleRefs(subToken);
+      })
+      .then((refs) => {
+        expect(refs, "and the folder never entered their own listing").to.not.include(
+          reference,
+        );
         // The entrusted agent keeps full access to both folders of their service.
         return visibleRefs(absentToken);
       })
@@ -435,6 +501,16 @@ describe("Absence delegation and archive withdrawal", () => {
     cy.get('[data-testid="profil-substitution"]').should("be.visible");
     cy.get('[data-testid="profil-historique"]').should("be.visible");
     cy.get('[data-testid="profil-trace"]').should("be.visible");
+    // The history lists the remplacements that already ran — at least the one
+    // this spec started and revoked — with its period and outcome filled in.
+    cy.get('[data-testid^="delegation-history-"]', { timeout: 20000 })
+      .should("have.length.at.least", 1)
+      .first()
+      .within(() => {
+        cy.get("td").eq(3).invoke("text").should("match", /\S/);
+        cy.get("td").eq(4).invoke("text").should("match", /\S/);
+        cy.get("td").eq(5).invoke("text").should("match", /\S/);
+      });
     // The substitute picker is fed from the live user list.
     cy.get("#substitute-select").should("exist");
   });

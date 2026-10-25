@@ -7,6 +7,9 @@
 //   Document · Notes
 // `N° de bureau` (creator user id + year) and `Service` (creator's originating
 // service) are system-assigned and rendered read-only.
+//
+// Which fields are shown, their labels, and whether they are required all come
+// from « Gestion des champs » (see useCourrierFields) — never from this file.
 
 "use client";
 
@@ -16,6 +19,8 @@ import { useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceOptions } from "@/app/hooks/useServiceOptions";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
+import { useCourrierFields } from "@/app/hooks/useCourrierFields";
+import { CustomFieldInputs } from "@/app/components/forms/CustomFieldInputs";
 
 interface AdminFormProps {
   source: string;
@@ -47,6 +52,9 @@ interface AdminFormProps {
   setReference: (v: string) => void;
   objet: string;
   setObjet: (v: string) => void;
+  /** Values of the fields the administrator added. */
+  customValues: Record<string, string>;
+  onCustomChange: (key: string, value: string) => void;
 }
 
 export function AdminForm({
@@ -77,10 +85,15 @@ export function AdminForm({
   reference,
   setReference,
   objet,
-  setObjet
+  setObjet,
+  customValues,
+  onCustomChange
 }: AdminFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuth();
+
+  // Field set, order, labels and required flags — read from the database.
+  const F = useCourrierFields(token, "administratif", langue);
 
   // Destination services come from the live catalog: anything added in the
   // admin panel becomes selectable immediately.
@@ -112,16 +125,17 @@ export function AdminForm({
     <>
       {/* ===== LIGNE 1 : Source · Dates · Numéro interne · N° bureau ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        {F.show("source") && (
         <div>
           <label htmlFor="admin-source" className={labelClass}>
-            {cur.tblSource} <span className="text-red-500">*</span>
+            {F.label("source", cur.tblSource)} {F.required("source") && <span className="text-red-500">*</span>}
           </label>
           <select
             id="admin-source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
             className={fieldClass}
-            required
+            required={F.required("source")}
           >
             <option value="">-- {cur.choisirService} --</option>
             {(sourceOptions && sourceOptions.length > 0 ? sourceOptions : [
@@ -134,10 +148,12 @@ export function AdminForm({
             ))}
           </select>
         </div>
+        )}
 
+        {F.show("dateArrivee") && (
         <div>
           <label htmlFor="admin-date-arrivee" className={labelClass}>
-            {cur.dateArrivee} <span className="text-red-500">*</span>
+            {F.label("dateArrivee", cur.dateArrivee)} {F.required("dateArrivee") && <span className="text-red-500">*</span>}
           </label>
           <input
             id="admin-date-arrivee"
@@ -145,12 +161,14 @@ export function AdminForm({
             value={dateArrivee}
             onChange={(e) => setDateArrivee(e.target.value)}
             className={fieldClass}
-            required
+            required={F.required("dateArrivee")}
           />
         </div>
+        )}
 
+        {F.show("dateMessage") && (
         <div>
-          <label htmlFor="admin-date-message" className={labelClass}>{cur.dateMessage}</label>
+          <label htmlFor="admin-date-message" className={labelClass}>{F.label("dateMessage", cur.dateMessage)}</label>
           <input
             id="admin-date-message"
             type="date"
@@ -159,9 +177,13 @@ export function AdminForm({
             className={fieldClass}
           />
         </div>
+        )}
 
+        {F.show("numeroInterne") && (
         <div>
-          <label htmlFor="admin-ref" className={labelClass}>{cur.numeroInterne} <span className="text-red-500">*</span></label>
+          <label htmlFor="admin-ref" className={labelClass}>
+            {F.label("numeroInterne", cur.numeroInterne)} {F.required("numeroInterne") && <span className="text-red-500">*</span>}
+          </label>
           <input
             id="admin-ref"
             type="text"
@@ -169,12 +191,14 @@ export function AdminForm({
             onChange={(e) => setReference(e.target.value)}
             placeholder={cur.recherche_exemple}
             className={fieldClass}
-            required
+            required={F.required("numeroInterne")}
           />
         </div>
+        )}
 
+        {F.show("numeroBureau") && (
         <div>
-          <label htmlFor="admin-numero-bureau" className={labelClass}>{cur.numeroBureau}</label>
+          <label htmlFor="admin-numero-bureau" className={labelClass}>{F.label("numeroBureau", cur.numeroBureau)}</label>
           <input
             id="admin-numero-bureau"
             type="text"
@@ -188,12 +212,14 @@ export function AdminForm({
             {annee} / {cur.autoYearSuffix}
           </p>
         </div>
+        )}
       </div>
 
       {/* ===== LIGNE 2 : Transmissible · État · Service · Objet ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {F.show("transmissible") && (
         <div>
-          <span className={labelClass}>{cur.transmissible}</span>
+          <span className={labelClass}>{F.label("transmissible", cur.transmissible)}</span>
           <label htmlFor="admin-transmissible-oui" className="flex items-center gap-2 text-xs font-medium mt-1">
             <input
               id="admin-transmissible-oui"
@@ -205,9 +231,11 @@ export function AdminForm({
             {cur.oui}
           </label>
         </div>
+        )}
 
+        {F.show("etat") && (
         <div>
-          <label htmlFor="admin-etat" className={labelClass}>{cur.etat}</label>
+          <label htmlFor="admin-etat" className={labelClass}>{F.label("etat", cur.etat)}</label>
           <select
             id="admin-etat"
             value={etat}
@@ -225,10 +253,12 @@ export function AdminForm({
             ))}
           </select>
         </div>
+        )}
 
+        {F.show("service") && (
         <div>
           <label htmlFor="admin-service-origine" className={labelClass}>
-            {cur.service} <span className="text-red-500">*</span>
+            {F.label("service", cur.service)} {F.required("service") && <span className="text-red-500">*</span>}
           </label>
           <input
             id="admin-service-origine"
@@ -239,10 +269,12 @@ export function AdminForm({
             className={readonlyClass}
           />
         </div>
+        )}
 
+        {F.show("objet") && (
         <div>
           <label htmlFor="admin-objet" className={labelClass}>
-            {cur.tblTitre} <span className="text-red-500">*</span>
+            {F.label("objet", cur.tblTitre)} {F.required("objet") && <span className="text-red-500">*</span>}
           </label>
           <input
             id="admin-objet"
@@ -251,14 +283,16 @@ export function AdminForm({
             onChange={(e) => setObjet(e.target.value)}
             placeholder={cur.sujet_placeholder}
             className={fieldClass}
-            required
+            required={F.required("objet")}
           />
         </div>
+        )}
       </div>
 
       {/* ===== LIGNE 3 : Document (pleine largeur) ===== */}
+      {F.show("document") && (
       <div>
-        <label htmlFor="admin-fichier" className={labelClass}>{cur.documentPdfWord}</label>
+        <label htmlFor="admin-fichier" className={labelClass}>{F.label("document", cur.documentPdfWord)}</label>
         <div className="flex items-center gap-3">
           <div
             className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
@@ -279,10 +313,12 @@ export function AdminForm({
           </label>
         </div>
       </div>
+      )}
 
       {/* ===== LIGNE 4 : Notes (pleine largeur) ===== */}
+      {F.show("notes") && (
       <div>
-        <label htmlFor="admin-notes" className={labelClass}>{cur.notes}</label>
+        <label htmlFor="admin-notes" className={labelClass}>{F.label("notes", cur.notes)}</label>
         <textarea
           id="admin-notes"
           rows={3}
@@ -292,11 +328,16 @@ export function AdminForm({
           className={fieldClass}
         />
       </div>
+      )}
 
       {/* ===== MODE DE TRAITEMENT ===== */}
+      {(F.show("modeTraitement") || F.show("serviceDestinataire") || F.show("servicesDiffusion")) && (
       <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
+        {F.show("modeTraitement") && (
         <div>
-          <span className="block text-xs font-bold text-slate-800 mb-2">{cur.modeTraitement} <span className="text-red-500">*</span></span>
+          <span className="block text-xs font-bold text-slate-800 mb-2">
+            {F.label("modeTraitement", cur.modeTraitement)} {F.required("modeTraitement") && <span className="text-red-500">*</span>}
+          </span>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {[
               { value: "archivage", label: cur.archivage },
@@ -329,10 +370,13 @@ export function AdminForm({
             ))}
           </div>
         </div>
+        )}
 
-        {modeTraitement === "unique" && (
+        {F.show("serviceDestinataire") && modeTraitement === "unique" && (
           <div>
-            <span className="block text-xs font-bold text-slate-800 mb-2">{cur.serviceDest}</span>
+            <span className="block text-xs font-bold text-slate-800 mb-2">
+              {F.label("serviceDestinataire", cur.serviceDest)}{F.required("serviceDestinataire") && <span className="text-red-500"> *</span>}
+            </span>
             <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 max-h-64 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {serviceGroups.map((group) => (
@@ -368,9 +412,11 @@ export function AdminForm({
           </div>
         )}
 
-        {modeTraitement === "diffusion" && (
+        {F.show("servicesDiffusion") && modeTraitement === "diffusion" && (
           <div>
-            <span className="block text-xs font-bold text-slate-800 mb-2">{cur.servicesDiff}</span>
+            <span className="block text-xs font-bold text-slate-800 mb-2">
+              {F.label("servicesDiffusion", cur.servicesDiff)}{F.required("servicesDiffusion") && <span className="text-red-500"> *</span>}
+            </span>
             <div className="grid grid-cols-2 gap-2 bg-white p-4 border border-slate-300 rounded-lg max-h-48 overflow-y-auto">
               {serviceGroups.map((group) => (
                 <div key={group.key}>
@@ -405,6 +451,14 @@ export function AdminForm({
           </div>
         )}
       </div>
+      )}
+
+      <CustomFieldInputs
+        fields={F.customFields}
+        values={customValues}
+        onChange={onCustomChange}
+        langue={langue}
+      />
     </>
   );
 }

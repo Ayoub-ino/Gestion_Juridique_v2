@@ -29,7 +29,8 @@ Built with **Next.js 16** (React 19) frontend and **ASP.NET Core 10** backend wi
 - **Reception Handshake**: A folder stays with the sender until the destination accepts it — a refusal keeps it in place and notifies the sender with the reason given
 - **Dynamic Destination Picker**: The juridical form routes a folder by choosing a live service (plus an optional member of it) — the catalog is read from the database, so new services appear with no restart
 - **Service-Based Custody**: Only the service currently holding a folder can edit, modify, or transfer it
-- **Absence Delegation**: An agent designates a substitute from *Mon profil*. The scope is narrow — the substitute reaches only the folders entrusted to that agent, never their colleagues' folders in the same service — and every action taken is traced (who acted, for whom). The delegation is closed on revocation with a date stamp, and only one can be active at a time
+- **Absence Delegation**: An agent designates a specific colleague from *Mon profil* and a bounded period for the replacement. The named colleague is invited, accepts or declines it from *Notifications*, and once accepted opens a **replacement workspace** in the sidebar where the app works as the replaced account — its folders, its permissions, its notifications. The two accounts are kept apart: a delegation never merges the replaced agent's folders into the substitute's own listing — outside the workspace the substitute still sees only their own service, and the replaced agent's folders appear only while working as them, where the backend resolves the request as that agent. Every action taken is traced (who acted, for whom), the period is recorded on both profiles, and the replaced agent can stop the replacement at any time — the workspace then disappears. Only one delegation can be active at a time
+- **Dynamic Courrier Fields**: « Gestion des champs » gives the administrator the field set of the three « Gérer les courriers » forms (administratif, juridique, sortant). Each form has its own ordered list, and every field can be renamed, reordered, made mandatory (the red « * », enforced by the API), hidden without being deleted, added or removed. The set is data, not code: the forms read it from the database, so a change applies on the next paint with no redeploy
 - **Archive Withdrawal Register**: Exceptional withdrawals of an archived folder are recorded with the requesting authority (chef du greffe, conseiller rapporteur, premier président), the reason, an optional return date and the agent who filed it — the folder itself stays in the archive
 - **Dynamic Service Catalog**: Services are resolved from the live database — no hardcoded labels
 - **RBAC Permission System**: 18 dynamic permissions controlling both API access and UI visibility
@@ -146,7 +147,7 @@ Gestion_Juridique-main/
 │   │   ├── types/                      # api.generated.ts (OpenAPI types)
 │   │   └── utils.ts                    # getDocServiceCode, isDocInService, etc.
 │   ├── cypress/
-│   │   ├── e2e/                        # E2E test specs (112 tests across 13 specs)
+│   │   ├── e2e/                        # E2E test specs (119 tests across 14 specs)
 │   │   │   ├── app.cy.ts               # Core app flows (35 tests)
 │   │   │   ├── permission-toggle.cy.ts # Permission CRUD (27 tests)
 │   │   │   ├── dynamic-service-transfer.cy.ts  # Transfer custody flow (9 tests)
@@ -263,7 +264,7 @@ Open **http://localhost:3000** in your browser.
 cd WebApplication1/WebApplication1.Tests
 dotnet test
 
-# Frontend E2E tests (112 tests across 13 specs)
+# Frontend E2E tests (119 tests across 14 specs)
 cd frontend-juridique
 CYPRESS_API_URL=http://localhost:5200 npx cypress run
 
@@ -294,7 +295,8 @@ npx eslint .
 | Cypress E2E — workflow-pipeline.cy.ts | 4 | `npx cypress run --spec cypress/e2e/workflow-pipeline.cy.ts` |
 | Cypress E2E — delegation-and-retrait.cy.ts | 4 | `npx cypress run --spec cypress/e2e/delegation-and-retrait.cy.ts` |
 | Cypress E2E — equipment-register.cy.ts | 14 | `npx cypress run --spec cypress/e2e/equipment-register.cy.ts` |
-| **Total** | **257** | |
+| Cypress E2E — courrier-fields.cy.ts | 7 | `npx cypress run --spec cypress/e2e/courrier-fields.cy.ts` |
+| **Total** | **119** | |
 
 ---
 
@@ -401,5 +403,5 @@ This project is for educational purposes (stage/stage SICOM).
 
 ---
 
-> Last verified: September 2026 — 145 unit tests, 98 E2E tests ✅
-> All 243 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.
+> Last verified: September 2026 — 145 unit tests, 119 E2E tests ✅
+> All 264 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

@@ -118,8 +118,11 @@ namespace WebApplication1.Services
                 }
 
                 // --- 3. Seed Permissions (~40) ---
+                // Always runs, inserting only the keys that are missing. Guarding the
+                // whole block on "no permission exists yet" meant a permission
+                // introduced after the database was created was never added — so a
+                // freshly declared key was unusable until someone reset the table.
                 _context.ChangeTracker.Clear();
-                if (force || !_context.Permissions.Any())
                 {
                     var permissions = new List<Permission>
                     {
@@ -160,6 +163,7 @@ namespace WebApplication1.Services
                         new Permission { Key = "gerer_equipements", LabelFr = "Gérer équipements", LabelAr = "إدارة المعدات", Category = "admin", DefaultEnabled = false },
                         new Permission { Key = "gerer_listes", LabelFr = "Gérer listes dynamiques", LabelAr = "إدارة اللوائح الديناميكية", Category = "admin", DefaultEnabled = false },
                         new Permission { Key = "gerer_substituts", LabelFr = "Gérer substituts", LabelAr = "إدارة البدائل", Category = "admin", DefaultEnabled = false },
+                        new Permission { Key = "gerer_champs_courrier", LabelFr = "Gérer les champs des courriers", LabelAr = "إدارة حقول الرسائل", Category = "admin", DefaultEnabled = false },
 
                         // Autres
                         new Permission { Key = "voir_workspace", LabelFr = "Voir espace de travail", LabelAr = "عرض مساحة العمل", Category = "autres", DefaultEnabled = true },
@@ -437,6 +441,27 @@ namespace WebApplication1.Services
                     _context.SaveChanges();
                     Console.WriteLine($"États d'équipement créés ({etatsEquipement.Count}).");
                 }
+
+                // --- 9. Seed the field configuration of « Gérer les courriers » ---
+                // Insert-if-missing per (type, key): the reference field set is only a
+                // starting point. From the first boot on, « Gestion des champs » owns
+                // it — a field the administrator removed is never resurrected here.
+                _context.ChangeTracker.Clear();
+                // Only a form with NO field at all is seeded. Seeding missing keys
+                // individually would resurrect a field the administrator deleted.
+                var configuredTypes = _context.CourrierFields
+                    .Select(f => f.CourrierType)
+                    .Distinct()
+                    .ToHashSet();
+                var newFields = CourrierFieldService.DefaultFields()
+                    .Where(f => !configuredTypes.Contains(f.CourrierType))
+                    .ToList();
+                if (newFields.Count > 0)
+                {
+                    _context.CourrierFields.AddRange(newFields);
+                    _context.SaveChanges();
+                }
+                Console.WriteLine($"Champs de courrier créés ({newFields.Count} ajoutés).");
         }
     }
 }

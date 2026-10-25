@@ -20,6 +20,7 @@ namespace WebApplication1.Data
         public DbSet<Equipment> Equipment { get; set; }
         public DbSet<ListItem> ListItems { get; set; }
         public DbSet<Substitute> Substitutes { get; set; }
+        public DbSet<CourrierFieldConfig> CourrierFields { get; set; }
         public DbSet<SubstitutionAction> SubstitutionActions { get; set; }
         public DbSet<Retrait> Retraits { get; set; }
         public DbSet<DocumentNote> DocumentNotes { get; set; }
@@ -80,6 +81,11 @@ namespace WebApplication1.Data
             // DocumentAccess: one access row per (document, service) pair
             modelBuilder.Entity<DocumentAccess>()
                 .HasIndex(da => new { da.DocumentId, da.ServiceCode })
+                .IsUnique();
+
+            // CourrierFieldConfig: one row per field per courrier type
+            modelBuilder.Entity<CourrierFieldConfig>()
+                .HasIndex(f => new { f.CourrierType, f.FieldKey })
                 .IsUnique();
 
             // DocumentAccess: FK to Document

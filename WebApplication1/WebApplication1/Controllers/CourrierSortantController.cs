@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using WebApplication1.Data;
 using WebApplication1.Models;
@@ -20,12 +21,14 @@ namespace WebApplication1.Controllers
         private readonly AppDbContext _context;
         private readonly WebApplication1.Services.DocumentAccessService _accessService;
         private readonly WebApplication1.Services.SubstitutionService _substitutions;
+        private readonly CourrierFieldService _fieldService;
 
-        public CourrierSortantController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService, WebApplication1.Services.SubstitutionService substitutions)
+        public CourrierSortantController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService, WebApplication1.Services.SubstitutionService substitutions, CourrierFieldService fieldService)
         {
             _context = context;
             _accessService = accessService;
             _substitutions = substitutions;
+            _fieldService = fieldService;
         }
 
         [HttpPost]
@@ -50,6 +53,24 @@ namespace WebApplication1.Controllers
 
                 // N° de bureau — creator user id + year (system-assigned)
                 var numeroBureauOrdre = $"{userId}/{DateTime.Now.Year}";
+
+                // « Gestion des champs » owns the field set — required fields are
+                // validated from the configuration, server-side.
+                // Keys passed to the validator: the subject and whatever the
+                // administrator added. The other standard fields are enforced by the
+                // form (see CourrierFieldService.FormEnforced).
+                var fieldValues = new Dictionary<string, string?>
+                {
+                    ["dateEnvoi"] = CourrierFieldService.FormEnforced,
+                    ["destinataire"] = CourrierFieldService.FormEnforced,
+                    ["objet"] = dto.Objet
+                };
+                foreach (var (key, value) in dto.ChampsPersonnalises ?? new())
+                    fieldValues[key] = value;
+
+                var missing = await _fieldService.FindMissingRequiredAsync(CourrierFieldService.Sortant, fieldValues);
+                if (missing.Count > 0)
+                    return BadRequest(new { error = $"Champs obligatoires manquants: {string.Join(", ", missing)}" });
 
                 // Vérifier l'unicité du numéro de référence dans TOUS les types de documents.
                 // Outgoing mail carries no "Numéro interne" field, so when the client
@@ -90,11 +111,16 @@ namespace WebApplication1.Controllers
                     NumeroEnvoi = dto.NumeroEnvoi ?? numeroRef,
                     TribunalOrigine = dto.TribunalOrigine ?? "",
                     TribunalDestination = dto.TribunalDestination ?? "",
-                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes
+                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes,
+                    ChampsPersonnalises = CourrierFieldValues.Serialize(dto.ChampsPersonnalises)
                 };
 
                 _context.CourriersSortants.Add(sortant);
                 await _context.SaveChangesAsync();
+
+                // Audited: creating inside a replacement workspace is recorded against
+                // the person who actually did it, not the account worked as.
+                await _substitutions.LogDelegatedActionAsync(userId, "Création", sortant.Id, numeroRef);
 
                 // ── Auto-grant Owner access to creator's service ──
                 await _accessService.GrantOwnerAsync(sortant.Id, creatorServiceCode, userId);
@@ -129,12 +155,12 @@ namespace WebApplication1.Controllers
                     // Scope by the dynamic RBAC service code so services created from the
                     // admin panel work without code changes. Legacy rows (no code stored)
                     // still match through their ServiceTribunal enum value.
-                    // The caller's own service, plus the folders entrusted to any
-                    // agent they are substituting for — never a whole covered service.
+                    // Only the caller's own service: a delegation never merges the
+                    // replaced agent's folders into this listing (their scope is
+                    // reached inside the replacement workspace only).
                     query = query.Where(SubstitutionService.BuildScopePredicate<CourrierSortant>(
                         _substitutions.GetOwnServiceCode(userId),
-                        _substitutions.GetOwnServiceEnum(userId),
-                        _substitutions.GetCoveredUserIds(userId)));
+                        _substitutions.GetOwnServiceEnum(userId)));
                 }
             }
 
@@ -148,6 +174,7 @@ namespace WebApplication1.Controllers
                     c.DateCreation,
                     c.ServiceActuel,
                     c.ServiceActuelCode,
+                    c.ChampsPersonnalises,
                     c.StatutActuel,
                     c.DestinataireExterne,
                     c.TypeSortant,

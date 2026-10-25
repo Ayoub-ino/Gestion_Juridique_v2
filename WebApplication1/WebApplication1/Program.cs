@@ -73,6 +73,8 @@ builder.Services.AddScoped<WebApplication1.Services.WorkspaceService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentAccessService>();
 builder.Services.AddScoped<WebApplication1.Services.DocumentCloneService>();
 builder.Services.AddScoped<WebApplication1.Services.SubstitutionService>();
+builder.Services.AddScoped<WebApplication1.Services.CourrierFieldService>();
+builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
@@ -103,6 +105,11 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Replacement workspace: when the client names the agent being replaced, an
+// accepted and still-running delegation swaps the principal before any
+// permission or controller code runs. A pass-through without the header.
+app.UseMiddleware<DelegationImpersonationMiddleware>();
 
 // Permission enforcement middleware — validates [RequirePermission] attributes
 // read from the matched endpoint metadata (server-side, not client-supplied).

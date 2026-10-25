@@ -47,27 +47,26 @@ namespace WebApplication1.Controllers
             if (role == "Admin" || role == "Greffier" || role == "Directeur" || role == "Consultant")
                 return Scope.Admin;
 
-            // The caller's own service, plus the folders entrusted to any agent they
-            // are substituting for — never the whole service of the absent agent.
+            // Only the caller's own service: a delegation never merges the replaced
+            // agent's folders into this listing (their scope is reached inside the
+            // replacement workspace only).
             return new Scope(
                 false,
                 _substitutions.GetOwnServiceCode(userId),
-                _substitutions.GetOwnServiceEnum(userId),
-                _substitutions.GetCoveredUserIds(userId));
+                _substitutions.GetOwnServiceEnum(userId));
         }
 
         /// <summary>Visibility scope of a non-administrator caller.</summary>
         private readonly record struct Scope(
             bool IsAdminLike,
             string? OwnServiceCode,
-            ServiceTribunal? OwnServiceEnum,
-            List<int> CoveredUserIds)
+            ServiceTribunal? OwnServiceEnum)
         {
             public static readonly Scope None =
-                new(false, null, null, new List<int>());
+                new(false, null, null);
 
             public static readonly Scope Admin =
-                new(true, null, null, new List<int>());
+                new(true, null, null);
         }
 
         // SOFT DELETE - Suppression logique
@@ -127,11 +126,10 @@ namespace WebApplication1.Controllers
         {
             var query = _context.Documents.Where(d => d.EstSupprime == true);
 
-            if (!scope.IsAdminLike
-                && (scope.OwnServiceCode != null || scope.CoveredUserIds.Count > 0))
+            if (!scope.IsAdminLike && scope.OwnServiceCode != null)
             {
                 query = query.Where(SubstitutionService.BuildScopePredicate<Document>(
-                    scope.OwnServiceCode, scope.OwnServiceEnum, scope.CoveredUserIds));
+                    scope.OwnServiceCode, scope.OwnServiceEnum));
             }
 
             return query;

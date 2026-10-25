@@ -119,6 +119,7 @@ export const translations = {
     faible: "Faible",
     tousRetraits: "Tous les retraits",
     equipements: "Équipements",
+    champsCourrier: "Gestion des champs",
     utilisateurs: "Utilisateurs",
     services: "Services",
     servicesHistoriques: "Services Historiques",
@@ -212,6 +213,7 @@ export const translations = {
     // Ajout clés manquantes
     permissions: "Permissions",
     monProfilPage: "Mon profil",
+    espaceRemplacement: "Espace de remplacement",
     tousLesServices: "Tous les services",
     tousLesTypes: "Tous les types",
     dateDebut: "Date début",
@@ -454,6 +456,7 @@ export const translations = {
     faible: "منخفض",
     tousRetraits: "كل السحوبات",
     equipements: "المعدات",
+    champsCourrier: "إدارة الحقول",
     utilisateurs: "المستخدمون",
     services: "المصالح",
     servicesHistoriques: "المصالح التاريخية",
@@ -547,6 +550,7 @@ export const translations = {
     // Ajout clés manquantes
     permissions: "الصلاحيات",
     monProfilPage: "ملفي الشخصي",
+    espaceRemplacement: "فضاء النيابة",
     tousLesServices: "جميع المصالح",
     tousLesTypes: "جميع الأنواع",
     dateDebut: "تاريخ البداية",

@@ -35,6 +35,22 @@ interface NotificationData {
 }
 
 /**
+ * A pending absence-delegation invitation. It shares the notifications screen
+ * with folder transfers because it is the same kind of decision for the agent:
+ * something is waiting for an answer. Accepting it opens the replacement
+ * workspace (see SubstitutesController).
+ */
+interface DelegationInvitation {
+  id: number;
+  absentUserId: number;
+  absentUserName: string;
+  absentUserService?: string;
+  dateAssignation: string;
+  dateDebut: string;
+  dateFin?: string | null;
+}
+
+/**
  * Refusal notices are ordinary pending transactions directed back to the original
  * sender, flagged with the [REFUS] marker in the commentaire column. They carry the
  * reason the receiver typed in `message` and only need an acknowledgement.
@@ -42,7 +58,10 @@ interface NotificationData {
 const isRefusalNotice = (n: { commentaire?: string }) => n.commentaire === "[REFUS]";
 
 export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger }: Props) {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const [invitations, setInvitations] = useState<DelegationInvitation[]>([]);
+  const [invitationMotifs, setInvitationMotifs] = useState<Record<number, string>>({});
+  const [invitationBusy, setInvitationBusy] = useState<number[]>([]);
   const canAccept = hasPermission("accepter");
   const canRefuse = hasPermission("refuser");
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
@@ -75,9 +94,28 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
     }
   }, [token]);
 
+  const fetchInvitations = useCallback(async () => {
+    if (!token || !user?.id) return;
+    try {
+      const rows = await api.get<DelegationInvitation[]>(
+        `/api/Substitutes/invitations/${user.id}`,
+        token
+      );
+      setInvitations(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      console.warn("Erreur fetch invitations:", getErrorMessage(err));
+    }
+  }, [token, user]);
+
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+  useEffect(() => { fetchInvitations(); }, [fetchInvitations]);
   // Re-fetch when parent signals a refresh (e.g. after accepting from Transactions tab)
-  useEffect(() => { if (refreshTrigger && refreshTrigger > 0) fetchNotifications(); }, [refreshTrigger, fetchNotifications]);
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchNotifications();
+      fetchInvitations();
+    }
+  }, [refreshTrigger, fetchNotifications, fetchInvitations]);
   useEffect(() => { const interval = setInterval(fetchNotifications, 30000); return () => clearInterval(interval); }, [fetchNotifications]);
 
   const toggleSelect = (id: number) => {
@@ -133,6 +171,41 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
     }
   };
 
+  /** Accept a delegation invitation — the replacement workspace opens at once. */
+  const handleAcceptInvitation = async (id: number) => {
+    setInvitationBusy((prev) => [...prev, id]);
+    try {
+      await api.post(`/api/Substitutes/${id}/accepter`, {}, token);
+      notify(
+        langue === "fr"
+          ? "Remplacement accepté. Votre espace de remplacement est ouvert."
+          : "تم قبول النيابة. فضاء النيابة مفتوح."
+      );
+      fetchInvitations();
+    } catch (err) {
+      notify((langue === "fr" ? "Erreur lors de l'acceptation: " : "خطأ أثناء القبول: ") + getErrorMessage(err));
+    }
+    setInvitationBusy((prev) => prev.filter((x) => x !== id));
+  };
+
+  /** Decline a delegation invitation, with the reason the absent agent will read. */
+  const handleRefuseInvitation = async (id: number) => {
+    const motif = invitationMotifs[id] || "";
+    if (!motif.trim()) {
+      notify(langue === "fr" ? "Veuillez saisir un motif" : "يرجى إدخال سبب الرفض");
+      return;
+    }
+    setInvitationBusy((prev) => [...prev, id]);
+    try {
+      await api.post(`/api/Substitutes/${id}/refuser`, { motif }, token);
+      notify(langue === "fr" ? "Invitation refusée" : "تم رفض الدعوة");
+      fetchInvitations();
+    } catch (err) {
+      notify((langue === "fr" ? "Erreur lors du refus: " : "خطأ أثناء الرفض: ") + getErrorMessage(err));
+    }
+    setInvitationBusy((prev) => prev.filter((x) => x !== id));
+  };
+
   const handleAcceptSelected = async () => {
     for (const id of selectedIds) {
       await handleAccept(id);
@@ -162,7 +235,9 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
     <div className="space-y-5">
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex justify-between items-center">
         <h3 className="font-bold text-sm text-slate-800">
-          {langue === "fr" ? `Mes notifications (${notifications.length})` : `إشعاراتي (${notifications.length})`}
+          {langue === "fr"
+            ? `Mes notifications (${notifications.length + invitations.length})`
+            : `إشعاراتي (${notifications.length + invitations.length})`}
         </h3>
         <div className="flex items-center gap-2">
           {onExport && (
@@ -197,9 +272,97 @@ export function NotificationsPage({ langue, cur, token, onExport, refreshTrigger
         </div>
       </div>
 
+      {/* Invitations de remplacement — même écran, même geste : répondre. */}
+      {invitations.length > 0 && (
+        <div className="space-y-3" data-testid="delegation-invitations">
+          <p className="text-xs font-bold text-slate-600">
+            {langue === "fr"
+              ? "Invitations de remplacement"
+              : "دعوات النيابة"}
+          </p>
+          {invitations.map((inv) => {
+            const busy = invitationBusy.includes(inv.id);
+            return (
+              <div
+                key={inv.id}
+                data-testid={`delegation-invitation-${inv.id}`}
+                className="bg-white border border-blue-200 rounded-lg p-5 shadow-sm"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-bold text-sm text-slate-800">
+                    {langue === "fr"
+                      ? `${inv.absentUserName} vous désigne comme remplaçant`
+                      : `${inv.absentUserName} يعيّنك بديلاً عنه`}
+                  </h4>
+                  <span className="px-2 py-1 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    {langue === "fr" ? "Remplacement" : "نيابة"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[11px] text-slate-500 mb-3">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 font-bold">
+                    {langue === "fr" ? "Service" : "المصلحة"} : {getServiceLabel(inv.absentUserService || "")}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 font-bold">
+                    {langue === "fr" ? "Du" : "من"} {new Date(inv.dateDebut).toLocaleString()}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 font-bold">
+                    {langue === "fr" ? "Au" : "إلى"}{" "}
+                    {inv.dateFin ? new Date(inv.dateFin).toLocaleString() : "-"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  {langue === "fr"
+                    ? "En acceptant, vous travaillerez dans son espace : ses dossiers, ses permissions et ses notifications, jusqu'à la fin de la période."
+                    : "بقبولك، ستعمل في فضائه: ملفاته وصلاحياته وإشعاراته، إلى غاية نهاية المدة."}
+                </p>
+                <div className="space-y-2">
+                  <textarea
+                    rows={2}
+                    value={invitationMotifs[inv.id] || ""}
+                    onChange={(e) =>
+                      setInvitationMotifs((prev) => ({ ...prev, [inv.id]: e.target.value }))
+                    }
+                    placeholder={langue === "fr" ? "Motif (en cas de refus)..." : "السبب (في حالة الرفض)..."}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      data-testid={`accept-invitation-${inv.id}`}
+                      onClick={() => handleAcceptInvitation(inv.id)}
+                      disabled={busy}
+                      className="px-4 py-1.5 rounded bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+                    >
+                      {langue === "fr" ? "Accepter" : "قبول"}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`refuse-invitation-${inv.id}`}
+                      onClick={() => handleRefuseInvitation(inv.id)}
+                      disabled={busy}
+                      className="px-4 py-1.5 rounded bg-red-500 text-white text-[11px] font-bold hover:bg-red-600 transition disabled:opacity-50"
+                    >
+                      {langue === "fr" ? "Refuser" : "رفض"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {notifications.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-lg p-12 shadow-sm text-center">
-          <p className="text-slate-400 font-bold">{langue === "fr" ? "Aucune notification" : "لا توجد إشعارات"}</p>
+          <p className="text-slate-400 font-bold">
+            {invitations.length > 0
+              ? langue === "fr"
+                ? "Aucun transfert de dossier en attente"
+                : "لا توجد تحويلات ملفات في الانتظار"
+              : langue === "fr"
+                ? "Aucune notification"
+                : "لا توجد إشعارات"}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

@@ -120,12 +120,47 @@ describe("Repeated transfer actions", () => {
     cy.get("aside", { timeout: 20000 }).should("exist");
   };
 
+  /**
+   * The detail modal, once it is on screen.
+   *
+   * Every interaction with it is scoped to this container and re-queried from
+   * it. A page-wide `cy.get("button").filter(...)` snapshots the document
+   * before the click that reveals the next control has re-rendered — React
+   * commits new nodes when the modal mounts and when « Modifier » flips it into
+   * edit mode, so a filter over the old set matches nothing while a click on a
+   * node that has since been replaced is silently swallowed. Scoping to the
+   * modal and clicking a freshly queried button is what makes the repeated
+   * edit deterministic.
+   */
+  const modal = () => cy.get('[data-testid="detail-modal"]', { timeout: 20000 });
+
+  /** Clicks, inside the modal, the first button whose whole label matches. */
+  const clickInModal = (pattern: RegExp) =>
+    modal().contains("button", pattern, { timeout: 20000 }).click({ force: true });
+
+  /**
+   * Opens the editor, and does not return until it is really open.
+   *
+   * The modal renders its action buttons only once the detail payload has
+   * settled, so « Modifier » is never mounted twice and a single click always
+   * reaches a live node. Waiting for an <input> would not prove edit mode — the
+   * modal always holds the note <textarea>, in view mode as well — so the save
+   * button is the honest check.
+   */
+  const openEditor = () => {
+    clickInModal(/^(Modifier|تعديل)$/);
+    modal().contains("button", /^(Enregistrer|حفظ)$/, { timeout: 20000 }).should("be.visible");
+  };
+
+  /**
+   * Clicks the first button on the page whose whole label matches.
+   *
+   * `cy.get("button").filter(...)` snapshots the document before the click that
+   * reveals the button has re-rendered, so it can miss a button that is on screen
+   * moments later; `contains` re-queries the live DOM on every retry.
+   */
   const clickButton = (pattern: RegExp) =>
-    cy
-      .get("button", { timeout: 20000 })
-      .filter((_, el) => pattern.test((el.textContent || "").trim()))
-      .first()
-      .click({ force: true });
+    cy.contains("button", pattern, { timeout: 20000 }).click({ force: true });
 
   after(() => {
     if (createdDocIds.length === 0) return;
@@ -146,6 +181,7 @@ describe("Repeated transfer actions", () => {
     const problems = new Problems();
     watchForProblems(problems);
 
+
     createMany(1, false)
       .then(() => loginThroughUi("bureauordre", "bureauordre123"))
       .then(() => {
@@ -159,26 +195,18 @@ describe("Repeated transfer actions", () => {
       cy.get("tbody tr", { timeout: 20000 })
         .should("have.length.at.least", 1)
         .first()
-        .find("button")
-        .filter((_, el) => /^(Voir|عرض)$/.test((el.textContent || "").trim()))
-        .first()
+        .contains("button", /^(Voir|عرض)$/)
         .click({ force: true });
 
-      // A custodian may edit: the Modifier button must be offered
-      clickButton(/^(Modifier|تعديل)$/);
-      cy.get("input, textarea", { timeout: 20000 }).should("have.length.at.least", 1);
-
-      // The save button is disabled ("...") while a save is in flight, so wait
-      // for it to be offered before clicking.
-      cy.get("button", { timeout: 20000 })
-        .filter((_, el) => /^(Enregistrer|حفظ)$/.test((el.textContent || "").trim()))
-        .should("have.length.at.least", 1)
-        .first()
-        .click({ force: true });
+      // A custodian may edit: the Modifier button must be offered, and the
+      // editor it opens must really be on screen before the save is clicked.
+      modal().should("be.visible");
+      openEditor();
+      clickInModal(/^(Enregistrer|حفظ)$/);
 
       // The modification must reach the backend, not just close the editor
       cy.contains(/Enregistré avec succès|تم الحفظ بنجاح/, { timeout: 20000 }).should("exist");
-      clickButton(/^(Fermer|إغلاق)$/);
+      clickInModal(/^(Fermer|إغلاق)$/);
       cy.wait(300);
     }
 

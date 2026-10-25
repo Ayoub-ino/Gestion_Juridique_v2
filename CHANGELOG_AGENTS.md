@@ -1872,3 +1872,170 @@ model, and there was no record of the agent who actually filed the entry.
   - Import reads `.xlsx`, `.xls` and `.csv`; `.doc`/`.docx` are not supported for
     this register (they are for documents, via `importFromFile`).
 
+
+---
+
+## [2026-09-23 02:22] - Dynamic Courrier Fields, Replacement Workspace & Full-Run Verification
+
+### 1. Context & Objective
+- Close out the two features requested in the previous session and prove them under
+  the whole regression suite:
+  1. **« Gestion des champs »** — an administrator tab that owns the field set of the
+     three « Gérer les courriers » forms so that fields can be added, removed,
+     renamed, reordered, made mandatory (`*`) or hidden without a redeploy.
+  2. **Absence delegation that really hands over the work** — choice of a *specific*
+     colleague plus a bounded period, an invitation the colleague accepts or
+     declines, and an accepted acceptance that opens a **replacement workspace**
+     where the app works as the replaced account, with the replaced agent able to
+     stop it at any time. Both profiles keep the history.
+- Then run every suite (backend unit, `tsc`, `eslint`, Cypress, plus a live API
+  sweep of both features) and fix whatever the runs exposed.
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `frontend-juridique/app/components/modals/DetailModal.tsx` — the
+  dialog is now addressable (`data-testid="detail-modal"`, `role="dialog"`) so
+  tests can scope their interactions to it. No behaviour change; the temporary
+  edit-mode instrumentation used during the investigation was removed again.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/courrier-fields.cy.ts` — creation
+  checks now run as a service agent instead of the administrator (the admin does
+  not hold `creer_courrier_admin`, so its calls were refused before validation ever
+  ran); the UI test signs in as the agent who can actually open the administratif
+  form; row lookups match the label inside the row's `<input value>`, which
+  `contains` cannot read.
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/delegation-and-retrait.cy.ts` —
+  rewritten against the invitation contract: every invitation carries a period end,
+  the invited colleague accepts it explicitly, and the pending row is picked up by
+  status (`EnAttente`) into a variable rather than returned from a `.then` (a
+  `Chainable` returned there is not unwrapped by the type system).
+- `[MODIFIED]` `frontend-juridique/cypress/e2e/repeated-actions.cy.ts` — the edit
+  loop no longer trusts a hollow guard (see §3) and re-clicks « Modifier » until the
+  editor is genuinely open; modal interactions are scoped to the dialog.
+- `[DELETED]` `_verify_fields_delegation.py` — the ad-hoc live-verification script
+  from the previous session, superseded by the two E2E specs and unreferenced by the
+  documentation.
+- `[MODIFIED]` `README.md` — the two features are described in §Features and the
+  test counts are brought up to date (119 E2E tests across 14 specs, 264 total).
+- `[DELETED]` *(from the database)* the fixtures the ad-hoc scripts had left behind:
+  six `VERIF-vd*` folders and one `PROBE-*` probe, soft-deleted then hard-deleted
+  through the batch endpoints. No hand-made document was touched.
+
+### 3. Key Technical & Architectural Decisions
+- **Why the edit loop was flaky — a test bug, not a product bug.** The spec waited
+  for "the editor is open" by asserting an `<input>`/`<textarea>` appeared. The
+  detail modal always holds the *note* textarea, in view mode as well, so that
+  assertion passed immediately and proved nothing. When the « Modifier » click was
+  swallowed — it is delivered while the modal is still settling, and React replaces
+  the footer as the detail and access payloads land — the spec went on to click a
+  save button that did not exist and failed 20 s later. Instrumenting the modal on
+  `window.__editLog` showed the click landing and edit mode engaging on every
+  attempt when the pacing was even, so the fix is on the test side: the save button
+  is the only honest proof of edit mode, and the click is retried until it appears
+  (max 5 attempts). Verified by four consecutive green runs of the spec.
+- Invitations are the startup gate: `POST /api/Substitutes` returns **201** and
+  creates a row in `EnAttente` with `IsActive = false`; `POST /{id}/accepter` (the
+  invited colleague only) starts it. Existing delegation readers
+  (`DocumentAccessService.IsSubstitutingFor`, the impersonation middleware) only
+  honour `Accepte && IsActive`, so nothing is reachable before the answer.
+- The field set is persisted data (`CourrierFieldConfig`, seeded per form), read by
+  `useCourrierFields` in each form and written by the admin tab through
+  `CourrierFieldsController`; the API enforces the mandatory ones, so the red « * »
+  is not decoration.
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**. `dotnet test`: **145/145**.
+- `npx tsc --noEmit`: **0 errors**. `npx eslint .`: **0 errors, 0 warnings**.
+- Cypress E2E: **119/119 across 14 specs — "All specs passed!"**
+  `app.cy.ts` 35, `permission-toggle` 27, `equipment-register` 14,
+  `dynamic-service-transfer` 9, `courrier-fields` 7 (new), `corbeille-vider` 4,
+  `delegation-and-retrait` 4, `workflow-pipeline` 4, `export` 3,
+  `juridique-destination` 3, `recherche-dossiers` 3, `repeated-actions` 3,
+  `admin-boundaries` 2, `permission-persistence` 1.
+- Live API sweep of both features (before the E2E runs): **44/44** — field CRUD,
+  rename, hide, reorder, mandatory enforcement (400 with the field's own label in
+  the message), non-admin refusals (403), period/substitute validation, invitation
+  visibility and badge counts, refusal with reason, workspace visibility after
+  acceptance, the narrow scope (a colleague's folder stays out of reach), the trace
+  naming the absent agent, and both stop paths.
+- Database after the runs: the hand-made folders are untouched and **no fixture
+  remains** (`TEST-`, `REP-`, `E2E-`, `DBG-`, `VERIF-`, `PROBE-` all at zero); no
+  leftover test service or user.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** Fully green. API on `:5200` (Development),
+  web on `:3000` (Turbopack). The backend was started with
+  `ASPNETCORE_ENVIRONMENT=Development --urls http://localhost:5200` — without the
+  environment the JWT key (which lives in `appsettings.Development.json`) is missing
+  and the host exits.
+- Both requested features are implemented end to end and covered by specs.
+- **Pending / worth knowing:**
+  - The delegation's invitation is what starts the replacement; an invitation left
+    unanswered simply expires with its period (`ExpireElapsedDelegationsAsync`).
+  - `openEditor`'s retry is a deliberate workaround for a click swallowed during the
+    modal's first re-render. A product-side fix would be to keep the modal chrome
+    stable until its payloads settle; the retry is cheaper and provably stable.
+
+---
+
+## [2026-10-25] - Delegation: two accounts kept apart, history table, modal footer race
+
+### 1. Context & Objective
+- **Reported bug:** while an agent was replacing a colleague, the replaced
+  agent's folders were *added to* the substitute's own folder list, so one
+  account showed a merged view of two services' work.
+- Finish the delegation history UI on *Mon profil* (period, covered duration,
+  outcome) and close the detail-modal race that made the repeated-edit spec
+  flaky (a footer button replaced mid-click swallowed the click).
+
+### 2. Files Modified / Created / Deleted
+- `[MODIFIED]` `WebApplication1/Services/SubstitutionService.cs` —
+  `BuildScopePredicate<T>` loses its `coveredUserIds` parameter and returns the
+  caller's own service only; `GetCoveredUserIds` is now used *solely* for the
+  trace.
+- `[MODIFIED]` `DocumentsController.cs`, `CourrierAdminController.cs`,
+  `CourrierJuridiqueController.cs`, `CourrierSortantController.cs` — every
+  listing and the trash scope call the two-argument predicate.
+- `[MODIFIED]` `DocumentAccessService.cs` — `IsUserCustodian` grants no custody
+  through a delegation; acting as the replaced agent requires the workspace.
+- `[MODIFIED]` `app/components/modals/DetailModal.tsx` — the action footer is
+  mounted together with the details (`detailsLoaded`), never before, so no
+  button is replaced underneath a click that is already in flight.
+- `[MODIFIED]` `app/components/pages/ProfilPage.tsx` — delegation history table:
+  role (I replace / I am replaced), substitute, replaced agent, agreed period,
+  duration actually covered, outcome badge + label, real end date or refusal
+  reason.
+- `[MODIFIED]` `cypress/e2e/delegation-and-retrait.cy.ts` — asserts the new
+  contract: the substituted folders never enter the substitute's own listing,
+  they appear only under `X-Delegation-User-Id`, a write without the header is
+  403, and revoking makes the header 403 as well.
+- `[MODIFIED]` `cypress/e2e/repeated-actions.cy.ts` — modal-scoped helpers, no
+  retry loop: the save button is awaited as the proof of edit mode.
+- `[MODIFIED]` `README.md` — the delegation bullet now describes the
+  non-merged scope; the E2E total is corrected to 119.
+- `[MODIFIED]` `WebApplication1.Tests/SubstitutionServiceTests.cs` — scope
+  predicate tests assert a delegated folder is *out* of the substitute's
+  listing and a colleague's folder stays out too.
+
+### 3. Key Technical & Architectural Decisions
+- **Impersonation, not a widening grant.** The replaced agent's view is reached
+  by swapping the principal in `DelegationImpersonationMiddleware`, so their
+  own service scope applies exactly as it does when they sign in. Keeping that
+  scope out of the substitute's own session is what stops the two accounts
+  merging — the previous predicate OR-ed the covered agents' folders in.
+- The workspace header (`X-Delegation-User-Id`) is honoured only for an
+  accepted, active, in-period delegation; anything else is 403.
+- The trace (`SubstitutionAction`) still records every covered agent, and
+  recovers the real actor from `original_user_id` when the principal was
+  swapped, so "who acted, for whom" survives impersonation.
+- Modal footer gated on `detailsLoaded` removes the race at the source instead
+  of retrying the click in the test.
+
+### 4. Verification & Test Results
+- Backend build: **0 errors, 0 warnings**. `dotnet test`: **145/145**.
+- `npx tsc --noEmit`: **0 errors**. `npx eslint .`: **0 errors, 0 warnings**.
+- Cypress E2E: **119/119 across 14 specs — "All specs passed!"**, including the
+  rewritten `delegation-and-retrait` scope assertions and `repeated-actions`.
+
+### 5. Current System State & Pending Tasks
+- **System operational status:** API on `:5200` (Development), web on `:3000`.
+- **Pending / worth knowing:** a delegation grants nothing at all until the
+  invitee accepts; the period end closes it without a clean-up job.

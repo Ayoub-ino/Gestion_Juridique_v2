@@ -65,6 +65,16 @@ namespace WebApplication1.Models
         /// them from <see cref="NumeroBureauOrdre"/> ("{userId}/{year}").
         /// </summary>
         public int? GestionnaireUserId { get; set; }
+
+        /// <summary>
+        /// Values of the fields the administrator added from « Gestion des champs »,
+        /// serialized as a JSON object keyed by <see cref="CourrierFieldConfig.FieldKey"/>.
+        ///
+        /// The seeded fields keep their own dedicated columns; only genuinely new
+        /// fields land here, so removing a seeded field never moves stored data.
+        /// Declared on the base class because the courrier types share one table (TPH).
+        /// </summary>
+        public string? ChampsPersonnalises { get; set; }
     }
 
 }

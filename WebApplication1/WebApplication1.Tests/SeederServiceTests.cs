@@ -11,7 +11,7 @@ namespace WebApplication1.Tests
         // Counts below mirror the SeederService matrix — update them together if the
         // matrix changes (services, permission keys, overrides, historical services).
         private const int ExpectedServices = 9;
-        private const int ExpectedPermissions = 37;
+        private const int ExpectedPermissions = 38;
         private const int ExpectedOverrides = 20;
         private const int ExpectedHistoricalServices = 18;
         private const int ExpectedUsers = 10; // admin + 9 service users
@@ -49,6 +49,14 @@ namespace WebApplication1.Tests
             Assert.Contains("creer_courrier_admin", bureauPerms);
             Assert.Contains("supprimer", bureauPerms);
             Assert.Contains("ajouter_notes", bureauPerms);
+
+            // The courrier field-configuration permission is admin-only: it lives in
+            // the catalogue, is granted to no service, and is NOT switched off for
+            // the admin (so the "Gérer les champs des courriers" tab is reachable).
+            var champsField = await ctx.Permissions.SingleAsync(p => p.Key == "gerer_champs_courrier");
+            Assert.Equal("admin", champsField.Category);
+            Assert.DoesNotContain("gerer_champs_courrier", bureauPerms);
+            Assert.False(await ctx.AdminPermissionOverrides.AnyAsync(o => o.PermissionKey == "gerer_champs_courrier"));
 
             var secretarait = await ctx.RbacServices.SingleAsync(s => s.Code == "secretarait");
             var secPerms = await ctx.ServicePermissions
@@ -111,7 +119,7 @@ namespace WebApplication1.Tests
             Assert.Equal(ExpectedOverrides, await ctx.AdminPermissionOverrides.CountAsync());
             Assert.True(await ctx.AdminPermissionOverrides.AnyAsync(o => o.PermissionKey == "accepter"));
 
-            // Permissions: pre-seeded dashboard + 35 missing
+            // Permissions: pre-seeded dashboard + 36 missing
             Assert.Equal(ExpectedPermissions, await ctx.Permissions.CountAsync());
 
             // Users: admin pre-seeded + 9 service users

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
-import { api, ApiError } from '@/lib/api/client';
+import { api, ApiError, setDelegationUser } from '@/lib/api/client';
 
 export type User = {
   id: number;
@@ -14,7 +14,14 @@ export type User = {
 };
 
 type AuthContextType = {
+  /**
+   * The account the UI is working as. Inside a replacement workspace this is the
+   * REPLACED agent, not the person at the keyboard, so every permission check and
+   * every listing follows that account.
+   */
   user: User | null;
+  /** The signed-in account, always — used to label the workspace banner. */
+  realUser: User | null;
   token: string | null;
   login: (login: string, password: string) => Promise<void>;
   logout: () => void;
@@ -23,13 +30,27 @@ type AuthContextType = {
   permissions: string[];
   /** Re-fetches the user + permissions from the DB (GET /api/auth/me). */
   refreshUser: () => Promise<void>;
+  /** True while the UI is acting as a delegated agent. */
+  isImpersonating: boolean;
+  /**
+   * Open (or leave) the replacement workspace. Entering resolves the replaced
+   * agent's own account — including their permissions — through /api/auth/me
+   * sent with the delegation header, so the workspace really is that account.
+   */
+  enterWorkspace: (absentUserId: number) => Promise<User | null>;
+  exitWorkspace: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  // The signed-in account. `impersonatedUser` is only ever set inside a
+  // replacement workspace, and takes precedence while it is.
+  const [realUser, setRealUser] = useState<User | null>(null);
+  const [impersonatedUser, setImpersonatedUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+
+  const user = impersonatedUser ?? realUser;
 
   useEffect(() => {
     try {
@@ -37,13 +58,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const storedUser = localStorage.getItem('user');
       if (storedToken && storedUser) {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setRealUser(JSON.parse(storedUser));
       }
     } catch {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     }
   }, []);
+
+  const exitWorkspace = useCallback(() => {
+    setDelegationUser(null);
+    setImpersonatedUser(null);
+  }, []);
+
+  // Read through a ref, not state: `refreshUser` must not change identity when
+  // the workspace opens, or the effect that calls it would re-trigger on every
+  // response and loop forever.
+  const impersonatedRef = React.useRef<User | null>(null);
+  useEffect(() => {
+    impersonatedRef.current = impersonatedUser;
+  }, [impersonatedUser]);
+
+  /**
+   * Work as the given agent. Setting the delegation BEFORE fetching means the
+   * request is already sent on their behalf, so what comes back is their account,
+   * their permissions and their data.
+   */
+  const enterWorkspace = useCallback(
+    async (absentUserId: number): Promise<User | null> => {
+      setDelegationUser(absentUserId);
+      try {
+        const data = await api.get<{ user: User }>("/api/auth/me", token);
+        setImpersonatedUser(data.user);
+        return data.user;
+      } catch (err) {
+        // No valid delegation (revoked, expired, refused): stay as ourselves.
+        setDelegationUser(null);
+        setImpersonatedUser(null);
+        console.warn('Workspace unavailable:', err instanceof Error ? err.message : err);
+        return null;
+      }
+    },
+    [token]
+  );
 
   const login = async (login: string, password: string) => {
     try {
@@ -52,7 +109,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         { Login: login, Password: password }
       );
       setToken(data.token);
-      setUser(data.user);
+      setDelegationUser(null);
+      setImpersonatedUser(null);
+      setRealUser(data.user);
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
     } catch (err) {
@@ -65,7 +124,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = useCallback(() => {
     setToken(null);
-    setUser(null);
+    setDelegationUser(null);
+    setImpersonatedUser(null);
+    setRealUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   }, []);
@@ -114,10 +175,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [token]);
 
   useEffect(() => {
-    if (user?.role === "Admin" && token) {
+    if (realUser?.role === "Admin" && token) {
       fetchAdminOverrides();
     }
-  }, [user?.role, token, fetchAdminOverrides]);
+  }, [realUser?.role, token, fetchAdminOverrides]);
 
   // Re-fetch the user + permissions from the DB so permission changes made in
   // the admin panel (by another admin) reflect in the UI without re-login.
@@ -125,7 +186,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!token) return;
     try {
       const data = await api.get<{ user: User }>("/api/auth/me", token);
-      setUser(data.user);
+      // Inside a workspace this response describes the REPLACED agent, so it must
+      // not overwrite the signed-in account.
+      if (impersonatedRef.current) {
+        setImpersonatedUser(data.user);
+        return;
+      }
+      setRealUser(data.user);
       // Keep the cached copy in sync so the next page load starts from fresh data.
       try {
         localStorage.setItem("user", JSON.stringify(data.user));
@@ -147,6 +214,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (token) refreshUser();
   }, [token, refreshUser]);
 
+  // Leaving the session must never leave a delegation header behind.
+  useEffect(() => {
+    if (!token) exitWorkspace();
+  }, [token, exitWorkspace]);
+
   // Refresh when the window regains focus, throttled to once a minute.
   const lastRefreshRef = React.useRef(0);
   useEffect(() => {
@@ -165,7 +237,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = !!token && !!user;
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated, hasPermission, permissions, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        realUser,
+        token,
+        login,
+        logout,
+        isAuthenticated,
+        hasPermission,
+        permissions,
+        refreshUser,
+        isImpersonating: impersonatedUser !== null,
+        enterWorkspace,
+        exitWorkspace,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -87,6 +87,54 @@ namespace WebApplication1.Migrations
                     b.ToTable("AdminPermissionOverrides");
                 });
 
+            modelBuilder.Entity("WebApplication1.Models.CourrierFieldConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CourrierType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FieldKey")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("FieldType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCustom")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LabelAr")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LabelFr")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourrierType", "FieldKey")
+                        .IsUnique();
+
+                    b.ToTable("CourrierFields");
+                });
+
             modelBuilder.Entity("WebApplication1.Models.Document", b =>
                 {
                     b.Property<int>("Id")
@@ -94,6 +142,9 @@ namespace WebApplication1.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChampsPersonnalises")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("CopieDeDocumentId")
                         .HasColumnType("int");
@@ -619,7 +670,16 @@ namespace WebApplication1.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("DateAcceptation")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("DateAssignation")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DateDebut")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateFin")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("DateRevocation")
@@ -627,6 +687,13 @@ namespace WebApplication1.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
+
+                    b.Property<string>("MotifRefus")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("SubstituteUserId")
                         .HasColumnType("int");

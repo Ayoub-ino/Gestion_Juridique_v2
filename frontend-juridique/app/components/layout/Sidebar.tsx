@@ -25,12 +25,25 @@ interface SidebarProps {
   canSeeServicesAdmin: boolean;
   canSeePermissionsAdmin: boolean;
   canSeeEquipementsAdmin: boolean;
+  canSeeChampsAdmin: boolean;
   canSeeHistoriquesAdmin: boolean;
   canOpenDossiers: boolean;
   canTransfer: boolean;
   canViewArchives: boolean;
   canViewTransactions: boolean;
   canSearchDossiers: boolean;
+  /** Agents the signed-in user may work as (running, accepted delegations). */
+  workspaces: Array<{
+    id: number;
+    absentUserId: number;
+    absentUserName?: string;
+  }>;
+  /** True while the UI is acting as a delegated agent. */
+  isImpersonating: boolean;
+  impersonatedName?: string;
+  activeWorkspaceId: number | null;
+  onEnterWorkspace: (delegationId: number, absentUserId: number) => void;
+  onExitWorkspace: () => void;
   pendingNotifications?: number;
 }
 
@@ -50,10 +63,17 @@ export function Sidebar({
   canSeeServicesAdmin,
   canSeePermissionsAdmin,
   canSeeEquipementsAdmin,
+  canSeeChampsAdmin,
   canSeeHistoriquesAdmin,
   canViewArchives,
   canViewTransactions,
   canSearchDossiers,
+  workspaces,
+  isImpersonating,
+  impersonatedName,
+  activeWorkspaceId,
+  onEnterWorkspace,
+  onExitWorkspace,
   pendingNotifications = 0
 }: SidebarProps) {
   const { theme, toggle: toggleTheme } = useTheme();
@@ -92,6 +112,43 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
+        {/* Rappel permanent : on agit au nom d'un autre agent. */}
+        {isImpersonating && (
+          <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 space-y-2" data-testid="sidebar-workspace">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              {cur.espaceRemplacement}
+            </p>
+            <p className="text-xs font-bold text-amber-900 truncate">{impersonatedName}</p>
+            <button
+              type="button"
+              data-testid="sidebar-exit-workspace"
+              onClick={onExitWorkspace}
+              className="w-full text-[11px] font-bold px-3 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition"
+            >
+              {langue === "fr" ? "Retour à mon compte" : "العودة إلى حسابي"}
+            </button>
+          </div>
+        )}
+
+        {workspaces.length > 0 && !isImpersonating && (
+          <div>
+            <span className={sectionTitleClass}>{cur.espaceRemplacement}</span>
+            <div className="space-y-1">
+              {workspaces.map((ws) => (
+                <button
+                  key={ws.id}
+                  type="button"
+                  data-testid={`nav-workspace-${ws.id}`}
+                  onClick={() => onEnterWorkspace(ws.id, ws.absentUserId)}
+                  className={navButtonClass(activeWorkspaceId === ws.id)}
+                >
+                  {ws.absentUserName}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <span className={sectionTitleClass}>{cur.tbd}</span>
           <button onClick={() => setVueActive("dashboard")} className={navButtonClass(vueActive === "dashboard")}>
@@ -187,6 +244,11 @@ export function Sidebar({
             {canSeeEquipementsAdmin && (
               <button data-testid="nav-equipements" onClick={() => setVueActive("admin-equipements")} className={navButtonClass(vueActive === "admin-equipements")}>
                 {cur.equipements}
+              </button>
+            )}
+            {canSeeChampsAdmin && (
+              <button data-testid="nav-champs" onClick={() => setVueActive("admin-champs")} className={navButtonClass(vueActive === "admin-champs")}>
+                {cur.champsCourrier}
               </button>
             )}
             {canSeeHistoriquesAdmin && (

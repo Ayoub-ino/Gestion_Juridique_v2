@@ -18,6 +18,7 @@ const GestionUtilisateurs = lazy(() => import("@/app/components/admin/GestionUti
 const GestionServices = lazy(() => import("@/app/components/admin/GestionServices").then(m => ({ default: m.GestionServices })));
 const GestionPermissions = lazy(() => import("@/app/components/admin/GestionPermissions").then(m => ({ default: m.GestionPermissions })));
 const GestionEquipements = lazy(() => import("@/app/components/admin/GestionEquipements").then(m => ({ default: m.GestionEquipements })));
+const GestionChampsCourrier = lazy(() => import("@/app/components/admin/GestionChampsCourrier").then(m => ({ default: m.GestionChampsCourrier })));
 const NotificationsPage = lazy(() => import("@/app/components/pages/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
 const TransactionsPage = lazy(() => import("@/app/components/pages/TransactionsPage").then(m => ({ default: m.TransactionsPage })));
 const ProfilPage = lazy(() => import("@/app/components/pages/ProfilPage").then(m => ({ default: m.ProfilPage })));
@@ -75,8 +76,36 @@ interface CorbeilleDoc {
   serviceActuel: string;
 }
 
+/**
+ * An agent the signed-in user is replacing, with a running delegation. Entering
+ * one opens their workspace — the app then works as that account (see
+ * AuthContext.enterWorkspace).
+ */
+interface WorkspaceEntry {
+  id: number;
+  absentUserId: number;
+  absentUserName?: string;
+  absentUserLogin?: string;
+  absentUserRole?: string;
+  absentUserService?: string;
+  absentUserServiceId?: number | null;
+  dateDebut: string;
+  dateFin?: string | null;
+  dateAcceptation?: string | null;
+}
+
 export default function Home() {
-  const { user, token, isAuthenticated, logout, hasPermission } = useAuth();
+  const {
+    user,
+    realUser,
+    token,
+    isAuthenticated,
+    logout,
+    hasPermission,
+    isImpersonating,
+    enterWorkspace,
+    exitWorkspace,
+  } = useAuth();
   const [langue, setLangue] = useState<Langue>("ar");
   const [vueActive, setVueActive] = useState<VueActive>("dashboard");
   const cur = translations[langue];
@@ -155,15 +184,85 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setErrorMessage] = useState("");
   const [workspaceDocId, setWorkspaceDocId] = useState<number | null>(null);
+  // Values of the fields the administrator added to a courrier form. Shared by
+  // the three sub-tabs so the create payload can carry them (see
+  // Gestion des champs → Document.ChampsPersonnalises).
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const setCustomValue = useCallback((key: string, value: string) => {
+    setCustomValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
+  // Replacement workspaces available to the signed-in user (see fetchWorkspaces).
+  const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<number | null>(null);
 
   const { listeCourriers, refetch } = useDocuments(token, langue, vueActive);
   const { getServiceLabel } = useServiceLabels(token, langue);
+
+  // Replacement workspaces this user may open (accepted, still running). This is
+  // what puts the workspace entry in the sidebar. Keyed on the REAL account: a
+  // substitute never inherits another delegation while already working as someone.
+  const fetchWorkspaces = useCallback(async () => {
+    if (!token || !realUser?.id) return;
+    try {
+      setWorkspaces(await api.get<WorkspaceEntry[]>(`/api/Substitutes/workspaces/${realUser.id}`, token));
+    } catch (err) {
+      console.warn("Fetch workspaces error:", err);
+    }
+  }, [token, realUser]);
+
+  useEffect(() => { fetchWorkspaces(); }, [fetchWorkspaces]);
+
+  /**
+   * Enter a replacement workspace. The delegation header is set before the first
+   * request, so everything from here — permissions, folders, notifications — is
+   * resolved as the replaced agent.
+   */
+  const handleEnterWorkspace = useCallback(
+    async (delegationId: number, absentUserId: number) => {
+      const entered = await enterWorkspace(absentUserId);
+      if (!entered) {
+        notify(
+          langue === "fr"
+            ? "Cette délégation n'est plus active (expirée, révoquée ou refusée)."
+            : "لم تعد هذه النيابة سارية (منتهية، ملغاة أو مرفوضة)."
+        );
+        setActiveWorkspaceId(null);
+        fetchWorkspaces();
+        return;
+      }
+      setActiveWorkspaceId(delegationId);
+      setVueActive("espace-remplacement");
+      notify(langue === "fr" ? `Espace de ${entered.nom} ouvert` : `تم فتح فضاء ${entered.nom}`);
+      await refetch();
+    },
+    [enterWorkspace, fetchWorkspaces, langue, refetch]
+  );
+
+  /** Leave the workspace: back to one's own account and own data. */
+  const handleExitWorkspace = useCallback(() => {
+    exitWorkspace();
+    setActiveWorkspaceId(null);
+    setVueActive("dashboard");
+    refetch();
+  }, [exitWorkspace, refetch]);
 
   const fetchPending = useCallback(async () => {
     if (!token) return;
     try {
       const data = await api.get<{ count: number }>("/api/Transactions/count-pending", token);
-      setPendingNotifications(data.count || 0);
+      // Delegation invitations sit in the same tray as folder requests, so the
+      // badge counts both — otherwise an unanswered invitation is invisible.
+      let invitations = 0;
+      if (realUser?.id) {
+        try {
+          const rows = await api.get<{ count: number }>(
+            `/api/Substitutes/invitation-count/${realUser.id}`,
+            token
+          );
+          invitations = rows.count || 0;
+        } catch { /* the tray simply shows folder requests */ }
+      }
+      setPendingNotifications((data.count || 0) + invitations);
     } catch (err) {
       // 401 means token expired — silently ignore (will redirect on next interaction)
       if (err instanceof ApiError && err.status === 401) {
@@ -182,7 +281,7 @@ export default function Home() {
       }
       console.warn("Fetch stats error:", err);
     }
-  }, [token]);
+  }, [token, realUser]);
 
   useEffect(() => {
     if (!token) return;
@@ -208,7 +307,10 @@ export default function Home() {
   const canSeePermissionsAdmin = isAdmin || hasPermission("gerer_permissions");
   const canSeeEquipementsAdmin = isAdmin || isGreffier || hasPermission("gerer_equipements");
   const canSeeHistoriquesAdmin = isAdmin || hasPermission("gerer_services");
-  const canSeeAdminSection = canManageUsers || canSeeServicesAdmin || canSeePermissionsAdmin || canSeeEquipementsAdmin;
+  // Field configuration is an administrative act: the permission opens it, and
+  // nothing else does — no role is granted it implicitly.
+  const canSeeChampsAdmin = isAdmin || hasPermission("gerer_champs_courrier");
+  const canSeeAdminSection = canManageUsers || canSeeServicesAdmin || canSeePermissionsAdmin || canSeeEquipementsAdmin || canSeeChampsAdmin;
   const userService = user?.service || "";
 
   // Enhanced permission-based gates with admin override support
@@ -252,6 +354,7 @@ export default function Home() {
       "admin-services": canSeeServicesAdmin,
       "admin-permissions": canSeePermissionsAdmin,
       "admin-equipements": canSeeEquipementsAdmin,
+      "admin-champs": canSeeChampsAdmin,
       "admin-services-historiques": canSeeHistoriquesAdmin,
 
       "entrant-admin": canSeeEntrantAdmin,
@@ -259,6 +362,8 @@ export default function Home() {
       "recherche-dossiers": canSearchDossiers,
       "transactions": canViewTransactions && !isAdminLike,
       "archives": canViewArchives,
+      // Only reachable while an accepted delegation is running.
+      "espace-remplacement": workspaces.length > 0,
     };
     if (viewPermissionMap[vueActive] === false || vueActive === "mes-dossiers-en-cours") {
       setVueActive("dashboard");
@@ -267,7 +372,7 @@ export default function Home() {
     if (vueActive === "notifications" && isAdminLike) {
       setVueActive("dashboard");
     }
-  }, [vueActive, isAdminLike, canManageUsers, canSeeServicesAdmin, canSeePermissionsAdmin, canSeeEquipementsAdmin, canSeeHistoriquesAdmin, canSeeEntrantAdmin, canSeeEntrantJuridique, canSearchDossiers, canViewTransactions, canViewArchives]);
+  }, [vueActive, isAdminLike, canManageUsers, canSeeServicesAdmin, canSeePermissionsAdmin, canSeeEquipementsAdmin, canSeeHistoriquesAdmin, canSeeChampsAdmin, canSeeEntrantAdmin, canSeeEntrantJuridique, canSearchDossiers, canViewTransactions, canViewArchives, workspaces.length]);
 
   // Trigger notification refresh when user navigates to notifications view
   useEffect(() => {
@@ -853,7 +958,9 @@ export default function Home() {
           transmissible: transmissible === "Oui",
           etat: etat,
           notes: notes,
-          fichier: fichier ? fichier.name : null
+          fichier: fichier ? fichier.name : null,
+          // Fields the administrator added from « Gestion des champs ».
+          champsPersonnalises: Object.keys(customValues).length > 0 ? customValues : null
         };
       } else if (vueActive === "entrant-juridique") {
         endpoint = "/api/CourrierJuridique";
@@ -873,6 +980,10 @@ export default function Home() {
           linkedDocumentType: docLie === "Oui" ? linkedDocumentType || null : null,
           demandeur: tiers || "",
           etatGlobal: etat || "En cours",
+          dateDossier: juridiqueDate || null,
+          serviceDestination: jurServiceDestination || null,
+          recipientUser: jurRecipientUserIds.length > 0 ? String(jurRecipientUserIds[0]) : null,
+          champsPersonnalises: Object.keys(customValues).length > 0 ? customValues : null
         };
       } else if (vueActive === "sortant-normal") {
         endpoint = "/api/CourrierSortant";
@@ -886,7 +997,8 @@ export default function Home() {
           numeroEnvoi: numeroOrdreFinal,
           statut: "Brouillon",
           notes: notesSortant,
-          fichier: fichierSortant ? fichierSortant.name : null
+          fichier: fichierSortant ? fichierSortant.name : null,
+          champsPersonnalises: Object.keys(customValues).length > 0 ? customValues : null
         };
       } else {
         notify(cur.enregistrementSimule);
@@ -1000,6 +1112,8 @@ export default function Home() {
     setJurServiceDestination("");
     setJurRecipientUserIds([]);
     setModeTraitement("");
+    // Values of the administrator-added fields belong to the folder just saved.
+    setCustomValues({});
     setServiceDestinataire("");
     setServicesDiffusion([]);
     setNumeroDossierAppel("");
@@ -1253,10 +1367,16 @@ export default function Home() {
         canSeeEquipementsAdmin={canSeeEquipementsAdmin}
         canSeeHistoriquesAdmin={canSeeHistoriquesAdmin}
         canOpenDossiers={canOpenDossiers}
-        canTransfer={canTransfer}
-        canViewArchives={canViewArchives}
+        canTransfer={canTransfer}              canViewArchives={canViewArchives}
         canViewTransactions={canViewTransactions}
         canSearchDossiers={canSearchDossiers}
+        canSeeChampsAdmin={canSeeChampsAdmin}
+        workspaces={workspaces}
+        isImpersonating={isImpersonating}
+        impersonatedName={isImpersonating ? user?.nom : undefined}
+        activeWorkspaceId={activeWorkspaceId}
+        onEnterWorkspace={handleEnterWorkspace}
+        onExitWorkspace={handleExitWorkspace}
         pendingNotifications={pendingNotifications}
       />
 
@@ -1274,6 +1394,8 @@ export default function Home() {
                 {vueActive === "admin-services" && cur.services}
                 {vueActive === "admin-permissions" && cur.permissions}
                 {vueActive === "admin-equipements" && cur.equipements}
+                {vueActive === "admin-champs" && cur.champsCourrier}
+                {vueActive === "espace-remplacement" && cur.espaceRemplacement}
                 {vueActive === "notifications" && cur.notifications}
                 {vueActive === "profil" && cur.monProfilPage}
             </h1>
@@ -1285,6 +1407,76 @@ export default function Home() {
         </header>
 
         <div className="p-8 flex-1 overflow-y-auto w-full mx-auto space-y-8">
+          {/* En-tête d'espace de remplacement : rappelle en permanence que l'on
+              n'agit plus en son propre nom. */}
+          {isImpersonating && (
+            <div
+              className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3"
+              data-testid="workspace-banner"
+            >
+              <div>
+                <p className="text-xs font-bold text-amber-900">
+                  {langue === "fr"
+                    ? `Espace de remplacement — vous travaillez en tant que ${user?.nom}`
+                    : `فضاء النيابة — أنت تعمل بصفة ${user?.nom}`}
+                </p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  {langue === "fr"
+                    ? "Dossiers, permissions et notifications de ce compte. Chaque action est tracée à votre nom dans la traçabilité des substitutions."
+                    : "ملفات وصلاحيات وإشعارات هذا الحساب. وتُسجَّل كل حركة باسمك في تتبع النيابات."}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="exit-workspace"
+                onClick={handleExitWorkspace}
+                className="px-4 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 text-xs font-bold hover:bg-amber-100 transition"
+              >
+                {langue === "fr" ? "Quitter l'espace" : "الخروج من الفضاء"}
+              </button>
+            </div>
+          )}
+
+          {vueActive === "espace-remplacement" && (
+            <div className="space-y-5" data-testid="espace-remplacement">
+              <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800">{cur.espaceRemplacement}</h3>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {langue === "fr"
+                    ? "Choisissez le compte que vous remplacez. Vous travaillerez alors dans son espace : ses dossiers, ses permissions et ses notifications, jusqu'à la fin de la période ou jusqu'à l'arrêt du remplacement."
+                    : "اختر الحساب الذي تنوب عنه. ستعمل بعد ذلك في فضائه: ملفاته وصلاحياته وإشعاراته، إلى غاية نهاية المدة أو إيقاف النيابة."}
+                </p>
+              </div>
+
+              {workspaces.map((ws) => (
+                <div
+                  key={ws.id}
+                  className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm flex flex-wrap items-center justify-between gap-4"
+                >
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{ws.absentUserName}</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {getServiceLabel(ws.absentUserService || "")} • {ws.absentUserRole}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {langue === "fr" ? "Période" : "المدة"} :{" "}
+                      {new Date(ws.dateDebut).toLocaleDateString()}
+                      {ws.dateFin ? ` → ${new Date(ws.dateFin).toLocaleDateString()}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid={`open-workspace-${ws.id}`}
+                    onClick={() => handleEnterWorkspace(ws.id, ws.absentUserId)}
+                    className="px-5 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
+                  >
+                    {langue === "fr" ? "Entrer dans l'espace" : "الدخول إلى الفضاء"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {isCourrierView && courrierSubTabs.length > 0 && (
             <div className="flex gap-3 flex-wrap" role="tablist" aria-label={cur.gererCourriers}>
               {courrierSubTabs.map((tab) => (
@@ -1484,6 +1676,7 @@ export default function Home() {
                     etatOptions={etatOptions}
                     reference={reference} setReference={setReference}
                     objet={objet} setObjet={setObjet}
+                    customValues={customValues} onCustomChange={setCustomValue}
                   />
                 )}
 
@@ -1508,6 +1701,7 @@ export default function Home() {
                     serviceDestination={jurServiceDestination} setServiceDestination={setJurServiceDestination}
                     recipientUserIds={jurRecipientUserIds} setRecipientUserIds={setJurRecipientUserIds}
                     langue={langue} cur={cur}
+                    customValues={customValues} onCustomChange={setCustomValue}
                   />
                 )}
 
@@ -1525,6 +1719,7 @@ export default function Home() {
                     fichier={fichierSortant}
                     setFichier={setFichierSortant}
                     langue={langue}
+                    customValues={customValues} onCustomChange={setCustomValue}
                   />
                 )}
 
@@ -1579,6 +1774,10 @@ export default function Home() {
 
           {vueActive === "admin-equipements" && canSeeEquipementsAdmin && (
             <GestionEquipements langue={langue} cur={cur} token={token} />
+          )}
+
+          {vueActive === "admin-champs" && canSeeChampsAdmin && (
+            <GestionChampsCourrier langue={langue} cur={cur} token={token} />
           )}
 
           {vueActive === "admin-services-historiques" && canSeeHistoriquesAdmin && (

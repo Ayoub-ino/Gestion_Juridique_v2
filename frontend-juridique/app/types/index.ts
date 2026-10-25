@@ -17,8 +17,30 @@ export type VueActive =
   | "admin-services-historiques"
   | "admin-permissions"
   | "admin-equipements"
+  | "admin-champs"
   | "notifications"
-  | "profil";
+  | "profil"
+  | "espace-remplacement";
+
+/**
+ * Definition of one field of one of the three « Gérer les courriers » forms.
+ * Rendered and validated from the database, never from this file — only the
+ * shape is declared here.
+ */
+export interface CourrierFieldConfig {
+  id: number;
+  courrierType: string;
+  /** Stable key binding the field to its widget and to the submitted payload. */
+  fieldKey: string;
+  labelFr: string;
+  labelAr: string;
+  fieldType: string;
+  isRequired: boolean;
+  isActive: boolean;
+  /** True for fields the administrator added (values go to the JSON bag). */
+  isCustom: boolean;
+  displayOrder: number;
+}
 
 export interface CourrierSimule {
   id: number;

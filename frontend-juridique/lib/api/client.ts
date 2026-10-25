@@ -4,6 +4,25 @@
 
 import { API_BASE_URL } from "@/lib/config/env";
 
+/**
+ * Replacement workspace: while a substitute is working as the agent they replace,
+ * every request names that agent so the backend resolves permissions, folders and
+ * notifications exactly as if that agent had signed in (see
+ * DelegationImpersonationMiddleware).
+ *
+ * Module-level on purpose: every call goes through `request`, so the workspace
+ * cannot be half-applied to some screens and not others.
+ */
+let delegationUserId: number | null = null;
+
+export function setDelegationUser(userId: number | null): void {
+  delegationUserId = userId;
+}
+
+export function getDelegationUser(): number | null {
+  return delegationUserId;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -33,6 +52,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         ? { "Content-Type": "application/json" }
         : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Only meaningful alongside a session: without a token the middleware would
+      // have no caller to validate the delegation against.
+      ...(delegationUserId && token
+        ? { "X-Delegation-User-Id": String(delegationUserId) }
+        : {}),
       ...headers,
     },
     body: rawBody ?? (body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined),

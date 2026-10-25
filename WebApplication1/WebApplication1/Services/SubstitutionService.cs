@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
 using WebApplication1.Helpers;
@@ -14,18 +15,49 @@ namespace WebApplication1.Services
     /// place of whom.
     /// </summary>
     /// <remarks>
-    /// The scope is deliberately <b>narrow</b>: a substitute reaches only the
-    /// folders entrusted to the agent they replace
-    /// (<see cref="Document.GestionnaireUserId"/>), never that agent's whole
-    /// service. Colleagues in the same service remain out of reach.
+    /// The scope is deliberately <b>narrow</b>: a delegation grants nothing at all
+    /// in the substitute's own session. The agent being replaced has their own
+    /// service and folders, and those are reached only inside the replacement
+    /// workspace, where the middleware makes the caller *be* that agent. Mixing the
+    /// two accounts in one listing would give the substitute a merged view of
+    /// folders that belong to two different services.
     /// </remarks>
     public class SubstitutionService
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public SubstitutionService(AppDbContext context)
+        public SubstitutionService(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        /// <summary>
+        /// Close every delegation whose period has elapsed. Called before any read
+        /// of the delegation state so an expired delegation never grants anything,
+        /// even if no clean-up has run since it lapsed.
+        /// </summary>
+        public async Task<int> ExpireElapsedDelegationsAsync()
+        {
+            var now = System.DateTime.Now;
+            var elapsed = await _context.Substitutes
+                .Where(s => s.IsActive
+                    && s.DateFin != null
+                    && s.DateFin < now)
+                .ToListAsync();
+
+            if (elapsed.Count == 0) return 0;
+
+            foreach (var sub in elapsed)
+            {
+                sub.IsActive = false;
+                sub.Statut = SubstitutionStatusConstants.Termine;
+                sub.DateRevocation ??= now;
+            }
+
+            await _context.SaveChangesAsync();
+            return elapsed.Count;
         }
 
         /// <summary>Active delegation where <paramref name="userId"/> is the absent agent.</summary>
@@ -35,28 +67,27 @@ namespace WebApplication1.Services
                 .OrderByDescending(s => s.DateAssignation)
                 .FirstOrDefault();
 
-        /// <summary>Active delegations where <paramref name="userId"/> is the substitute.</summary>
+        /// <summary>
+        /// Active delegations where <paramref name="userId"/> is the substitute —
+        /// accepted, not closed, and still inside their period.
+        /// </summary>
         public List<Substitute> GetActiveForSubstitute(int userId) =>
             _context.Substitutes
                 .Where(s => s.SubstituteUserId == userId && s.IsActive)
+                .Where(s => s.DateFin == null || s.DateFin > System.DateTime.Now)
                 .OrderByDescending(s => s.DateAssignation)
                 .ToList();
 
-        /// <summary>Agents this substitute is currently covering.</summary>
+        /// <summary>
+        /// Agents this substitute is currently covering. Used to record the
+        /// delegation trace — never to widen what they may see.
+        /// </summary>
         public List<int> GetCoveredUserIds(int substituteUserId) =>
             _context.Substitutes
                 .Where(s => s.SubstituteUserId == substituteUserId && s.IsActive)
                 .Select(s => s.UserId)
                 .Distinct()
                 .ToList();
-
-        /// <summary>
-        /// Is <paramref name="substituteUserId"/> an active substitute for
-        /// <paramref name="absentUserId"/>?
-        /// </summary>
-        public bool IsSubstitutingFor(int substituteUserId, int absentUserId) =>
-            _context.Substitutes.Any(s =>
-                s.SubstituteUserId == substituteUserId && s.UserId == absentUserId && s.IsActive);
 
         /// <summary>The user's own service code, normalized to the RBAC form.</summary>
         public string? GetOwnServiceCode(int userId)
@@ -82,13 +113,20 @@ namespace WebApplication1.Services
 
         /// <summary>
         /// Visibility scope of a caller who is not an administrator: the folders their
-        /// own service holds, plus the folders entrusted to any agent they are
-        /// substituting for. Shared by every listing so they cannot drift apart.
+        /// own service holds. Shared by every listing so they cannot drift apart.
         /// </summary>
+        /// <remarks>
+        /// Delegations deliberately add <b>nothing</b> here. The agent being replaced
+        /// has their own service and their own folders; merging those into the
+        /// substitute's listing made two separate accounts share one view. The
+        /// replaced agent's scope is reached only inside the replacement workspace,
+        /// where <see cref="Middleware.DelegationImpersonationMiddleware"/> makes the
+        /// caller *be* that agent — so their own scope applies, exactly as it does
+        /// when they sign in.
+        /// </remarks>
         public static Expression<Func<T, bool>> BuildScopePredicate<T>(
             string? ownServiceCode,
-            ServiceTribunal? ownServiceEnum,
-            List<int> coveredUserIds) where T : Document
+            ServiceTribunal? ownServiceEnum) where T : Document
         {
             return d =>
                 // Held by the caller's own service.
@@ -97,10 +135,7 @@ namespace WebApplication1.Services
                 || (ownServiceCode == null
                     && ownServiceEnum != null
                     && d.ServiceActuelCode == null
-                    && d.ServiceActuel == ownServiceEnum.Value)
-                // Folders entrusted to an agent the caller is substituting for.
-                || (coveredUserIds.Count > 0
-                    && coveredUserIds.Contains(d.GestionnaireUserId ?? 0));
+                    && d.ServiceActuel == ownServiceEnum.Value);
         }
 
         /// <summary>
@@ -110,8 +145,29 @@ namespace WebApplication1.Services
         /// </summary>
         public async Task LogDelegatedActionAsync(int actingUserId, string action, int? documentId = null, string? reference = null)
         {
-            var coveredIds = GetCoveredUserIds(actingUserId);
-            if (coveredIds.Count == 0) return;
+            // Who really acted, and for whom.
+            //
+            // Outside a workspace the caller acts as themselves, for every agent
+            // they cover — and a caller who covers nobody produces no trace at all
+            // (the mutation endpoints call this unconditionally). Inside a
+            // workspace the absent agent IS the effective principal, so the real
+            // person is recovered from the delegation claim the middleware attached.
+            var subjects = new List<int>();
+            var author = actingUserId;
+
+            var originalClaim = _httpContextAccessor?.HttpContext?.User
+                .FindFirst(DelegationConstants.OriginalUserClaim)?.Value;
+            if (ServiceMapper.TryParseUserId(originalClaim, out var originalUserId))
+            {
+                author = originalUserId;
+                subjects.Add(actingUserId);
+            }
+            else
+            {
+                subjects.AddRange(GetCoveredUserIds(actingUserId));
+            }
+
+            if (subjects.Count == 0) return;
 
             // Resolve the folder reference when the caller did not supply it, so the
             // trace is readable without every endpoint having to look it up.
@@ -123,12 +179,12 @@ namespace WebApplication1.Services
                     .FirstOrDefault();
             }
 
-            foreach (var coveredId in coveredIds)
+            foreach (var subject in subjects)
             {
                 _context.SubstitutionActions.Add(new SubstitutionAction
                 {
-                    EffectueParUserId = actingUserId,
-                    PourUserId = coveredId,
+                    EffectueParUserId = author,
+                    PourUserId = subject,
                     Action = action,
                     DocumentId = documentId,
                     Reference = reference ?? string.Empty,

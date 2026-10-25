@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using WebApplication1.Data;
@@ -20,12 +21,14 @@ namespace WebApplication1.Controllers
         private readonly AppDbContext _context;
         private readonly WebApplication1.Services.DocumentAccessService _accessService;
         private readonly WebApplication1.Services.SubstitutionService _substitutions;
+        private readonly CourrierFieldService _fieldService;
 
-        public CourrierJuridiqueController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService, WebApplication1.Services.SubstitutionService substitutions)
+        public CourrierJuridiqueController(AppDbContext context, WebApplication1.Services.DocumentAccessService accessService, WebApplication1.Services.SubstitutionService substitutions, CourrierFieldService fieldService)
         {
             _context = context;
             _accessService = accessService;
             _substitutions = substitutions;
+            _fieldService = fieldService;
         }
 
         // GET: api/CourrierJuridique
@@ -49,12 +52,12 @@ namespace WebApplication1.Controllers
                 // Scope by the dynamic RBAC service code so services created from the
                 // admin panel work without code changes. Legacy rows (no code stored)
                 // still match through their ServiceTribunal enum value.
-                // The caller's own service, plus the folders entrusted to any agent
-                // they are substituting for — never a whole covered service.
+                // Only the caller's own service: a delegation never merges the
+                // replaced agent's folders into this listing (their scope is reached
+                // inside the replacement workspace only).
                 query = query.Where(SubstitutionService.BuildScopePredicate<DossierJuridique>(
                     _substitutions.GetOwnServiceCode(userId),
-                    _substitutions.GetOwnServiceEnum(userId),
-                    _substitutions.GetCoveredUserIds(userId)));
+                    _substitutions.GetOwnServiceEnum(userId)));
             }
 
             var juridiques = await query
@@ -69,6 +72,7 @@ namespace WebApplication1.Controllers
                     c.ServiceActuelCode,
                     c.StatutActuel,
                     c.FilePath,
+                    c.ChampsPersonnalises,
                     DernierTransfert = c.Transactions
                         .OrderByDescending(t => t.DateTransaction)
                         .Select(t => (System.DateTime?)t.DateTransaction)
@@ -115,8 +119,38 @@ namespace WebApplication1.Controllers
             var numeroRef = dto.Reference ?? "";
             int? dossierParentId = null;
 
+            // « Gestion des champs » owns the field set — required fields are
+            // validated from the configuration, server-side.
+            var activeFields = await _fieldService.GetFieldsAsync(CourrierFieldService.Juridique);
+            // Keys passed to the validator: the folder's identity, its subject, and
+            // whatever the administrator added. The other standard fields are
+            // enforced by the form (see CourrierFieldService.FormEnforced).
+            var fieldValues = new Dictionary<string, string?>
+            {
+                ["sourceDocLie"] = CourrierFieldService.FormEnforced,
+                ["tribunalSource"] = CourrierFieldService.FormEnforced,
+                ["date"] = CourrierFieldService.FormEnforced,
+                ["numeroDossierAppel"] = CourrierFieldService.FormEnforced,
+                ["serviceDestination"] = CourrierFieldService.FormEnforced,
+                ["objet"] = dto.Objet,
+                // A linked document inherits its parent's number, which counts as set.
+                ["numeroDossierJuridique"] = dto.DossierLie ? "inherited" : numeroRef
+            };
+            foreach (var (key, value) in dto.ChampsPersonnalises ?? new())
+                fieldValues[key] = value;
+
+            var missing = await _fieldService.FindMissingRequiredAsync(CourrierFieldService.Juridique, fieldValues);
+            if (missing.Count > 0)
+                return BadRequest(new { error = $"Champs obligatoires manquants: {string.Join(", ", missing)}" });
+
+            // A folder still needs an identification number even when the
+            // administrator removed the field from the form.
             if (dto.DossierLie != true && string.IsNullOrWhiteSpace(numeroRef))
-                return BadRequest(new { error = "Le numéro de référence est requis" });
+            {
+                if (activeFields.Any(f => f.FieldKey == "numeroDossierJuridique"))
+                    return BadRequest(new { error = "Le numéro de référence est requis" });
+                numeroRef = $"AUTO-{DateTime.Now.Year}-{await NextAutoReferenceAsync()}";
+            }
 
             if (dto.DossierLie == true)
             {
@@ -159,7 +193,8 @@ namespace WebApplication1.Controllers
                 TypeCircuit = dto.TypeCircuit,
                 MotifException = dto.MotifException,
                 Demandeur = dto.Demandeur ?? "",
-                DateEntree = DateTime.Now,
+                // « Date » captures the date of the dossier itself; today when unset.
+                DateEntree = dto.DateDossier ?? DateTime.Now,
                 EtapeJalsatActuelle = dto.EtapeJalsatActuelle ?? "ijra2_baht",
                 EtatGlobal = dto.EtatGlobal ?? "En cours",
                 Circuit = dto.Circuit,
@@ -170,7 +205,8 @@ namespace WebApplication1.Controllers
                 ServiceActuel = creatorServiceEnum,
                 ServiceActuelCode = creatorServiceCode,
                 StatutActuel = StatutDossier.Nouveau,
-                DateCreation = DateTime.Now
+                DateCreation = DateTime.Now,
+                ChampsPersonnalises = CourrierFieldValues.Serialize(dto.ChampsPersonnalises)
             };
 
             _context.DossiersJuridiques.Add(juridique);
@@ -229,6 +265,8 @@ namespace WebApplication1.Controllers
             juridique.NumeroReference = dto.Reference ?? juridique.NumeroReference;
             juridique.Sujet = dto.Objet ?? juridique.Sujet;
             juridique.Objet = dto.Objet ?? juridique.Objet;
+            if (dto.ChampsPersonnalises != null)
+                juridique.ChampsPersonnalises = CourrierFieldValues.Serialize(dto.ChampsPersonnalises);
             juridique.NumeroBureauOrdre = dto.NumeroBureauOrdre ?? juridique.NumeroBureauOrdre;
             juridique.NumeroDossierJuridique = dto.NumeroDossierAppel ?? juridique.NumeroDossierJuridique;
             juridique.TypeCircuit = dto.TypeCircuit ?? juridique.TypeCircuit;
@@ -270,6 +308,28 @@ namespace WebApplication1.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Courrier supprimé avec succès" });
         }
+
+        /// <summary>
+        /// Next free "AUTO-{year}-n" reference, used when the administrator removed
+        /// « Numéro dossier judiciaire » from the form and the folder still needs an
+        /// identification number.
+        /// </summary>
+        private async Task<int> NextAutoReferenceAsync()
+        {
+            var prefix = $"AUTO-{DateTime.Now.Year}-";
+            var used = await _context.Documents
+                .Where(d => d.NumeroReference.StartsWith(prefix))
+                .Select(d => d.NumeroReference)
+                .ToListAsync();
+
+            var highest = 0;
+            foreach (var reference in used)
+            {
+                if (int.TryParse(reference.Substring(prefix.Length), out var n) && n > highest)
+                    highest = n;
+            }
+            return highest + 1;
+        }
     }
 
     public class CreateDossierJuridiqueDto
@@ -279,9 +339,25 @@ namespace WebApplication1.Controllers
         /// document (DossierLie) may inherit it from its parent instead.
         /// </summary>
         public string? Reference { get; set; }
-        [Required]
+        /// <summary>
+        /// Not annotated [Required]: whether it must be filled is decided by
+        /// « Gestion des champs », so a form without it stays submittable.
+        /// </summary>
         public string? Objet { get; set; }
         public string? Provenance { get; set; }
+
+        /// <summary>Date of the dossier — mapped to the "date" form field.</summary>
+        public DateTime? DateDossier { get; set; }
+        /// <summary>Destination service — applied as a reception request after creation.</summary>
+        public string? ServiceDestination { get; set; }
+        /// <summary>Named recipient inside the destination service, if any.</summary>
+        public string? RecipientUser { get; set; }
+        /// <summary>Source of a linked document (only when DossierLie is true).</summary>
+        public string? SourceDocLie { get; set; }
+        public string? Notes { get; set; }
+
+        /// <summary>Values of the fields added from « Gestion des champs ».</summary>
+        public Dictionary<string, string?>? ChampsPersonnalises { get; set; }
         public string? Circuit { get; set; }
         public string? TypeCircuit { get; set; }
         public string? MotifException { get; set; }

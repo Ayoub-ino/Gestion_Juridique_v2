@@ -116,10 +116,10 @@ namespace WebApplication1.Tests
             Assert.Equal(ServiceTribunal.JalsatWaIjra2at, service.GetOwnServiceEnum(user.Id));
         }
 
-        // ── Narrow custody ──
+        // ── No widening outside the workspace ──
 
         [Fact]
-        public void SubstituteHasCustodyOfAnEntrustedFolder_AndLosesItOnRevocation()
+        public void DelegationGrantsNoCustodyInTheSubstitutesOwnSession()
         {
             using var ctx = CreateContext();
             var absent = AddUser(ctx, "Absent", "secretarait");
@@ -129,14 +129,13 @@ namespace WebApplication1.Tests
             var access = new DocumentAccessService(ctx, new SubstitutionService(ctx));
             Assert.False(access.IsUserCustodian(doc, substitute.Id));
 
-            var sub = Delegate(ctx, absent, substitute);
-            Assert.True(access.IsUserCustodian(doc, substitute.Id));
+            Delegate(ctx, absent, substitute);
 
-            sub.IsActive = false;
-            sub.DateRevocation = DateTime.Now;
-            ctx.SaveChanges();
-
+            // The delegation does not move the absent agent's folders into the
+            // substitute's own session. Inside the replacement workspace the caller
+            // IS the absent agent, so custody resolves for that account instead.
             Assert.False(access.IsUserCustodian(doc, substitute.Id));
+            Assert.True(access.IsUserCustodian(doc, absent.Id));
         }
 
         [Fact]
@@ -187,7 +186,7 @@ namespace WebApplication1.Tests
         // ── ACL ──
 
         [Fact]
-        public async Task SubstituteHasEditorAccessOnlyToEntrustedFolders()
+        public async Task DelegationGrantsNoAccessInTheSubstitutesOwnSession()
         {
             using var ctx = CreateContext();
             var absent = AddUser(ctx, "Absent", "secretarait");
@@ -201,18 +200,19 @@ namespace WebApplication1.Tests
             await access.GrantOwnerAsync(entrusted.Id, "secretarait");
             await access.GrantOwnerAsync(other.Id, "secretarait");
 
-            Assert.False(await access.UserHasAccessAsync(entrusted.Id, substitute.Id, DocumentAccessLevel.Viewer));
-
             Delegate(ctx, absent, substitute);
 
-            Assert.True(await access.UserHasAccessAsync(entrusted.Id, substitute.Id, DocumentAccessLevel.Editor));
+            // Nothing of the replaced agent's service leaks into the substitute's own
+            // session; the absent agent's own access is untouched.
+            Assert.False(await access.UserHasAccessAsync(entrusted.Id, substitute.Id, DocumentAccessLevel.Viewer));
             Assert.False(await access.UserHasAccessAsync(other.Id, substitute.Id, DocumentAccessLevel.Viewer));
+            Assert.True(await access.UserHasAccessAsync(entrusted.Id, absent.Id, DocumentAccessLevel.Editor));
         }
 
         // ── Listing scope ──
 
         [Fact]
-        public void ScopePredicate_MatchesOwnServiceAndEntrustedFoldersOnly()
+        public void ScopePredicate_IsTheOwnServiceOnly()
         {
             using var ctx = CreateContext();
             var absent = AddUser(ctx, "Absent", "secretarait");
@@ -230,12 +230,13 @@ namespace WebApplication1.Tests
             var matches = SubstitutionService
                 .BuildScopePredicate<Document>(
                     service.GetOwnServiceCode(substitute.Id),
-                    service.GetOwnServiceEnum(substitute.Id),
-                    service.GetCoveredUserIds(substitute.Id))
+                    service.GetOwnServiceEnum(substitute.Id))
                 .Compile();
 
             Assert.True(matches(ownService));
-            Assert.True(matches(entrusted));
+            // The whole bug: the replaced agent's folders used to be merged into the
+            // substitute's listing. They now stay out of it entirely.
+            Assert.False(matches(entrusted), "a delegated folder must not appear in the substitute's own listing");
             Assert.False(matches(colleagues), "a colleague's folder must stay out of reach");
             Assert.False(matches(elsewhere));
         }
@@ -254,8 +255,7 @@ namespace WebApplication1.Tests
             var matches = SubstitutionService
                 .BuildScopePredicate<Document>(
                     service.GetOwnServiceCode(user.Id),
-                    service.GetOwnServiceEnum(user.Id),
-                    service.GetCoveredUserIds(user.Id))
+                    service.GetOwnServiceEnum(user.Id))
                 .Compile();
 
             Assert.True(matches(ownService));

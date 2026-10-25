@@ -9,6 +9,8 @@ import { Langue } from "@/app/types";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceLabels } from "@/app/hooks/useServiceLabels";
 import { useServiceOptions } from "@/app/hooks/useServiceOptions";
+import { useCourrierFields } from "@/app/hooks/useCourrierFields";
+import { CustomFieldInputs } from "@/app/components/forms/CustomFieldInputs";
 import { api } from "@/lib/api/client";
 
 interface JuridiqueFormProps {
@@ -58,6 +60,10 @@ interface JuridiqueFormProps {
   /** Named recipients inside that service. Empty = the whole service. */
   recipientUserIds: number[];
   setRecipientUserIds: (ids: number[]) => void;
+
+  /** Values of the fields the administrator added. */
+  customValues: Record<string, string>;
+  onCustomChange: (key: string, value: string) => void;
 }
 
 export function JuridiqueForm({
@@ -97,10 +103,15 @@ export function JuridiqueForm({
   serviceDestination,
   setServiceDestination,
   recipientUserIds,
-  setRecipientUserIds
+  setRecipientUserIds,
+  customValues,
+  onCustomChange
 }: JuridiqueFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuth();
+
+  // Field set, order, labels and required flags — read from the database.
+  const F = useCourrierFields(token, "juridique", langue);
   const { getServiceLabel } = useServiceLabels(token, langue);
 
   // Destination pickers read the LIVE catalog, so a service created (or
@@ -263,6 +274,7 @@ export function JuridiqueForm({
         <h3 className="font-bold text-sm text-slate-800">{cur.juridique}</h3>
 
         {/* Dossier principal / document lié */}
+        {F.show("dossierLie") && (
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -281,14 +293,15 @@ export function JuridiqueForm({
             {cur.dossierPrincipalTab}
           </button>
         </div>
+        )}
 
         {/* ===== LIGNE 1 ===== */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           {docLie === "Oui" ? (
             <>
-              <div>
+              <div className={F.show("typeDocumentLie") ? "" : "hidden"}>
                 <label htmlFor="jur-linked-type" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.typeDocumentLie}
+                  {F.label("typeDocumentLie", cur.typeDocumentLie)}
                 </label>
                 <select
                   id="jur-linked-type"
@@ -302,9 +315,9 @@ export function JuridiqueForm({
                   ))}
                 </select>
               </div>
-              <div>
+              <div className={F.show("sourceDocLie") ? "" : "hidden"}>
                 <label htmlFor="jur-source-doc" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.sourceDocumentLie} <span className="text-red-500">*</span>
+                  {F.label("sourceDocLie", cur.sourceDocumentLie)} {F.required("sourceDocLie") && <span className="text-red-500">*</span>}
                 </label>
                 <select
                   id="jur-source-doc"
@@ -318,9 +331,9 @@ export function JuridiqueForm({
                   ))}
                 </select>
               </div>
-              <div>
+              <div className={F.show("dossierParent") ? "" : "hidden"}>
                 <label htmlFor="jur-parent-dossier" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.choisirDossierParent}
+                  {F.label("dossierParent", cur.choisirDossierParent)}
                 </label>
                 <div className="relative">
                   <input
@@ -380,9 +393,9 @@ export function JuridiqueForm({
             </>
           ) : (
             <>
-              <div>
+              <div className={F.show("objet") ? "" : "hidden"}>
                 <label htmlFor="jur-objet" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.objetLabel} <span className="text-red-500">*</span>
+                  {F.label("objet", cur.objetLabel)} {F.required("objet") && <span className="text-red-500">*</span>}
                 </label>
                 <input
                   id="jur-objet"
@@ -390,19 +403,19 @@ export function JuridiqueForm({
                   value={objet}
                   onChange={(e) => setObjet(e.target.value)}
                   className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                  required
+                  required={F.show("objet") && F.required("objet")}
                 />
               </div>
-              <div>
+              <div className={F.show("tribunalSource") ? "" : "hidden"}>
                 <label htmlFor="jur-tribunal" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.tribunalSource} <span className="text-red-500">*</span>
+                  {F.label("tribunalSource", cur.tribunalSource)} {F.required("tribunalSource") && <span className="text-red-500">*</span>}
                 </label>
                 <select
                   id="jur-tribunal"
                   value={tiers}
                   onChange={(e) => setTiers(e.target.value)}
                   className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                  required
+                  required={F.show("tribunalSource") && F.required("tribunalSource")}
                 >
                   <option value="">-- {cur.choisirService} --</option>
                   {(tribunalOptions && tribunalOptions.length > 0 ? tribunalOptions : getTribunalOptions()).map((opt) => (
@@ -413,9 +426,9 @@ export function JuridiqueForm({
             </>
           )}
 
-          <div>
+          <div className={F.show("date") ? "" : "hidden"}>
             <label htmlFor="jur-date" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.tblDate} <span className="text-red-500">*</span>
+              {F.label("date", cur.tblDate)} {F.required("date") && <span className="text-red-500">*</span>}
             </label>
             <input
               id="jur-date"
@@ -423,14 +436,14 @@ export function JuridiqueForm({
               value={juridiqueDate}
               onChange={(e) => setJuridiqueDate(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              required
+              required={F.show("date") && F.required("date")}
             />
           </div>
 
           {docLie !== "Oui" && (
-            <div>
+            <div className={F.show("numeroDossierJuridique") ? "" : "hidden"}>
               <label htmlFor="jur-num-dossier" className="block text-xs font-bold text-slate-700 mb-2">
-                {cur.numeroDossierJuridique} <span className="text-red-500">*</span>
+                {F.label("numeroDossierJuridique", cur.numeroDossierJuridique)} {F.required("numeroDossierJuridique") && <span className="text-red-500">*</span>}
               </label>
               <input
                 id="jur-num-dossier"
@@ -439,13 +452,13 @@ export function JuridiqueForm({
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="2026/15/3"
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                required
+                required={F.show("numeroDossierJuridique") && F.required("numeroDossierJuridique")}
               />
             </div>
           )}
 
-          <div>
-            <label htmlFor="jur-bo" className="block text-xs font-bold text-slate-700 mb-2">{cur.numeroBureau}</label>
+          <div className={F.show("numeroBureau") ? "" : "hidden"}>
+            <label htmlFor="jur-bo" className="block text-xs font-bold text-slate-700 mb-2">{F.label("numeroBureau", cur.numeroBureau)}</label>
             <input
               id="jur-bo"
               type="text"
@@ -463,8 +476,8 @@ export function JuridiqueForm({
 
         {/* ===== LIGNE 2 ===== */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div>
-            <label htmlFor="jur-etat" className="block text-xs font-bold text-slate-700 mb-2">{cur.etat}</label>
+          <div className={F.show("etat") ? "" : "hidden"}>
+            <label htmlFor="jur-etat" className="block text-xs font-bold text-slate-700 mb-2">{F.label("etat", cur.etat)}</label>
             <select
               id="jur-etat"
               value={juridiqueEtat}
@@ -478,9 +491,9 @@ export function JuridiqueForm({
             </select>
           </div>
 
-          <div>
+          <div className={F.show("service") ? "" : "hidden"}>
             <label htmlFor="jur-service" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.service} <span className="text-red-500">*</span>
+              {F.label("service", cur.service)} {F.required("service") && <span className="text-red-500">*</span>}
             </label>
             <input
               id="jur-service"
@@ -492,9 +505,9 @@ export function JuridiqueForm({
             />
           </div>
 
-          <div>
+          <div className={F.show("numeroDossierAppel") ? "" : "hidden"}>
             <label htmlFor="jur-num-appel" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.numDossierAppel} <span className="text-red-500">*</span>
+              {F.label("numeroDossierAppel", cur.numDossierAppel)} {F.required("numeroDossierAppel") && <span className="text-red-500">*</span>}
             </label>
             <input
               id="jur-num-appel"
@@ -503,14 +516,14 @@ export function JuridiqueForm({
               onChange={(e) => setNumeroDossierAppel(e.target.value)}
               placeholder={cur.recherche_exemple}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              required
+              required={F.show("numeroDossierAppel") && F.required("numeroDossierAppel")}
             />
           </div>
 
           {docLie === "Oui" ? (
-            <div>
+            <div className={F.show("objet") ? "" : "hidden"}>
               <label htmlFor="jur-objet-linked" className="block text-xs font-bold text-slate-700 mb-2">
-                {cur.objetLabel} <span className="text-red-500">*</span>
+                {F.label("objet", cur.objetLabel)} {F.required("objet") && <span className="text-red-500">*</span>}
               </label>
               <input
                 id="jur-objet-linked"
@@ -518,14 +531,14 @@ export function JuridiqueForm({
                 value={objet}
                 onChange={(e) => setObjet(e.target.value)}
                 className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                required
+                required={F.show("objet") && F.required("objet")}
               />
             </div>
           ) : (
             <>
-              <div>
+              <div className={F.show("typeDossier") ? "" : "hidden"}>
                 <label htmlFor="jur-type" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.typeDossier}
+                  {F.label("typeDossier", cur.typeDossier)}
                 </label>
                 <select
                   id="jur-type"
@@ -539,9 +552,9 @@ export function JuridiqueForm({
                   ))}
                 </select>
               </div>
-              <div>
+              <div className={F.show("numeroPremiereInstance") ? "" : "hidden"}>
                 <label htmlFor="jur-num-premiere" className="block text-xs font-bold text-slate-700 mb-2">
-                  {cur.numeroPremiereInstance}
+                  {F.label("numeroPremiereInstance", cur.numeroPremiereInstance)}
                 </label>
                 <input
                   id="jur-num-premiere"
@@ -557,8 +570,8 @@ export function JuridiqueForm({
         </div>
 
         {/* Document PDF / Word (pleine largeur) */}
-        <div>
-          <label htmlFor="jur-fichier" className="block text-xs font-bold text-slate-700 mb-2">{cur.documentPdfWord}</label>
+        <div className={F.show("document") ? "" : "hidden"}>
+          <label htmlFor="jur-fichier" className="block text-xs font-bold text-slate-700 mb-2">{F.label("document", cur.documentPdfWord)}</label>
           <div className="flex items-center gap-3">
             <div
               className="flex-1 min-w-0 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-500 truncate"
@@ -581,8 +594,8 @@ export function JuridiqueForm({
         </div>
 
         {/* Notes (pleine largeur) */}
-        <div>
-          <label htmlFor="jur-notes" className="block text-xs font-bold text-slate-700 mb-2">{cur.notes}</label>
+        <div className={F.show("notes") ? "" : "hidden"}>
+          <label htmlFor="jur-notes" className="block text-xs font-bold text-slate-700 mb-2">{F.label("notes", cur.notes)}</label>
           <textarea
             id="jur-notes"
             rows={3}
@@ -595,9 +608,9 @@ export function JuridiqueForm({
       </div>
 
       {/* ===== DESTINATION DU DOSSIER ===== */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
+      <div className={`bg-white p-6 rounded-xl border border-slate-200 space-y-4 ${F.show("serviceDestination") || F.show("recipientUser") ? "" : "hidden"}`}>
         <div>
-          <h3 className="font-bold text-sm text-slate-800">{cur.serviceDest}</h3>
+          <h3 className="font-bold text-sm text-slate-800">{F.label("serviceDestination", cur.serviceDest)}</h3>
           <p className="text-[10px] text-slate-400 mt-1">
             {langue === "fr"
               ? "Le dossier reste dans votre service jusqu'à ce que le service destinataire accepte la réception."
@@ -607,9 +620,9 @@ export function JuridiqueForm({
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* Choix du service destinataire */}
-          <div>
+          <div className={F.show("serviceDestination") ? "" : "hidden"}>
             <label htmlFor="jur-service-destination" className="block text-xs font-bold text-slate-700 mb-2">
-              {cur.serviceDest} <span className="text-red-500">*</span>
+              {F.label("serviceDestination", cur.serviceDest)} {F.required("serviceDestination") && <span className="text-red-500">*</span>}
             </label>
             <select
               id="jur-service-destination"
@@ -617,7 +630,7 @@ export function JuridiqueForm({
               value={serviceDestination}
               onChange={(e) => setServiceDestination(e.target.value)}
               className="w-full border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-              required
+              required={F.show("serviceDestination") && F.required("serviceDestination")}
             >
               <option value="">{cur.choisirService}</option>
               {groups.map((group) => (
@@ -643,7 +656,7 @@ export function JuridiqueForm({
           </div>
 
           {/* Utilisateurs du service choisi — apparaît une fois le service choisi */}
-          {serviceDestination && (
+          {serviceDestination && F.show("recipientUser") && (
             <div data-testid="jur-recipients-group">
               {destinationIsHistorical ? (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
@@ -721,7 +734,7 @@ export function JuridiqueForm({
           )}
         </div>
 
-        {!serviceDestination && (
+        {!serviceDestination && F.show("serviceDestination") && (
           <p className="text-xs text-slate-400 p-3 bg-slate-50 rounded-lg border border-slate-200">
             {langue === "fr"
               ? "Choisissez le service destinataire pour envoyer le dossier."
@@ -729,6 +742,13 @@ export function JuridiqueForm({
           </p>
         )}
       </div>
+
+      <CustomFieldInputs
+        fields={F.customFields}
+        values={customValues}
+        onChange={onCustomChange}
+        langue={langue}
+      />
     </div>
   );
 }

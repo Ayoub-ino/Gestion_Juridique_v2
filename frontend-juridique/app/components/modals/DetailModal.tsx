@@ -85,7 +85,10 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [docDetails, setDocDetails] = useState<DocDetails | null>(null);
-  const [loadingDoc, setLoadingDoc] = useState(false);
+  // False until the detail payload for the current folder has settled (loaded or
+  // failed). Everything below the header — the fields AND the action buttons —
+  // waits for it, so the modal is rendered once, with its final data.
+  const [detailsLoaded, setDetailsLoaded] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editedFields, setEditedFields] = useState<Record<string, string>>({});
@@ -246,7 +249,6 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
   const fetchDocDetails = useCallback(async () => {
     if (!doc || !token) return;
-    setLoadingDoc(true);
     try {
       const data = await api.get<DocDetails>(`/api/Workspace/document/${doc.id}`, token);
       setDocDetails(data);
@@ -268,7 +270,8 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
     } catch (err) {
       console.warn("Erreur fetch doc:", err);
     } finally {
-      setLoadingDoc(false);
+      // Settled either way: a failed detail call must not leave the modal blank.
+      setDetailsLoaded(true);
     }
   }, [doc, token]);
 
@@ -308,6 +311,10 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
 
   useEffect(() => {
     if (doc) {
+      // A different folder: drop the previous one's details before fetching, so
+      // the modal can never show fields of two folders at once.
+      setDocDetails(null);
+      setDetailsLoaded(false);
       fetchDocDetails();
       fetchHistory();
       fetchDocAccess();
@@ -444,8 +451,12 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" data-testid="detail-modal-backdrop">
+      <div
+        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        data-testid="detail-modal"
+        role="dialog"
+      >
         <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -483,8 +494,8 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
         </div>
 
         <div className="p-5 space-y-4">
-          {loadingDoc ? (
-            <p className="text-center text-slate-400 py-8">{cur.loadingText}</p>
+          {!detailsLoaded ? (
+            <p className="text-center text-slate-400 py-8" data-testid="detail-loading">{cur.loadingText}</p>
           ) : (
             <>
               {/* Success Message */}
@@ -838,7 +849,10 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
             </>
           )}
 
-          {/* Action Buttons */}
+          {/* Action Buttons — mounted together with the details, never before: a
+              button that appears while the payload is in flight can swallow the
+              click that was already dispatched to the node it replaced. */}
+          {detailsLoaded && (
           <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between">
             <div className="flex gap-2">
               {onTransfer && canTransferDoc && isCustodian && doc.transmissible !== "Non" && (
@@ -892,6 +906,7 @@ export function DetailModal({ doc, onClose, onTransfer, onSaved, cur, langue = "
               )}
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

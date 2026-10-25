@@ -1,6 +1,6 @@
 // app/hooks/useDocuments.ts
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { CourrierSimule, VueActive, Langue } from "@/app/types";
 import { getServiceLabel, getStatusLabel } from "@/lib/constants";
@@ -40,12 +40,18 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { logout } = useAuth();
+  // Only the newest fetch may write the list. Leaving a replacement workspace
+  // starts a fetch as the real account while the impersonated one may still be
+  // in flight; without this guard the late response would put the replaced
+  // agent's folders into the user's own dashboard.
+  const fetchSeq = useRef(0);
 
   const fetchDocuments = useCallback(async () => {
     if (!token) {
       console.warn("Aucun token disponible");
       return;
     }
+    const seq = ++fetchSeq.current;
     setLoading(true);
     setError(null);
 
@@ -173,14 +179,16 @@ export function useDocuments(token: string | null, langue: Langue, vueActive: Vu
         setError(null);
       }
 
+      if (seq !== fetchSeq.current) return;
       setListeCourriers(allDocs);
     } catch (err) {
+      if (seq !== fetchSeq.current) return;
       console.warn("❌ Erreur fetch:", err);
       // On ne lance pas d'erreur, on laisse un tableau vide
       setError(getErrorMessage(err) || "Erreur de chargement");
       setListeCourriers([]);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   // vueActive is intentionally kept as a dependency: navigating views re-fetches
   // the document list (legacy behavior), even though the fetch itself doesn't read it.

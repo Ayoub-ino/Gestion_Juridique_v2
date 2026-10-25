@@ -90,37 +90,10 @@ namespace WebApplication1.Services
                 return true;
             }
 
-            // A substitute is checked against the absent agent's service — but only
-            // for the folder that agent is actually entrusted with, so a delegation
-            // never widens into "everything my colleague's service holds".
-            var custodianCode = await ResolveCoveredAgentServiceCodeAsync(documentId, userId);
-            if (custodianCode != null
-                && await HasAccessAsync(documentId, custodianCode, requiredLevel))
-            {
-                return true;
-            }
-
+            // A delegation grants nothing here. The replaced agent's folders are
+            // reached inside the replacement workspace, where the middleware makes
+            // the caller *be* that agent and their own service applies.
             return false;
-        }
-
-        /// <summary>
-        /// When the given user is substituting for the agent entrusted with
-        /// <paramref name="documentId"/>, returns that agent's service code.
-        /// Null when no delegation gives the caller a claim on this document.
-        /// </summary>
-        private async Task<string?> ResolveCoveredAgentServiceCodeAsync(int documentId, int userId)
-        {
-            var custodianUserId = await _context.Documents
-                .Where(d => d.Id == documentId)
-                .Select(d => d.GestionnaireUserId)
-                .FirstOrDefaultAsync();
-
-            if (custodianUserId is not int custodian) return null;
-            if (!_substitutions.IsSubstitutingFor(userId, custodian)) return null;
-
-            var covered = await _context.Utilisateurs.FindAsync(custodian);
-            var code = NormalizeServiceCode(covered?.Service ?? "");
-            return string.IsNullOrEmpty(code) ? null : code;
         }
 
         /// <summary>
@@ -417,13 +390,10 @@ namespace WebApplication1.Services
             // The caller's own service holds the folder.
             if (NormalizeServiceCode(user.Service ?? "") == custodyServiceCode) return true;
 
-            // A substitute may act only on the folders entrusted to the agent they
-            // replace, and only while those folders still sit in that agent's service.
-            if (document.GestionnaireUserId is not int custodian) return false;
-            if (!_substitutions.IsSubstitutingFor(userId, custodian)) return false;
-
-            var covered = _context.Utilisateurs.Find(custodian);
-            return NormalizeServiceCode(covered?.Service ?? "") == custodyServiceCode;
+            // A delegation grants no custody in the caller's own session. Acting as
+            // the replaced agent requires the workspace, where the principal really
+            // is that agent and the comparison above already succeeds.
+            return false;
         }
 
         /// <summary>

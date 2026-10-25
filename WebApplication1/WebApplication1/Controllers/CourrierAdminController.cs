@@ -22,13 +22,15 @@ namespace WebApplication1.Controllers
         private readonly DocumentAccessService _accessService;
         private readonly ServiceCatalog _serviceCatalog;
         private readonly WebApplication1.Services.SubstitutionService _substitutions;
+        private readonly CourrierFieldService _fieldService;
 
-        public CourrierAdminController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog, WebApplication1.Services.SubstitutionService substitutions)
+        public CourrierAdminController(AppDbContext context, DocumentAccessService accessService, ServiceCatalog serviceCatalog, WebApplication1.Services.SubstitutionService substitutions, CourrierFieldService fieldService)
         {
             _context = context;
             _accessService = accessService;
             _serviceCatalog = serviceCatalog;
             _substitutions = substitutions;
+            _fieldService = fieldService;
         }
 
         // ========== 1. LISTER LES COURRIERS ADMIN ==========
@@ -53,12 +55,12 @@ namespace WebApplication1.Controllers
                 // Scope by the dynamic RBAC service code so services created from the
                 // admin panel work without code changes. Legacy rows (no code stored)
                 // still match through their ServiceTribunal enum value.
-                // The caller's own service, plus the folders entrusted to any agent
-                // they are substituting for — never a whole covered service.
+                // Only the caller's own service: a delegation never merges the
+                // replaced agent's folders into this listing (their scope is reached
+                // inside the replacement workspace only).
                 query = query.Where(SubstitutionService.BuildScopePredicate<CourrierAdministratif>(
                     _substitutions.GetOwnServiceCode(userId),
-                    _substitutions.GetOwnServiceEnum(userId),
-                    _substitutions.GetCoveredUserIds(userId)));
+                    _substitutions.GetOwnServiceEnum(userId)));
             }
 
             var courriers = await query
@@ -79,6 +81,7 @@ namespace WebApplication1.Controllers
                     Source = c.Expediteur,
                     NumeroReference = c.NumeroReference,
                     Transmissible = c.Transmissible,
+                    ChampsPersonnalises = c.ChampsPersonnalises,
                     DernierTransfert = c.Transactions
                         .OrderByDescending(t => t.DateTransaction)
                         .Select(t => (DateTime?)t.DateTransaction)
@@ -112,8 +115,38 @@ namespace WebApplication1.Controllers
                 var numeroRef = !string.IsNullOrWhiteSpace(dto.NumeroReference)
                     ? dto.NumeroReference
                     : dto.NumeroOrdre;
+
+                // « Gestion des champs » owns the field set: the required fields are
+                // validated from the configuration, server-side.
+                var activeFields = await _fieldService.GetFieldsAsync(CourrierFieldService.Administratif);
+                // Keys passed to the validator. The API enforces the folder's
+                // identity, its subject, and whatever the administrator added;
+                // the remaining standard fields are enforced by the form (see
+                // CourrierFieldService.FormEnforced).
+                var fieldValues = new Dictionary<string, string?>
+                {
+                    ["source"] = CourrierFieldService.FormEnforced,
+                    ["dateArrivee"] = CourrierFieldService.FormEnforced,
+                    ["modeTraitement"] = CourrierFieldService.FormEnforced,
+                    ["numeroInterne"] = numeroRef,
+                    ["objet"] = dto.Objet
+                };
+                foreach (var (key, value) in dto.ChampsPersonnalises ?? new())
+                    fieldValues[key] = value;
+
+                var missing = await _fieldService.FindMissingRequiredAsync(CourrierFieldService.Administratif, fieldValues);
+                if (missing.Count > 0)
+                    return BadRequest(new { error = $"Champs obligatoires manquants: {string.Join(", ", missing)}" });
+
+
+                // A field the administrator removed must not block creation: the
+                // internal reference is generated instead of demanded.
                 if (string.IsNullOrWhiteSpace(numeroRef))
-                    return BadRequest(new { error = "Le numéro de référence est requis" });
+                {
+                    if (activeFields.Any(f => f.FieldKey == "numeroInterne"))
+                        return BadRequest(new { error = "Le numéro de référence est requis" });
+                    numeroRef = $"AUTO-{DateTime.Now.Year}-{await NextAutoReferenceAsync()}";
+                }
 
                 // Vérifier l'unicité du numéro de référence dans TOUS les types de documents
                 var refExists = await _context.Documents
@@ -156,11 +189,16 @@ namespace WebApplication1.Controllers
                     Source = dto.Source,
                     DateMessage = dto.DateMessage,
                     Etat = dto.Etat,
-                    Notes = dto.Notes
+                    Notes = dto.Notes,
+                    ChampsPersonnalises = CourrierFieldValues.Serialize(dto.ChampsPersonnalises)
                 };
 
                 _context.CourriersAdministratifs.Add(courrier);
                 await _context.SaveChangesAsync();
+
+                // Audited: creating inside a replacement workspace is recorded against
+                // the person who actually did it, not the account worked as.
+                await _substitutions.LogDelegatedActionAsync(creatorUserId, "Création", courrier.Id, numeroRef);
 
                 // ===== 2. GESTION DU MODE DE TRAITEMENT =====
                 if (dto.ModeTraitement == "archivage")
@@ -308,6 +346,8 @@ namespace WebApplication1.Controllers
             courrier.DateMessage = dto.DateMessage ?? courrier.DateMessage;
             courrier.Etat = dto.Etat ?? courrier.Etat;
             courrier.Notes = dto.Notes ?? courrier.Notes;
+            if (dto.ChampsPersonnalises != null)
+                courrier.ChampsPersonnalises = CourrierFieldValues.Serialize(dto.ChampsPersonnalises);
 
             await _context.SaveChangesAsync();
 
@@ -356,6 +396,7 @@ namespace WebApplication1.Controllers
                     Source = c.Expediteur,
                     NumeroReference = c.NumeroReference,
                     Transmissible = c.Transmissible,
+                    ChampsPersonnalises = c.ChampsPersonnalises,
                     DernierTransfert = c.Transactions
                         .OrderByDescending(t => t.DateTransaction)
                         .Select(t => (DateTime?)t.DateTransaction)
@@ -367,6 +408,29 @@ namespace WebApplication1.Controllers
                 return NotFound(new { message = "Courrier non trouvé" });
 
             return Ok(courrier);
+        }
+
+        // ========== HELPERS ==========
+
+    /// <summary>
+    /// Next free "AUTO-{year}-n" reference, used when the administrator removed
+    /// « Numéro interne » from the form and the folder still needs an identifier.
+    /// </summary>
+    private async Task<int> NextAutoReferenceAsync()
+    {
+        var prefix = $"AUTO-{DateTime.Now.Year}-";
+        var used = await _context.Documents
+            .Where(d => d.NumeroReference.StartsWith(prefix))
+            .Select(d => d.NumeroReference)
+            .ToListAsync();
+
+        var highest = 0;
+        foreach (var reference in used)
+        {
+            var tail = reference.Substring(prefix.Length);
+            if (int.TryParse(tail, out var n) && n > highest) highest = n;
+        }
+        return highest + 1;
         }
     }
 
@@ -387,6 +451,7 @@ namespace WebApplication1.Controllers
         public string? NumeroReference { get; set; }
         public DateTime DernierTransfert { get; set; }
         public bool Transmissible { get; set; } = true;
+        public string? ChampsPersonnalises { get; set; }
     }
     public class CourrierAdminDto
     {
@@ -395,7 +460,10 @@ namespace WebApplication1.Controllers
         public string? NumeroReference { get; set; }
         /// <summary>Legacy alias for <see cref="NumeroReference"/> — pre-"Gérer les courriers" payloads.</summary>
         public string? NumeroOrdre { get; set; }
-        [Required]
+        /// <summary>
+        /// Not annotated [Required]: whether it must be filled is decided by
+        /// « Gestion des champs », so a form without it stays submittable.
+        /// </summary>
         public string Objet { get; set; } = string.Empty;
 
         // ── Assigned by the system on creation ──
@@ -420,5 +488,8 @@ namespace WebApplication1.Controllers
         public string? ModeTraitement { get; set; } // "archivage", "unique", "diffusion"
         public string? ServiceDestinataire { get; set; } // Pour "unique" (ex: "OuvertureDossier")
         public List<string>? ServicesDiffusion { get; set; } // Pour "diffusion" (ex: ["Service1", "Service2"])
+
+        /// <summary>Values of the fields added from « Gestion des champs ».</summary>
+        public Dictionary<string, string?>? ChampsPersonnalises { get; set; }
     }
 }
