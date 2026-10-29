@@ -216,20 +216,6 @@ cd frontend-juridique
 npm install
 ```
 
-### 4. Seed the database
-
-Start the backend first (see below), then seed:
-
-```bash
-# Login as admin to get token
-ADMIN=$(curl -s http://localhost:5200/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"admin","password":"admin123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-
-# Seed database with default users and permissions
-curl -X POST http://localhost:5200/api/seed/run \
-  -H "Authorization: Bearer $ADMIN"
-```
 
 ---
 
@@ -397,11 +383,6 @@ After seeding the database, these users are available:
 
 ---
 
-## 📄 License
-
-This project is for educational purposes (stage/stage SICOM).
-
----
 
 > Last verified: September 2026 — 145 unit tests, 119 E2E tests ✅
 > All 264 tests passing. 0 ESLint errors, 0 TypeScript errors, 0 unused imports.

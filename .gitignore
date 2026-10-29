@@ -34,7 +34,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# AI/tooling artifacts (internal only, not for repo)
+CHANGELOG_AGENTS.md
 
 # Uploaded documents — runtime data, never committed.
 # The API recreates the folder on first upload (FileUploadController).
